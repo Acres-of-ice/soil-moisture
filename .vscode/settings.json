@@ -9,6 +9,7 @@
     "idf.portWin": "COM5",
     "idf.flashType": "UART",
     "files.associations": {
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "sensor.h": "c"
     }
 }

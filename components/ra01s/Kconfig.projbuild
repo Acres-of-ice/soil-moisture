@@ -76,6 +76,18 @@ menu "SX126X Configuration"
 		help
 			Enable Temperature-Compensated Crystal Oscillator.
 
+	config RECEIVER
+		bool "Enable receiver"
+		default false
+		help
+			Enable Receiver Function.
+
+	config SENDER
+		bool "Enable Sender"
+		default false
+		help
+			Enable Sender Function.
+
 	config MISO_GPIO
 		int "SX126X MISO GPIO"
 		range 0 GPIO_RANGE_MAX

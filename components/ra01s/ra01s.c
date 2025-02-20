@@ -318,7 +318,7 @@ uint8_t LoRaReceive(uint8_t *pData, int16_t len)
 {
 	uint8_t rxLen = 0;
 	uint16_t irqRegs = GetIrqStatus();
-	//uint8_t status = GetStatus();
+
 	
 	if( irqRegs & SX126X_IRQ_RX_DONE )
 	{
