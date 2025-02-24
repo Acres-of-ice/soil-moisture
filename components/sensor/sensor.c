@@ -14,7 +14,16 @@
 #include <sys/time.h>
 #include "esp_sntp.h"
 #include "esp_wifi.h"
+#include "freertos/event_groups.h"
 #include "nvs_flash.h"
+#include "driver/i2c.h"
+#include "ssd1306.h"
+#include "nvs_flash.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+#include "esp_sleep.h"
+#include "onewire_bus.h"
+#include "ds18b20.h"
 
 
 #include "ra01s.h"
@@ -28,12 +37,15 @@ const static char *TAG = "EXAMPLE";
 
 
 #define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_1
-#define EXAMPLE_ADC1_CHAN2          ADC_CHANNEL_2
-#define EXAMPLE_ADC1_CHAN3          ADC_CHANNEL_3
+#define EXAMPLE_ADC1_CHAN2          ADC_CHANNEL_0
+#define EXAMPLE_ADC1_CHAN3          ADC_CHANNEL_4
 
 
 
 #define EXAMPLE_ADC_ATTEN           ADC_ATTEN_DB_11
+
+#define EXAMPLE_ONEWIRE_BUS_GPIO    GPIO_NUM_3  // Set the GPIO for OneWire data line
+#define EXAMPLE_ONEWIRE_MAX_DS18B20 2           // Maximum DS18B20 devices to detect
 
 static int adc_raw_1[2][10];
 static int adc_raw_2[2][10];
@@ -45,25 +57,211 @@ uint8_t rx_buf[256] = {0}; // Maximum Payload size of SX1261/62/68 is 255
 uint8_t received[256] = {0};
 uint8_t response[256] = {0};
 
+#define SCL_GPIO 18       // GPIO for SCL
+#define SDA_GPIO 17       // GPIO for SDA
+#define I2C_MASTER_FREQ_HZ 100000  // I2C clock frequency
+#define I2C_MASTER_NUM I2C_NUM_0   // I2C port number
+#define OLED_ADDR            0x3C  /*!< OLED Display I2C Address */
+#define VEXT_GPIO       36 // Power control (from Arduino code)
 
-void wifi_connect() 
+#define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
+#define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
+#define EXAMPLE_ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
+
+#if CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK
+#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK
+#define EXAMPLE_H2E_IDENTIFIER ""
+#elif CONFIG_ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT
+#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HASH_TO_ELEMENT
+#define EXAMPLE_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
+#elif CONFIG_ESP_WPA3_SAE_PWE_BOTH
+#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_BOTH
+#define EXAMPLE_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
+#endif
+#if CONFIG_ESP_WIFI_AUTH_OPEN
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_OPEN
+#elif CONFIG_ESP_WIFI_AUTH_WEP
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WEP
+#elif CONFIG_ESP_WIFI_AUTH_WPA_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_PSK
+#elif CONFIG_ESP_WIFI_AUTH_WPA2_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_PSK
+#elif CONFIG_ESP_WIFI_AUTH_WPA_WPA2_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA_WPA2_PSK
+#elif CONFIG_ESP_WIFI_AUTH_WPA3_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA3_PSK
+#elif CONFIG_ESP_WIFI_AUTH_WPA2_WPA3_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WPA2_WPA3_PSK
+#elif CONFIG_ESP_WIFI_AUTH_WAPI_PSK
+#define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WAPI_PSK
+#endif
+
+/* FreeRTOS event group to signal when we are connected*/
+static EventGroupHandle_t s_wifi_event_group;
+
+/* The event group allows multiple bits for each event, but we only care about two events:
+ * - we are connected to the AP with an IP
+ * - we failed to connect after the maximum amount of retries */
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+
+
+
+static int s_retry_num = 0;
+
+
+void i2c_init()
 {
-    ESP_LOGI("WiFi", "Connecting to %s...", WIFI_SSID);
-    esp_netif_init();
-    esp_event_loop_create_default();
+    i2c_config_t i2c_conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = SDA_GPIO,
+        .scl_io_num = SCL_GPIO,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = 400000
+    };
+    i2c_param_config(I2C_MASTER_NUM, &i2c_conf);
+    i2c_driver_install(I2C_MASTER_NUM, i2c_conf.mode, 0, 0, 0);
+}
+
+void i2c_scan() {
+    ESP_LOGI(TAG, "Scanning I2C bus...");
+
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+        i2c_master_stop(cmd);
+
+        esp_err_t result = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(100));
+        i2c_cmd_link_delete(cmd);
+
+        if (result == ESP_OK) 
+        {
+            ESP_LOGI(TAG, "Device found at address 0x%02X", addr);
+        }
+        else 
+        {ESP_LOGI(TAG, "Device not found");}
+    }
+
+    ESP_LOGI(TAG, "I2C scan complete.");
+}
+
+void vext_on() {
+    gpio_reset_pin(VEXT_GPIO);
+    gpio_set_direction(VEXT_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_level(VEXT_GPIO, 0);  // LOW to enable OLED power
+}
+
+void reset_i2c_bus() {
+    gpio_reset_pin(SDA_GPIO);
+    gpio_reset_pin(SCL_GPIO);
+    gpio_set_direction(SDA_GPIO, GPIO_MODE_INPUT_OUTPUT_OD);
+    gpio_set_direction(SCL_GPIO, GPIO_MODE_INPUT_OUTPUT_OD);
+
+    // Generate 9 clock pulses to reset I2C devices
+    for (int i = 0; i < 9; i++) {
+        gpio_set_level(SCL_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        gpio_set_level(SCL_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    ESP_LOGI(TAG, "I2C Bus Reset Done.");
+}
+
+static void event_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
+{
+if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+esp_wifi_connect();
+} else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
+esp_wifi_connect();
+s_retry_num++;
+ESP_LOGI(TAG, "retry to connect to the AP");
+} else {
+xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+}
+ESP_LOGI(TAG,"connect to the AP fail");
+} else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+s_retry_num = 0;
+xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+}
+}
+
+void wifi_init_sta(void)
+{
+    s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
+            .ssid = EXAMPLE_ESP_WIFI_SSID,
+            .password = EXAMPLE_ESP_WIFI_PASS,
+            /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
+             * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
+             * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
+             * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
+             */
+            .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+            .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
+            .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
         },
     };
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-    esp_wifi_start();
-    esp_wifi_connect();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+     * happened. */
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    } else if (bits & WIFI_FAIL_BIT) {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    } else {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    }
+}
+void wifi_stop() 
+{
+ 
+    vTaskDelay(5);
+    esp_wifi_stop();
 }
 
 
@@ -137,21 +335,38 @@ char* get_current_time()
     return time_str;
 }
 
+void enter_light_sleep() 
+{
+    //ESP_LOGI(TAG, "Entering light sleep for 5 minutes...");
+    
+    
+    esp_sleep_enable_timer_wakeup(300000000);   //(5 minutes = 300 seconds = 300,000,000 microseconds)
+
+
+ 
+    esp_light_sleep_start();
+
+    //ESP_LOGI(TAG, "Woke up from light sleep!");
+}
+
 
 
 #if CONFIG_SENDER
 
 void task_tx(void *pvParameters)
 {
+
     ESP_LOGI(pcTaskGetName(NULL), "Start");
     esp_efuse_mac_get_default(device_id);
     const TickType_t delay = pdMS_TO_TICKS(10000); // 10 seconds
     vTaskDelay(pdMS_TO_TICKS(1000));
 
+
     while (1) 
     {
         char* timestamp = get_current_time();
-        memset(buf, 0, sizeof(buf)); // Clear buffer before use
+        
+        //memset(buf, 0, sizeof(buf)); // Clear buffer before use
         memset(received, 0, sizeof(received)); // Clear received buffer
 
 
@@ -173,6 +388,7 @@ void task_tx(void *pvParameters)
 
         ESP_LOGI(pcTaskGetName(NULL), "Transmitting: %s", buf);
 
+
         //  Send Data
         if (!LoRaSend(buf, txLen, SX126x_TXMODE_SYNC)) 
         {
@@ -181,7 +397,7 @@ void task_tx(void *pvParameters)
         
         vTaskDelay(pdMS_TO_TICKS(3000));
 
-
+        //enter_light_sleep();
 
         //  Receive Acknowledgment
         uint8_t ackLen = LoRaReceive(received, sizeof(received) - 1);
@@ -189,7 +405,7 @@ void task_tx(void *pvParameters)
 
         if (ackLen > 0)
         {
-           ESP_LOGI(pcTaskGetName(NULL), "RX: Received %d bytes: %s", ackLen, received);
+          // ESP_LOGI(pcTaskGetName(NULL), "RX: Received %d bytes: %s", ackLen, received);
            int8_t rssi, snr;
            GetPacketStatus(&rssi, &snr);
            ESP_LOGI(pcTaskGetName(NULL), "rssi=%d[dBm] snr=%d[dB]", rssi, snr);
@@ -199,26 +415,33 @@ void task_tx(void *pvParameters)
            { 
 
              char ack_mac[18] = {0}; //  Reset before use
-             int extracted = sscanf((char *)received, "REC[%17[^]]]", ack_mac);
+             //int extracted = sscanf((char *)received, "REC[%17[^]]]", ack_mac);
              ack_mac[17] = '\0';  //  Ensure null termination
 
-             if (extracted == 1)
-             { 
-                 /*Convert `ack_mac` to bytes and compare*/  
-                 uint8_t extracted_mac[6] = {0};
-                 if (sscanf(ack_mac, "%hhX:%hhX:%hhX:%hhX:%hhX:%hhX", 
-                     &extracted_mac[0], &extracted_mac[1], &extracted_mac[2], 
-                     &extracted_mac[3], &extracted_mac[4], &extracted_mac[5]) == 6)
-                  {
-                     if (memcmp(extracted_mac, device_id, 6) == 0)
-                     {
-                         ESP_LOGI(pcTaskGetName(NULL), "✅ MAC ID Matched!");
-                     }
-                  }
-              }
+             ESP_LOGI(pcTaskGetName(NULL), "✅ MAC ID Matched!");
+
+            //  if (extracted == 1)
+            //  { 
+            //      /*Convert `ack_mac` to bytes and compare*/  
+            //      uint8_t extracted_mac[6] = {0};
+            //      if (sscanf(ack_mac, "%hhX:%hhX:%hhX:%hhX:%hhX:%hhX", 
+            //          &extracted_mac[0], &extracted_mac[1], &extracted_mac[2], 
+            //          &extracted_mac[3], &extracted_mac[4], &extracted_mac[5]) == 6)
+            //       {
+            //          if (memcmp(extracted_mac, device_id, 6) == 0)
+            //          {
+            //              ESP_LOGI(pcTaskGetName(NULL), "✅ MAC ID Matched!");
+            //              // ✅ Show Received MAC ID on OLED
+            //          }
+            //       }
+            //   }
+            enter_light_sleep();
            }
         }
+     memset(buf, 0, sizeof(buf)); // Clear buffer before use
+     memset(received, 0, sizeof(received));
      vTaskDelay(pdMS_TO_TICKS(5500));
+     //enter_light_sleep();
     }
 
 }
@@ -252,7 +475,7 @@ void task_rx(void *pvParameters)
                 int soil, battery, temp;
                 char timestamp[20] = {0};
 
-                // ✅ Extract values from received message
+                //  Extract values from received message
                 int extracted = sscanf((char *)rx_buf, 
                     "TRAID[%19[^]]]S[%d]B[%d]T[%d]D[%49[^]]]",
                     mac_id, &soil, &battery, &temp, timestamp);
@@ -293,7 +516,7 @@ void task_rx(void *pvParameters)
 
 void sensor_task(void *pvParameters)
 {
-        
+                 /*INITIALISING ADC FOR MOISTURE SENSOR*/
         adc_oneshot_unit_handle_t adc1_handle;
         adc_oneshot_unit_init_cfg_t init_config1 = {
             .unit_id = ADC_UNIT_1,
@@ -308,21 +531,86 @@ void sensor_task(void *pvParameters)
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN2, &config));
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN3, &config));
-    
+
+            
         //-------------ADC1 Calibration Init---------------//
         adc_cali_handle_t adc1_cali_handle = NULL;
 
+        adc_oneshot_unit_handle_t adc2_handle;
+        adc_oneshot_unit_init_cfg_t init_config2 = {
+            .unit_id = ADC_UNIT_2,
+            .ulp_mode = ADC_ULP_MODE_DISABLE,
+        };
+        ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config2, &adc2_handle));
+        adc_cali_handle_t adc2_cali_handle = NULL;
+        
+    
+         /*INITIALISING ONE WIRE AND SEARCHING FOR DS18B20 FOR TEMPERATURE SENSOR*/
+     onewire_bus_handle_t bus = NULL;
+     onewire_bus_config_t bus_config = {
+         .bus_gpio_num = EXAMPLE_ONEWIRE_BUS_GPIO,
+     };
+     onewire_bus_rmt_config_t rmt_config = {
+         .max_rx_bytes = 10,  
+     };
+     ESP_ERROR_CHECK(onewire_new_bus_rmt(&bus_config, &rmt_config, &bus));
+ 
+     // Search for DS18B20 devices
+     int ds18b20_device_num = 0;
+     ds18b20_device_handle_t ds18b20s[EXAMPLE_ONEWIRE_MAX_DS18B20];
+     onewire_device_iter_handle_t iter = NULL;
+     onewire_device_t next_onewire_device;
+     esp_err_t search_result = ESP_OK;
+ 
+     // Create 1-Wire device iterator
+     ESP_ERROR_CHECK(onewire_new_device_iter(bus, &iter));
+     ESP_LOGI(TAG, "Device iterator created, start searching...");
+ 
+     do {
+         search_result = onewire_device_iter_get_next(iter, &next_onewire_device);
+         if (search_result == ESP_OK) {
+             ds18b20_config_t ds_cfg = {};
+             // Check if the found device is a DS18B20
+             if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &ds18b20s[ds18b20_device_num]) == ESP_OK) {
+                 //ESP_LOGI(TAG, "Found DS18B20[%d], Address: %016llX", ds18b20_device_num, next_onewire_device.address);
+                 ds18b20_device_num++;
+             } else {
+                 ESP_LOGW(TAG, "Unknown device found at Address: %016llX", next_onewire_device.address);
+             }
+         }
+     } while (search_result != ESP_ERR_NOT_FOUND);
+ 
+     ESP_ERROR_CHECK(onewire_del_device_iter(iter));
+     //ESP_LOGI(TAG, "Searching done, %d DS18B20 device(s) found", ds18b20_device_num);
+ 
+     // Check if any DS18B20 devices were found
+     if (ds18b20_device_num == 0) {
+         ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
+         vTaskDelete(NULL);
+     }
+ 
 
     while (1) 
     {
+        //for (int i = 0; i < ds18b20_device_num; i++) {
+            float temperature = 0.0;
+
+            ESP_ERROR_CHECK(ds18b20_trigger_temperature_conversion(ds18b20s[0]));
+            vTaskDelay(pdMS_TO_TICKS(800));  // Wait for conversion to complete (750ms required)
+            
+            if (ds18b20_get_temperature(ds18b20s[0], &temperature) == ESP_OK) {
+                //ESP_LOGI(TAG, "DS18B20[%d] Temperature: %.2f°C", 0, temperature);
+            } else {
+                //ESP_LOGE(TAG, "Failed to read temperature from DS18B20[%d]", 0);
+            }
+        //}
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN2, &adc_raw_2[0][0]));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
 
-        buf[0] = (uint8_t)((adc_raw_1[0][0] * 100) / 4095);
-        buf[2] = (uint8_t)((adc_raw_2[0][0] * 100) / 4095);
+        buf[0] = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        buf[2] = (uint8_t)temperature;
         buf[3] = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-       vTaskDelay(pdMS_TO_TICKS(10000));
+       vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
