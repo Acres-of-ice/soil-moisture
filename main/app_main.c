@@ -13,6 +13,7 @@
 #include "nvs_flash.h"
 
 #include "sensor.h"
+#include "soil_comm.h"
 
 
 void app_main(void)

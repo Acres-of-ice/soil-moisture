@@ -109,6 +109,14 @@ static EventGroupHandle_t s_wifi_event_group;
 
 static int s_retry_num = 0;
 
+typedef struct {
+    uint8_t soil_moisture;  // buf[0]
+    uint8_t temperature;    // buf[2]
+    uint8_t battery_level;  // buf[3]
+} espnow_message_t;
+
+QueueHandle_t espnow_queue = NULL;
+
 
 void i2c_init()
 {
@@ -351,7 +359,7 @@ void enter_light_sleep()
 
 
 
-#if CONFIG_SENDER
+//#if CONFIG_SENDER
 
 void task_tx(void *pvParameters)
 {
@@ -446,7 +454,7 @@ void task_tx(void *pvParameters)
 
 }
 
-#endif
+//#endif
 
 #if CONFIG_RECEIVER
 
@@ -588,7 +596,10 @@ void sensor_task(void *pvParameters)
          ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
          vTaskDelete(NULL);
      }
- 
+     espnow_queue = xQueueCreate(10, sizeof(espnow_message_t));
+     if (espnow_queue == NULL) {
+     ESP_LOGE("Queue", "Failed to create queue!");
+     }
 
     while (1) 
     {
@@ -607,10 +618,23 @@ void sensor_task(void *pvParameters)
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
 
-        buf[0] = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
-        buf[2] = (uint8_t)temperature;
-        buf[3] = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-       vTaskDelay(pdMS_TO_TICKS(2000));
+        // buf[0] = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        // buf[2] = (uint8_t)temperature;
+        // buf[3] = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+        
+
+        espnow_message_t message;
+
+        message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        message.temperature = (uint8_t)temperature;
+        message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+    
+        if (espnow_queue != NULL) {
+            if (xQueueSend(espnow_queue, &message, pdMS_TO_TICKS(100)) != pdTRUE) {
+                ESP_LOGE("SensorTask", "Failed to send data to queue");
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
