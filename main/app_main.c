@@ -22,39 +22,50 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(100));  // Short delay
     /*lora initialisation*/
+    // wifi_init_sta();
+    // vTaskDelay(5); 
+    // initialize_sntp(); 
+    // wait_for_sntp_sync();
+    // wifi_stop();
      i2c_init();
-    lora_init();
+    //lora_init();
+    espnow_init();
 
-#if CONFIG_SENDER
-    /*nvs,wifi and sntp are required for fetching the real time
-    when the transmitter is getting started the wifi has to be connectedd for a brief period
-    for now the wifi ssid is "myssid" and password is "mypassword"*/
-    //nvs_flash_init(); 
-    //wifi_connect(); 
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    wifi_init_sta();
-    vTaskDelay(5); 
-    initialize_sntp(); 
-    wait_for_sntp_sync();
-    wifi_stop();
- 
-    /*Task for reading sensor and battery values*/
+    vTaskDelay(pdMS_TO_TICKS(2000));
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
-    /*Task for transmitting */
-    vTaskDelay(pdMS_TO_TICKS(3000));
-    xTaskCreate(&task_tx, "TX", 1024*4, NULL, 5, NULL);
-#endif
+    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 3, NULL);
+    
 
-#if CONFIG_RECEIVER
-    /*Task for transmitting */
-    xTaskCreate(&task_rx, "RX", 1024*4, NULL, 5, NULL);
-#endif
+// #if CONFIG_SENDER
+//     /*nvs,wifi and sntp are required for fetching the real time
+//     when the transmitter is getting started the wifi has to be connectedd for a brief period
+//     for now the wifi ssid is "myssid" and password is "mypassword"*/
+//     //nvs_flash_init(); 
+//     //wifi_connect(); 
+//     esp_err_t ret = nvs_flash_init();
+//     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+//       ESP_ERROR_CHECK(nvs_flash_erase());
+//       ret = nvs_flash_init();
+//     }
+//     ESP_ERROR_CHECK(ret);
+
+//     wifi_init_sta();
+//     vTaskDelay(5); 
+//     initialize_sntp(); 
+//     wait_for_sntp_sync();
+//     wifi_stop();
+ 
+//     /*Task for reading sensor and battery values*/
+//     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
+//     /*Task for transmitting */
+//     vTaskDelay(pdMS_TO_TICKS(3000));
+//     xTaskCreate(&task_tx, "TX", 1024*4, NULL, 5, NULL);
+// #endif
+
+// #if CONFIG_RECEIVER
+//     /*Task for transmitting */
+//     xTaskCreate(&task_rx, "RX", 1024*4, NULL, 5, NULL);
+// #endif
 
 }
 

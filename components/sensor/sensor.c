@@ -24,6 +24,8 @@
 #include "esp_sleep.h"
 #include "onewire_bus.h"
 #include "ds18b20.h"
+#include "sensor.h"
+
 
 
 #include "ra01s.h"
@@ -51,7 +53,7 @@ static int adc_raw_1[2][10];
 static int adc_raw_2[2][10];
 static int adc_raw_3[2][10];
 
-uint8_t device_id[6];
+extern uint8_t device_id[6];
 uint8_t buf[256] = {0}; // Maximum Payload size of SX1261/62/68 is 255
 uint8_t rx_buf[256] = {0}; // Maximum Payload size of SX1261/62/68 is 255
 uint8_t received[256] = {0};
@@ -109,11 +111,7 @@ static EventGroupHandle_t s_wifi_event_group;
 
 static int s_retry_num = 0;
 
-typedef struct {
-    uint8_t soil_moisture;  // buf[0]
-    uint8_t temperature;    // buf[2]
-    uint8_t battery_level;  // buf[3]
-} espnow_message_t;
+
 
 QueueHandle_t espnow_queue = NULL;
 
@@ -359,7 +357,7 @@ void enter_light_sleep()
 
 
 
-//#if CONFIG_SENDER
+#if CONFIG_SENDER
 
 void task_tx(void *pvParameters)
 {
@@ -454,7 +452,7 @@ void task_tx(void *pvParameters)
 
 }
 
-//#endif
+#endif
 
 #if CONFIG_RECEIVER
 
@@ -571,31 +569,31 @@ void sensor_task(void *pvParameters)
      esp_err_t search_result = ESP_OK;
  
      // Create 1-Wire device iterator
-     ESP_ERROR_CHECK(onewire_new_device_iter(bus, &iter));
-     ESP_LOGI(TAG, "Device iterator created, start searching...");
+    //  ESP_ERROR_CHECK(onewire_new_device_iter(bus, &iter));
+    //  ESP_LOGI(TAG, "Device iterator created, start searching...");
  
-     do {
-         search_result = onewire_device_iter_get_next(iter, &next_onewire_device);
-         if (search_result == ESP_OK) {
-             ds18b20_config_t ds_cfg = {};
-             // Check if the found device is a DS18B20
-             if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &ds18b20s[ds18b20_device_num]) == ESP_OK) {
-                 //ESP_LOGI(TAG, "Found DS18B20[%d], Address: %016llX", ds18b20_device_num, next_onewire_device.address);
-                 ds18b20_device_num++;
-             } else {
-                 ESP_LOGW(TAG, "Unknown device found at Address: %016llX", next_onewire_device.address);
-             }
-         }
-     } while (search_result != ESP_ERR_NOT_FOUND);
+    //  do {
+    //      search_result = onewire_device_iter_get_next(iter, &next_onewire_device);
+    //      if (search_result == ESP_OK) {
+    //          ds18b20_config_t ds_cfg = {};
+    //          // Check if the found device is a DS18B20
+    //          if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &ds18b20s[ds18b20_device_num]) == ESP_OK) {
+    //              //ESP_LOGI(TAG, "Found DS18B20[%d], Address: %016llX", ds18b20_device_num, next_onewire_device.address);
+    //              ds18b20_device_num++;
+    //          } else {
+    //              ESP_LOGW(TAG, "Unknown device found at Address: %016llX", next_onewire_device.address);
+    //          }
+    //      }
+    //  } while (search_result != ESP_ERR_NOT_FOUND);
  
-     ESP_ERROR_CHECK(onewire_del_device_iter(iter));
-     //ESP_LOGI(TAG, "Searching done, %d DS18B20 device(s) found", ds18b20_device_num);
+    //  ESP_ERROR_CHECK(onewire_del_device_iter(iter));
+    //  //ESP_LOGI(TAG, "Searching done, %d DS18B20 device(s) found", ds18b20_device_num);
  
-     // Check if any DS18B20 devices were found
-     if (ds18b20_device_num == 0) {
-         ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
-         vTaskDelete(NULL);
-     }
+    //  // Check if any DS18B20 devices were found
+    //  if (ds18b20_device_num == 0) {
+    //      ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
+    //      vTaskDelete(NULL);
+    //  }
      espnow_queue = xQueueCreate(10, sizeof(espnow_message_t));
      if (espnow_queue == NULL) {
      ESP_LOGE("Queue", "Failed to create queue!");
@@ -606,14 +604,14 @@ void sensor_task(void *pvParameters)
         //for (int i = 0; i < ds18b20_device_num; i++) {
             float temperature = 0.0;
 
-            ESP_ERROR_CHECK(ds18b20_trigger_temperature_conversion(ds18b20s[0]));
-            vTaskDelay(pdMS_TO_TICKS(800));  // Wait for conversion to complete (750ms required)
+            // ESP_ERROR_CHECK(ds18b20_trigger_temperature_conversion(ds18b20s[0]));
+            // vTaskDelay(pdMS_TO_TICKS(800));  // Wait for conversion to complete (750ms required)
             
-            if (ds18b20_get_temperature(ds18b20s[0], &temperature) == ESP_OK) {
-                //ESP_LOGI(TAG, "DS18B20[%d] Temperature: %.2f°C", 0, temperature);
-            } else {
-                //ESP_LOGE(TAG, "Failed to read temperature from DS18B20[%d]", 0);
-            }
+            // if (ds18b20_get_temperature(ds18b20s[0], &temperature) == ESP_OK) {
+            //     //ESP_LOGI(TAG, "DS18B20[%d] Temperature: %.2f°C", 0, temperature);
+            // } else {
+            //     //ESP_LOGE(TAG, "Failed to read temperature from DS18B20[%d]", 0);
+            // }
         //}
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));

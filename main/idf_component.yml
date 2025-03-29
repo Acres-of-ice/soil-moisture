@@ -1,5 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
+  espressif/onewire_bus: "^1.0.2"
   espressif/ds18b20: "^0.1.2"
   espressif/ssd1306: "^1.0.5~1"
   ## Required IDF version

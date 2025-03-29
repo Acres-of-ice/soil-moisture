@@ -2,6 +2,25 @@
 #define SENSOR_H
 
 
+typedef struct {
+    uint8_t soil_moisture;  // buf[0]
+    uint8_t temperature;    // buf[2]
+    uint8_t battery_level;  // buf[3]
+} espnow_message_t;
+#define ESPNOW_MAX_PAYLOAD_SIZE       250  // Leave some room for headers
+// Message structure
+// typedef struct {
+//     uint8_t address;
+//     uint8_t command;
+//     uint8_t source;
+//     uint8_t retries;
+//     uint8_t seq_num;
+//     char data[ESPNOW_MAX_PAYLOAD_SIZE - 5]; // Reserve space for headers
+// } espnow_message_t;
+
+//extern QueueHandle_t espnow_queue;
+
+
 void i2c_init();
 void i2c_scan();
 void reset_i2c_bus();
