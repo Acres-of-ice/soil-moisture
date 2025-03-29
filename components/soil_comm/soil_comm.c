@@ -37,6 +37,7 @@ typedef struct {
     int temperature;
     int battery_level;
     char timestamp[20];
+    int8_t rssi;  // Add this field for RSSI
 } espnow_recv_data_t;
 
 static QueueHandle_t espnow_recv_queue = NULL;
@@ -142,11 +143,19 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
         return;
     }
 
-    ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len, MAC2STR(recv_info->src_addr));
+    int8_t rssi = 0;
+    if (recv_info->rx_ctrl) {
+        rssi = recv_info->rx_ctrl->rssi;
+    }
+
+   // ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len, MAC2STR(recv_info->src_addr));
+    ESP_LOGI(TAG, "Received %d bytes from " MACSTR " (RSSI: %d dBm)", 
+        len, MAC2STR(recv_info->src_addr), rssi);
     
    // Parse the received data
    espnow_recv_data_t recv_data;
    memcpy(recv_data.mac, recv_info->src_addr, 6);
+   recv_data.rssi = rssi;  // Store the RSSI value
    
    // Convert data to string for parsing
    char recv_str[ESPNOW_MAX_PAYLOAD_SIZE + 1] = {0};
@@ -442,6 +451,20 @@ void vTaskESPNOW_RX(void *pvParameters) {
             ESP_LOGI(TAG, "Temperature: %d°C", recv_data.temperature);
             ESP_LOGI(TAG, "Battery Level: %d%%", recv_data.battery_level);
             ESP_LOGI(TAG, "Timestamp: %s", recv_data.timestamp);
+            ESP_LOGI(TAG, "Signal Strength: %d dBm", recv_data.rssi);
+            ESP_LOGI(TAG, "==========================\n");
+
+            const char* signal_quality;
+            if (recv_data.rssi >= -50) {
+                signal_quality = "Excellent";
+            } else if (recv_data.rssi >= -60) {
+                signal_quality = "Good";
+            } else if (recv_data.rssi >= -70) {
+                signal_quality = "Fair";
+            } else {
+                signal_quality = "Weak";
+            }
+            ESP_LOGI(TAG, "Signal Quality: %s", signal_quality);
             ESP_LOGI(TAG, "==========================\n");
         }
     }
