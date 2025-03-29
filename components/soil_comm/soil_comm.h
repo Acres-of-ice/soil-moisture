@@ -35,6 +35,7 @@ void clearMessageQueue();
 
 // Task and queue functions
 void vTaskESPNOW_TX(void *pvParameters);
+void vTaskESPNOW_RX(void *pvParameters);
 void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
                          uint8_t retries);
 //void reset_acknowledgements();

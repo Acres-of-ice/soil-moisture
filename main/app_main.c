@@ -32,8 +32,15 @@ void app_main(void)
     espnow_init();
 
     vTaskDelay(pdMS_TO_TICKS(2000));
+
+#if CONFIG_SENDER
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
     xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 3, NULL);
+#endif
+
+#if CONFIG_RECEIVER
+    xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
+#endif
     
 
 // #if CONFIG_SENDER

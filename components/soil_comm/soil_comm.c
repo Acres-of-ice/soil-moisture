@@ -31,6 +31,16 @@ uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 QueueHandle_t message_queue = NULL;
 uint8_t sequence_number = 0;
 
+typedef struct {
+    uint8_t mac[6];
+    int soil_moisture;
+    int temperature;
+    int battery_level;
+    char timestamp[20];
+} espnow_recv_data_t;
+
+static QueueHandle_t espnow_recv_queue = NULL;
+
 // Configuration structure
 typedef struct {
     uint8_t channel;
@@ -41,7 +51,7 @@ typedef struct {
 
 static espnow_config_t espnow_config = {
     .channel = CONFIG_ESPNOW_CHANNEL,
-    .dest_mac = {0x24, 0x0A, 0xC4, 0x12, 0x34, 0x56}, // Default MAC
+    .dest_mac = {0x48, 0xCA, 0x43, 0x3B, 0xC4, 0x84}, // Default MAC
     .enable_long_range = false,
     .enable_ack = true
 };
@@ -134,8 +144,46 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
 
     ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len, MAC2STR(recv_info->src_addr));
     
-    // Process received data here if needed
-    // ...
+   // Parse the received data
+   espnow_recv_data_t recv_data;
+   memcpy(recv_data.mac, recv_info->src_addr, 6);
+   
+   // Convert data to string for parsing
+   char recv_str[ESPNOW_MAX_PAYLOAD_SIZE + 1] = {0};
+   memcpy(recv_str, data, len > ESPNOW_MAX_PAYLOAD_SIZE ? ESPNOW_MAX_PAYLOAD_SIZE : len);
+   
+   // Parse the sensor data (format: ID[MAC]S[soil]B[batt]T[temp]D[timestamp])
+   if (sscanf(recv_str, "ID[%*02X:%*02X:%*02X:%*02X:%*02X:%*02X]S[%d]B[%d]T[%d]D[%19[^]]",
+             &recv_data.soil_moisture,
+             &recv_data.battery_level,
+             &recv_data.temperature,
+             recv_data.timestamp) == 4) {
+       
+       // Send to receive queue
+       if (espnow_recv_queue != NULL) {
+           if (xQueueSend(espnow_recv_queue, &recv_data, 0) != pdTRUE) {
+               ESP_LOGE(TAG, "Receive queue full");
+           }
+       }
+   } else {
+       ESP_LOGE(TAG, "Failed to parse received data");
+   }
+}
+
+void espnow_recv_init(void) {
+    if (espnow_recv_queue == NULL) {
+        espnow_recv_queue = xQueueCreate(10, sizeof(espnow_recv_data_t));
+        if (espnow_recv_queue == NULL) {
+            ESP_LOGE(TAG, "Failed to create receive queue");
+        }
+    }
+}
+
+bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
+    if (espnow_recv_queue == NULL || data == NULL) {
+        return false;
+    }
+    return xQueueReceive(espnow_recv_queue, data, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
 // Add ESP-NOW peer
@@ -196,6 +244,7 @@ esp_err_t espnow_init(void) {
         esp_now_deinit();
         return ret;
     }
+    espnow_recv_init();
 
     // Add default peer
     if (!espnow_add_peer(espnow_config.dest_mac)) {
@@ -319,64 +368,8 @@ static bool espnow_send_data(const uint8_t *data, size_t len) {
     return false;
 }
 
-// ESP-NOW TX Task
-// void vTaskESPNOW_TX(void *pvParameters) {
-//     ESP_LOGI(TAG, "ESP-NOW TX task started");
-    
-//     // Initialize ESP-NOW
-//     if (espnow_init() != ESP_OK) {
-//         ESP_LOGE(TAG, "ESP-NOW initialization failed");
-//         vTaskDelete(NULL);
-//         return;
-//     }
 
-//     espnow_message_t sensor_data;
-//     char timestamp[32];
-
-//     while (1) {
-//         // Wait for data from queue
-//         if (xQueueReceive(espnow_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
-//             // Get current timestamp
-//             time_t now = time(NULL);
-//             struct tm *timeinfo = localtime(&now);
-//             strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
-
-//             // Format the message
-//             int msg_len = snprintf((char *)tx_buffer, sizeof(tx_buffer),
-//                 "ID[%02X:%02X:%02X:%02X:%02X:%02X]S[%d]B[%d]T[%d]D[%s]",
-//                 device_id[0], device_id[1], device_id[2],
-//                 device_id[3], device_id[4], device_id[5],
-//                 sensor_data.soil_moisture,
-//                 sensor_data.battery_level,
-//                 sensor_data.temperature,
-//                 timestamp);
-
-//             if (msg_len >= sizeof(tx_buffer)) {
-//                 ESP_LOGE(TAG, "Message truncated!");
-//                 msg_len = sizeof(tx_buffer) - 1;
-//             }
-
-//             ESP_LOGI(TAG, "Sending data: Soil: %d, Temp: %d, Battery: %d",
-//                      sensor_data.soil_moisture, sensor_data.temperature, sensor_data.battery_level);
-
-//             // Send the data
-//             if (espnow_send_data(tx_buffer, msg_len)) {
-//                 ESP_LOGI(TAG, "Data sent successfully");
-//             } else {
-//                 ESP_LOGE(TAG, "Failed to send data");
-//             }
-
-//             // Clear buffers
-//             memset(tx_buffer, 0, sizeof(tx_buffer));
-//             memset(&sensor_data, 0, sizeof(sensor_data));
-            
-//             // Delay before next transmission
-//             vTaskDelay(pdMS_TO_TICKS(5000));
-//         }
-//     }
-// }
-
-
+#if CONFIG_SENDER
 void vTaskESPNOW_TX(void *pvParameters) {
   ESP_LOGI(TAG, "ESP-NOW TX task started");
   
@@ -431,3 +424,26 @@ void vTaskESPNOW_TX(void *pvParameters) {
       }
   }
 }
+#endif
+
+
+#if CONFIG_RECEIVER
+void vTaskESPNOW_RX(void *pvParameters) {
+    ESP_LOGI(TAG, "ESP-NOW RX task started");
+    
+    espnow_recv_data_t recv_data;
+    
+    while (1) {
+        if (espnow_get_received_data(&recv_data, portMAX_DELAY)) {
+            // Print received data
+            ESP_LOGI(TAG, "\n=== Received Sensor Data ===");
+            ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
+            ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
+            ESP_LOGI(TAG, "Temperature: %d°C", recv_data.temperature);
+            ESP_LOGI(TAG, "Battery Level: %d%%", recv_data.battery_level);
+            ESP_LOGI(TAG, "Timestamp: %s", recv_data.timestamp);
+            ESP_LOGI(TAG, "==========================\n");
+        }
+    }
+}
+#endif
