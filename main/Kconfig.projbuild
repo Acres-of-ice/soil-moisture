@@ -1,0 +1,33 @@
+menu "ESP-NOW Sensor Application Configuration"
+    
+    choice DEVICE_MODE
+        prompt "Device Operation Mode"
+        default SENDER
+        help
+            Select the operation mode for this device.
+
+        config SENDER
+            bool "Sender Mode"
+            help
+                Device will read sensors and send data via ESP-NOW.
+
+        config RECEIVER
+            bool "Receiver Mode"
+            help
+                Device will receive data from sensors and display/forward it.
+    endchoice
+
+    config PCB_NAME_PREFIX
+        string "PCB Name Prefix"
+        default "SENSOR"
+        help
+            Prefix for the PCB name. Will be combined with last 2 bytes of MAC.
+
+    config QUEUE_SIZE
+        int "Queue Size for Sensor Data"
+        range 1 20
+        default 10
+        help
+            Size of the queue for storing sensor data messages.
+
+endmenu
