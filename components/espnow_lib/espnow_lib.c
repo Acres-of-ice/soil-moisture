@@ -113,7 +113,7 @@ static void espnow_task(void *pvParameter) {
     // set
     if (s_require_auth && s_auth_broadcast_interval_ms > 0 &&
         (current_time - s_last_auth_broadcast > s_auth_broadcast_interval_ms)) {
-      ESP_LOGI(TAG, "SIMPLE-AUTH: Sending periodic auth broadcast");
+      ESP_LOGI(TAG, "AUTH: Sending periodic auth broadcast");
       espnow_broadcast_auth();
       s_last_auth_broadcast = current_time;
     }
@@ -122,7 +122,7 @@ static void espnow_task(void *pvParameter) {
     if (!s_discovery_complete &&
         (current_time - discovery_start_time > s_discovery_timeout_ms)) {
       ESP_LOGI(TAG, "Peer discovery completed with %d peers found",
-               s_discovered_peer_count);
+               s_auth_peer_count);
       s_discovery_complete = true;
       // Notify any listeners (could add a callback here)
     }
@@ -352,14 +352,16 @@ esp_err_t espnow_set_pcb_name(const char *pcb_name) {
   return ESP_OK;
 }
 
-int espnow_get_peer_count(void) { return s_discovered_peer_count; }
+int espnow_get_peer_count(void) { return s_auth_peer_count; }
 
 esp_err_t espnow_get_peer_mac(int index, uint8_t *mac_addr) {
-  if (mac_addr == NULL || index < 0 || index >= s_discovered_peer_count) {
+  if (mac_addr == NULL || index < 0 || index >= s_auth_peer_count) {
     return ESP_ERR_INVALID_ARG;
   }
 
-  memcpy(mac_addr, s_discovered_peers[index], ESP_NOW_ETH_ALEN);
+  // Use s_auth_peers instead of s_discovered_peers to be consistent with
+  // espnow_get_peer_count
+  memcpy(mac_addr, s_auth_peers[index], ESP_NOW_ETH_ALEN);
   return ESP_OK;
 }
 
@@ -373,7 +375,7 @@ esp_err_t espnow_start_discovery(uint32_t timeout_ms) {
 
   // If authentication is required, send auth broadcast
   if (s_require_auth) {
-    ESP_LOGI(TAG, "SIMPLE-AUTH: Starting discovery with authentication");
+    ESP_LOGI(TAG, "AUTH: Starting discovery with authentication");
     return espnow_broadcast_auth();
   } else {
     // Send regular broadcast for discovery
@@ -652,14 +654,12 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
 
     memcpy(recv_key, data + 1, key_len);
 
-    ESP_LOGI(TAG,
-             "SIMPLE-AUTH: Received broadcast auth from " MACSTR
-             " with key '%s'",
+    ESP_LOGI(TAG, "AUTH: Received broadcast auth from " MACSTR " with key '%s'",
              MAC2STR(mac_addr), recv_key);
 
     // Compare with our key
     if (strcmp(recv_key, s_auth_key) == 0) {
-      ESP_LOGI(TAG, "SIMPLE-AUTH: Key matches, authenticating peer " MACSTR,
+      ESP_LOGI(TAG, "AUTH: Key matches, authenticating peer " MACSTR,
                MAC2STR(mac_addr));
 
       // Add to authenticated peers list
@@ -676,7 +676,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
 
         esp_err_t ret = esp_now_add_peer(&peer);
         if (ret != ESP_OK) {
-          ESP_LOGW(TAG, "SIMPLE-AUTH: Failed to add peer to ESP-NOW: %s",
+          ESP_LOGW(TAG, "AUTH: Failed to add peer to ESP-NOW: %s",
                    esp_err_to_name(ret));
         }
       }
@@ -689,7 +689,7 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
         store_peer_pcb_name(mac_addr, buf->pcb_name);
       }
     } else {
-      ESP_LOGW(TAG, "SIMPLE-AUTH: Key mismatch, ignoring peer " MACSTR,
+      ESP_LOGW(TAG, "AUTH: Key mismatch, ignoring peer " MACSTR,
                MAC2STR(mac_addr));
     }
 
@@ -888,7 +888,7 @@ esp_err_t espnow_broadcast_auth(void) {
 
   uint8_t *msg = malloc(msg_len);
   if (msg == NULL) {
-    ESP_LOGE(TAG, "SIMPLE-AUTH: Failed to allocate memory for auth message");
+    ESP_LOGE(TAG, "AUTH: Failed to allocate memory for auth message");
     return ESP_ERR_NO_MEM;
   }
 
@@ -896,16 +896,15 @@ esp_err_t espnow_broadcast_auth(void) {
   msg[0] = ESPNOW_AUTH;
   memcpy(msg + 1, s_auth_key, key_len);
 
-  ESP_LOGI(TAG, "SIMPLE-AUTH: Broadcasting auth message with key '%s'",
-           s_auth_key);
+  ESP_LOGI(TAG, "AUTH: Broadcasting auth message with key '%s'", s_auth_key);
 
   // Send as broadcast
   esp_err_t ret = esp_now_send(ESPNOW_BROADCAST_MAC, msg, msg_len);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "SIMPLE-AUTH: Failed to send broadcast auth: %s",
+    ESP_LOGE(TAG, "AUTH: Failed to send broadcast auth: %s",
              esp_err_to_name(ret));
   } else {
-    ESP_LOGI(TAG, "SIMPLE-AUTH: Broadcast auth sent successfully");
+    ESP_LOGI(TAG, "AUTH: Broadcast auth sent successfully");
     s_last_auth_broadcast = esp_timer_get_time() / 1000;
   }
 

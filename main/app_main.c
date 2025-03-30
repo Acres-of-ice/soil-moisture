@@ -81,6 +81,7 @@ static void wifi_init(void) {
   ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
            ssid);
 }
+//
 // Task to generate random sensor data and send it to the queue
 void sensor_data_task(void *pvParameter) {
   ESP_LOGI(TAG, "Sensor data simulation task started");
@@ -118,86 +119,136 @@ void sensor_data_task(void *pvParameter) {
                sensor_data.temperature);
     }
 
-    // Wait before generating next set of sensor values
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Generate data every 5 seconds
+    // Generate data every 1 second to match the sending interval when we have
+    // peers
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
 // Task to periodically send messages
 void send_task(void *pvParameter) {
   int message_count = 0;
+  TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
+  bool at_least_one_peer_authenticated = false;
+
   // Give time for peer discovery
+  ESP_LOGI(TAG, "Starting peer discovery...");
+  espnow_start_discovery(5000);
   vTaskDelay(pdMS_TO_TICKS(5000));
 
   // Get our own PCB name for message inclusion
   const char *own_pcb_name = espnow_get_peer_name(NULL);
-
   espnow_message_t sensor_data;
 
   while (1) {
-    int peer_count = espnow_get_peer_count();
-    if (peer_count > 0) {
-      // Get the first peer and its PCB name
+    // Get authenticated peer count
+    int auth_peer_count = espnow_get_peer_count();
+    ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
+
+    if (auth_peer_count > 0) {
+      // If we just discovered our first peer, switch to 1-second interval
+      if (!at_least_one_peer_authenticated) {
+        ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second "
+                      "send interval");
+        at_least_one_peer_authenticated = true;
+        send_interval = pdMS_TO_TICKS(1000); // 1 second interval
+      }
+
+      // Get the first authenticated peer and send to it
       uint8_t peer_mac[ESP_NOW_ETH_ALEN];
-      espnow_get_peer_mac(0, peer_mac);
-      const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
+      if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
+        const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
 
-      // Check if there's sensor data available
-      if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
-        // Get current timestamp
-        char timestamp[20];
-        time_t now = time(NULL);
-        struct tm *timeinfo = localtime(&now);
-        strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
+        // Check if there's sensor data available
+        if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+          // Get current timestamp
+          char timestamp[20];
+          time_t now = time(NULL);
+          struct tm *timeinfo = localtime(&now);
+          strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
 
-        // Format the message with sensor data
-        char message[128];
-        int msg_len = snprintf(
-            message, sizeof(message),
-            "PCB:%s to PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
-            peer_pcb_name, message_count++, sensor_data.soil_moisture,
-            sensor_data.battery_level, sensor_data.temperature, timestamp);
+          // Format the message with sensor data
+          char message[128];
+          int msg_len = snprintf(
+              message, sizeof(message),
+              "PCB:%s to PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+              peer_pcb_name, message_count++, sensor_data.soil_moisture,
+              sensor_data.battery_level, sensor_data.temperature, timestamp);
 
-        if (msg_len >= sizeof(message)) {
-          ESP_LOGE(TAG, "Message truncated!");
-          msg_len = sizeof(message) - 1;
+          if (msg_len >= sizeof(message)) {
+            ESP_LOGE(TAG, "Message truncated!");
+            msg_len = sizeof(message) - 1;
+          }
+
+          ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_pcb_name);
+          esp_err_t send_result = espnow_send(peer_mac, message, msg_len + 1);
+          if (send_result != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send message: %s",
+                     esp_err_to_name(send_result));
+          }
+        } else {
+          // Send regular message without sensor data if queue is empty
+          char message[64];
+          snprintf(message, sizeof(message),
+                   "Hello from PCB:%s to PCB:%s! Count: %d", own_pcb_name,
+                   peer_pcb_name, message_count++);
+
+          ESP_LOGI(TAG, "Sending to PCB %s: %s", peer_pcb_name, message);
+          esp_err_t send_result =
+              espnow_send(peer_mac, message, strlen(message) + 1);
+          if (send_result != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send message: %s",
+                     esp_err_to_name(send_result));
+          }
         }
-
-        ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_pcb_name);
-        espnow_send(peer_mac, message, msg_len + 1);
       } else {
-        // Send regular message without sensor data
-        char message[64];
-        snprintf(message, sizeof(message),
-                 "Hello from PCB:%s to PCB:%s! Count: %d", own_pcb_name,
-                 peer_pcb_name, message_count++);
-        ESP_LOGI(TAG, "Sending to PCB %s: %s", peer_pcb_name, message);
-        espnow_send(peer_mac, message, strlen(message) + 1);
+        ESP_LOGE(TAG, "Failed to get MAC address for peer index 0");
+        // If getting the MAC address fails, restart discovery
+        espnow_start_discovery(5000);
       }
 
       // Demonstration of changing our PCB name dynamically if needed
-      // This is useful for devices that change function or location
-      if (message_count % 10 == 0) {
+      if (message_count % 30 == 0) {
         char new_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
         snprintf(new_pcb_name, sizeof(new_pcb_name), "SENSOR-%d",
-                 message_count / 10);
+                 message_count / 30);
         ESP_LOGI(TAG, "Changing PCB name to: %s", new_pcb_name);
         espnow_set_pcb_name(new_pcb_name);
         // Update our local reference
         own_pcb_name = espnow_get_peer_name(NULL);
       }
     } else {
+      // Reset to 10-second interval if no peers are authenticated
+      if (at_least_one_peer_authenticated) {
+        ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second "
+                      "send interval");
+        at_least_one_peer_authenticated = false;
+        send_interval = pdMS_TO_TICKS(10000); // 10 seconds
+      }
+
       // No peers discovered yet, send broadcast
       ESP_LOGI(TAG, "No peers yet, sending broadcast from PCB: %s",
                own_pcb_name);
+
+      // Use the existing espnow_broadcast_auth function
+      espnow_broadcast_auth();
+
+      // Also send a regular message for backward compatibility
       char message[64];
       snprintf(message, sizeof(message),
                "Broadcast from PCB:%s, looking for peers", own_pcb_name);
       espnow_send(ESPNOW_BROADCAST_MAC, message, strlen(message) + 1);
+
+      // Restart discovery periodically if no peers found
+      if (message_count % 5 == 0) {
+        ESP_LOGI(TAG, "Restarting peer discovery...");
+        espnow_start_discovery(5000);
+      }
     }
 
     // Wait before sending next message
-    vTaskDelay(pdMS_TO_TICKS(10000)); // Send every 10 seconds
+    vTaskDelay(send_interval);
+    message_count++;
   }
 }
 
@@ -294,8 +345,12 @@ void app_main(void) {
       .send_cb = on_data_sent,     // Callback for sent data
 
       // Authentication settings
-      .require_auth = true, // Enable authentication
-      .auth_key = "AIR4201" // Set authentication key
+      .require_auth = true,           // Enable authentication
+      .auth_key = "AIR4201",          // Set authentication key
+      .auth_broadcast_interval_ms = 0 // Set authentication key
+
+      // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
+      // .max_auth_attempts;     // Maximum authentication attempts per peer
   };
 
   // Initialize ESP-NOW
