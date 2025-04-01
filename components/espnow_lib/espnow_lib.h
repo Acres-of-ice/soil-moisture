@@ -33,9 +33,6 @@ typedef enum {
   ESPNOW_DATA_MAX,
 } espnow_data_type_t;
 
-/** Authentication message type */
-#define ESPNOW_DATA_AUTH 3
-
 /** Simple broadcast authentication message type */
 #define ESPNOW_AUTH 4
 
@@ -111,6 +108,8 @@ typedef struct {
                                        // (0 to disable)
   uint32_t discovery_timeout_ms; // Timeout for peer discovery in milliseconds
   uint8_t max_auth_attempts;     // Maximum authentication attempts per peer
+  uint32_t peer_response_timeout_ms; // Timeout before responding to the same
+                                     // peer again
 } espnow_config_t;
 
 /** Broadcast MAC address */

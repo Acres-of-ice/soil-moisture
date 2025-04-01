@@ -465,8 +465,8 @@ CONFIG_PARTITION_TABLE_MD5=y
 #
 # ESP-NOW Sensor Application Configuration
 #
-# CONFIG_SENDER is not set
-CONFIG_RECEIVER=y
+CONFIG_SENDER=y
+# CONFIG_RECEIVER is not set
 CONFIG_PCB_NAME_PREFIX="SENSOR"
 CONFIG_QUEUE_SIZE=10
 # end of ESP-NOW Sensor Application Configuration
