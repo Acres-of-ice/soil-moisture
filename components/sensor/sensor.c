@@ -594,7 +594,7 @@ void sensor_task(void *pvParameters)
     //      ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
     //      vTaskDelete(NULL);
     //  }
-     espnow_queue = xQueueCreate(10, sizeof(espnow_message_t));
+     espnow_queue = xQueueCreate(20, sizeof(espnow_message_t));
      if (espnow_queue == NULL) {
      ESP_LOGE("Queue", "Failed to create queue!");
      }

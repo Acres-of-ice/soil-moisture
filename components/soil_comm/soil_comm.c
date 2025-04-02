@@ -24,7 +24,11 @@
 extern QueueHandle_t espnow_queue;
 
 static const char *TAG = "ESPNOW";
-
+extern char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
+extern bool message_received;
+extern char last_message[256];
+extern uint8_t last_sender_mac[ESP_NOW_ETH_ALEN];
+extern int last_rssi;
 // Global variables
 uint8_t device_id[6];
 uint8_t tx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
@@ -32,11 +36,11 @@ uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 QueueHandle_t message_queue = NULL;
 uint8_t sequence_number = 0;
 
-static char last_message[256] = {0}; // Adjust size as needed
-static uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
-static int last_rssi = 0;
-static bool message_received = false;
-static char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH] = {0};
+// static char last_message[256] = {0}; // Adjust size as needed
+// static uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
+// static int last_rssi = 0;
+// static bool message_received = false;
+// static char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH] = {0};
 
 typedef struct {
     uint8_t mac[6];
@@ -51,23 +55,7 @@ static QueueHandle_t espnow_recv_queue = NULL;
 
 // Configuration structure
 
-espnow_config_t config = {
-    .pcb_name = pcb_name,        // Set the PCB name
-    .wifi_channel = 1,           // WiFi channel (must match WiFi config)
-    .send_delay_ms = 1000,       // Delay between sends
-    .enable_long_range = true,   // Enable long range mode
-    .enable_encryption = false,  // No encryption for simplicity
-    .recv_cb = on_data_received, // Callback for received data
-    .send_cb = on_data_sent,     // Callback for sent data
 
-    // Authentication settings
-    .require_auth = true,           // Enable authentication
-    .auth_key = "AIR4201",          // Set authentication key
-    .auth_broadcast_interval_ms = 0 // Set authentication key
-
-    // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
-    // .max_auth_attempts;     // Maximum authentication attempts per peer
-};
 // typedef struct {
 //     uint8_t channel;
 //     uint8_t dest_mac[ESP_NOW_ETH_ALEN];
@@ -103,49 +91,49 @@ typedef struct {
 static delivery_tracker_t current_delivery = {0};
 
 // Initialize WiFi for ESP-NOW
-static void wifi_init(void) {
-    // Initialize networking stack
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+// static void wifi_init(void) {
+//     // Initialize networking stack
+//     ESP_ERROR_CHECK(esp_netif_init());
+//     ESP_ERROR_CHECK(esp_event_loop_create_default());
   
-    // Create default AP interface
-    esp_netif_create_default_wifi_ap();
+//     // Create default AP interface
+//     esp_netif_create_default_wifi_ap();
   
-    // Get MAC address for unique SSID
-    uint8_t mac[6];
-    ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
-    char ssid[32];
-    snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
+//     // Get MAC address for unique SSID
+//     uint8_t mac[6];
+//     ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+//     char ssid[32];
+//     snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
   
-    // Initialize and configure WiFi
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(
-        esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
+//     // Initialize and configure WiFi
+//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+//     ESP_ERROR_CHECK(
+//         esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
   
-    // Set up AP configuration
-    wifi_config_t ap_config = {0};
-    strcpy((char *)ap_config.ap.ssid, ssid);
-    ap_config.ap.ssid_len = strlen(ssid);
-    strcpy((char *)ap_config.ap.password, "12345678");
-    ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
-    ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    ap_config.ap.max_connection = 4;
+//     // Set up AP configuration
+//     wifi_config_t ap_config = {0};
+//     strcpy((char *)ap_config.ap.ssid, ssid);
+//     ap_config.ap.ssid_len = strlen(ssid);
+//     strcpy((char *)ap_config.ap.password, "12345678");
+//     ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
+//     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+//     ap_config.ap.max_connection = 4;
   
-    // Apply config and start WiFi
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_start());
+//     // Apply config and start WiFi
+//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+//     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+//     ESP_ERROR_CHECK(esp_wifi_start());
   
-    // Power saving settings
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
-    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
-    ESP_ERROR_CHECK(
-        esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+//     // Power saving settings
+//     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+//     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
+//     ESP_ERROR_CHECK(
+//         esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
   
-    ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
-             ssid);
-  }
+//     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
+//              ssid);
+//   }
 
 // ESP-NOW send callback
 static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -403,8 +391,52 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 //     return false;
 // }
 
+     void wifi_init(void) {
+    // Initialize networking stack
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+  
+    // Create default AP interface
+    esp_netif_create_default_wifi_ap();
+  
+    // Get MAC address for unique SSID
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+    char ssid[32];
+    snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
+  
+    // Initialize and configure WiFi
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(
+        esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
+  
+    // Set up AP configuration
+    wifi_config_t ap_config = {0};
+    strcpy((char *)ap_config.ap.ssid, ssid);
+    ap_config.ap.ssid_len = strlen(ssid);
+    strcpy((char *)ap_config.ap.password, "12345678");
+    ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
+    ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    ap_config.ap.max_connection = 4;
+  
+    // Apply config and start WiFi
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_start());
+  
+    // Power saving settings
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
+    ESP_ERROR_CHECK(
+        esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+  
+    ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
+             ssid);
+  }
 
-static void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
+
+ void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
     int data_len, int rssi) {
 // Copy data to process it safely
 if (data_len > 0 && data_len < sizeof(last_message)) {
@@ -425,7 +457,7 @@ MAC2STR(mac_addr), rssi, last_message);
 }
 }
 
-static void on_data_sent(const uint8_t *mac_addr,
+ void on_data_sent(const uint8_t *mac_addr,
     esp_now_send_status_t status) {
 // Get PCB name for logging
 const char *pcb_name = espnow_get_peer_name(mac_addr);
@@ -580,14 +612,18 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
 
 #if CONFIG_RECEIVER
-void vTaskESPNOW_RX(void *pvParameters) {
+
+void vTaskESPNOW_RX(void *pvParameters) 
+{
     ESP_LOGI(TAG, "ESP-NOW RX task started");
     
     espnow_recv_data_t recv_data;
     
     while (1) {
-        if (espnow_get_received_data(&recv_data, portMAX_DELAY)) {
+        if (message_received) {
             // Print received data
+            ESP_LOGI(TAG, "Processing message from PCB: %s", last_sender_pcb_name);
+
             ESP_LOGI(TAG, "\n=== Received Sensor Data ===");
             ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
             ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
@@ -609,7 +645,20 @@ void vTaskESPNOW_RX(void *pvParameters) {
             }
             ESP_LOGI(TAG, "Signal Quality: %s", signal_quality);
             ESP_LOGI(TAG, "==========================\n");
+            if (espnow_get_peer_count() > 0) 
+            {
+                // Include our PCB name in the response
+             char response[64];
+             snprintf(response, sizeof(response), "STATUS:%s,HEAP:%d",
+                espnow_get_peer_name(NULL), (int)esp_get_free_heap_size());
+                espnow_send(last_sender_mac, response, strlen(response) + 1);
+      
+             ESP_LOGI(TAG, "Sent status response to %s", last_sender_pcb_name);
+            }
+
+            message_received = false;
         }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 #endif
