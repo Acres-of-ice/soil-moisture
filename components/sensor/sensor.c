@@ -602,31 +602,21 @@ void sensor_task(void *pvParameters)
     while (1) 
     {
         //for (int i = 0; i < ds18b20_device_num; i++) {
-            float temperature = 0.0;
+        float temperature = 0.0;
 
-            // ESP_ERROR_CHECK(ds18b20_trigger_temperature_conversion(ds18b20s[0]));
-            // vTaskDelay(pdMS_TO_TICKS(800));  // Wait for conversion to complete (750ms required)
-            
-            // if (ds18b20_get_temperature(ds18b20s[0], &temperature) == ESP_OK) {
-            //     //ESP_LOGI(TAG, "DS18B20[%d] Temperature: %.2f°C", 0, temperature);
-            // } else {
-            //     //ESP_LOGE(TAG, "Failed to read temperature from DS18B20[%d]", 0);
-            // }
-        //}
+
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
-
-        // buf[0] = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
-        // buf[2] = (uint8_t)temperature;
-        // buf[3] = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-        
 
         espnow_message_t message;
 
         message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
         message.temperature = (uint8_t)temperature;
         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-    
+        
+        UBaseType_t available = uxQueueSpacesAvailable(espnow_queue);
+        ESP_LOGI("SensorTask", "Queue space available: %d", available);
+        
         if (espnow_queue != NULL) {
             if (xQueueSend(espnow_queue, &message, pdMS_TO_TICKS(100)) != pdTRUE) {
                 ESP_LOGE("SensorTask", "Failed to send data to queue");

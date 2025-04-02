@@ -49,9 +49,6 @@ espnow_config_t config = {
   // .max_auth_attempts;     // Maximum authentication attempts per peer
 };
 
-
-
-
 void app_main(void)
 {
     vext_on(); // ✅ Turn on OLED power
@@ -74,13 +71,20 @@ void app_main(void)
     wifi_init();
     i2c_init();
     //lora_init();
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+    snprintf(pcb_name, sizeof(pcb_name), "SENSOR-%02X%02X", mac[4], mac[5]);
     ESP_ERROR_CHECK(espnow_init(&config));
+
+    ESP_ERROR_CHECK(espnow_start_discovery(30000));
+
+    ESP_LOGI(TAG, "ESP-NOW initialized with PCB name: %s", pcb_name);
 
     vTaskDelay(pdMS_TO_TICKS(2000));
 
 #if CONFIG_SENDER
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
-    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 3, NULL);
+    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
 
 #if CONFIG_RECEIVER
