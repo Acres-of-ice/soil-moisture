@@ -36,11 +36,7 @@ uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 QueueHandle_t message_queue = NULL;
 uint8_t sequence_number = 0;
 
-// static char last_message[256] = {0}; // Adjust size as needed
-// static uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
-// static int last_rssi = 0;
-// static bool message_received = false;
-// static char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH] = {0};
+
 
 typedef struct {
     uint8_t mac[6];
@@ -53,32 +49,6 @@ typedef struct {
 
 static QueueHandle_t espnow_recv_queue = NULL;
 
-// Configuration structure
-
-
-// typedef struct {
-//     uint8_t channel;
-//     uint8_t dest_mac[ESP_NOW_ETH_ALEN];
-//     bool enable_long_range;
-//     bool enable_ack;
-// } espnow_config_t;
-
-// static espnow_config_t espnow_config = {
-//     .channel = CONFIG_ESPNOW_CHANNEL,
-//     .dest_mac = {0x48, 0xCA, 0x43, 0x3B, 0xC4, 0x84}, // Default MAC
-//     .enable_long_range = false,
-//     .enable_ack = true
-// };
-
-// Message structure
-// typedef struct {
-//     uint8_t address;
-//     uint8_t command;
-//     uint8_t source;
-//     uint8_t retries;
-//     uint8_t seq_num;
-//     char data[ESPNOW_MAX_PAYLOAD_SIZE - 5]; // Reserve space for headers
-// } espnow_message_t;
 
 // Delivery tracking
 typedef struct {
@@ -90,50 +60,7 @@ typedef struct {
 
 static delivery_tracker_t current_delivery = {0};
 
-// Initialize WiFi for ESP-NOW
-// static void wifi_init(void) {
-//     // Initialize networking stack
-//     ESP_ERROR_CHECK(esp_netif_init());
-//     ESP_ERROR_CHECK(esp_event_loop_create_default());
-  
-//     // Create default AP interface
-//     esp_netif_create_default_wifi_ap();
-  
-//     // Get MAC address for unique SSID
-//     uint8_t mac[6];
-//     ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
-//     char ssid[32];
-//     snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
-  
-//     // Initialize and configure WiFi
-//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-//     ESP_ERROR_CHECK(
-//         esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
-  
-//     // Set up AP configuration
-//     wifi_config_t ap_config = {0};
-//     strcpy((char *)ap_config.ap.ssid, ssid);
-//     ap_config.ap.ssid_len = strlen(ssid);
-//     strcpy((char *)ap_config.ap.password, "12345678");
-//     ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
-//     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
-//     ap_config.ap.max_connection = 4;
-  
-//     // Apply config and start WiFi
-//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-//     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-//     ESP_ERROR_CHECK(esp_wifi_start());
-  
-//     // Power saving settings
-//     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
-//     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
-//     ESP_ERROR_CHECK(
-//         esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
-  
-//     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
-//              ssid);
-//   }
+
 
 // ESP-NOW send callback
 static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -209,189 +136,10 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
     return xQueueReceive(espnow_recv_queue, data, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
-// Add ESP-NOW peer
-// static bool espnow_add_peer(const uint8_t *mac_addr) {
-//     if (esp_now_is_peer_exist(mac_addr)) {
-//         return true;
-//     }
-
-//     esp_now_peer_info_t peer = {
-//         .channel = espnow_config.channel,
-//         .ifidx = ESP_IF_WIFI_STA,
-//         .encrypt = false
-//     };
-//     memcpy(peer.peer_addr, mac_addr, ESP_NOW_ETH_ALEN);
-
-//     if (espnow_config.enable_long_range) {
-//         peer.ifidx = ESP_IF_WIFI_STA;
-//         peer.encrypt = false;
-//     }
-
-//     esp_err_t ret = esp_now_add_peer(&peer);
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "Failed to add peer: %s", esp_err_to_name(ret));
-//         return false;
-//     }
-
-//     ESP_LOGI(TAG, "Added peer: " MACSTR, MAC2STR(mac_addr));
-//     return true;
-// }
-
-// Initialize ESP-NOW
-// esp_err_t espnow_init(void) {
-//     // Initialize WiFi first
-//     esp_err_t ret = wifi_init_for_espnow();
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "WiFi initialization failed");
-//         return ret;
-//     }
-
-//     // Initialize ESP-NOW
-//     ret = esp_now_init();
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "ESP-NOW init failed: %s", esp_err_to_name(ret));
-//         return ret;
-//     }
-
-//     // Register callbacks
-//     ret = esp_now_register_send_cb(espnow_send_cb);
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "Failed to register send callback: %s", esp_err_to_name(ret));
-//         esp_now_deinit();
-//         return ret;
-//     }
-
-//     ret = esp_now_register_recv_cb(espnow_recv_cb);
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "Failed to register receive callback: %s", esp_err_to_name(ret));
-//         esp_now_deinit();
-//         return ret;
-//     }
-//     espnow_recv_init();
-
-//     // Add default peer
-//     if (!espnow_add_peer(espnow_config.dest_mac)) {
-//         ESP_LOGE(TAG, "Failed to add default peer");
-//         esp_now_deinit();
-//         return ESP_FAIL;
-//     }
-
-//     // Create message queue
-//     message_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(espnow_message_t));
-//     if (message_queue == NULL) {
-//         ESP_LOGE(TAG, "Failed to create message queue");
-//         esp_now_deinit();
-//         return ESP_FAIL;
-//     }
-
-//     ESP_LOGI(TAG, "ESP-NOW initialized successfully");
-//     return ESP_OK;
-// }
 
 
-
-// esp_err_t espnow_init(void) {
-//   // Check if WiFi is already initialized
-//   if (esp_netif_get_default_netif() == NULL) {
-//       // WiFi not initialized yet, do minimal initialization
-//       ESP_ERROR_CHECK(esp_netif_init());
-//       ESP_ERROR_CHECK(esp_event_loop_create_default());
-//   }
-
-//   // Initialize ESP-NOW
-//   esp_err_t ret = esp_now_init();
-//   if (ret != ESP_OK) {
-//       ESP_LOGE(TAG, "ESP-NOW init failed: %s", esp_err_to_name(ret));
-//       return ret;
-//   }
-
-//   // Register callbacks
-//   ret = esp_now_register_send_cb(espnow_send_cb);
-//   if (ret != ESP_OK) {
-//       ESP_LOGE(TAG, "Failed to register send callback: %s", esp_err_to_name(ret));
-//       esp_now_deinit();
-//       return ret;
-//   }
-
-//   ret = esp_now_register_recv_cb(espnow_recv_cb);
-//   if (ret != ESP_OK) {
-//       ESP_LOGE(TAG, "Failed to register receive callback: %s", esp_err_to_name(ret));
-//       esp_now_deinit();
-//       return ret;
-//   }
-
-//   // Set WiFi channel if needed
-//   if (esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
-//       ESP_LOGW(TAG, "Failed to set WiFi channel");
-//   }
-
-//   // Add peer
-//   uint8_t dest_mac[ESP_NOW_ETH_ALEN] = {0x24, 0x0A, 0xC4, 0x12, 0x34, 0x56};
-//   if (!esp_now_is_peer_exist(dest_mac)) {
-//       esp_now_peer_info_t peer = {0};
-//       memcpy(peer.peer_addr, dest_mac, ESP_NOW_ETH_ALEN);
-//       peer.channel = CONFIG_ESPNOW_CHANNEL;
-//       peer.ifidx = ESP_IF_WIFI_STA;
-//       peer.encrypt = false;
-      
-//       if (esp_now_add_peer(&peer) != ESP_OK) {
-//           ESP_LOGE(TAG, "Failed to add peer");
-//           esp_now_deinit();
-//           return ESP_FAIL;
-//       }
-//   }
-
-//   ESP_LOGI(TAG, "ESP-NOW initialized successfully");
-//   return ESP_OK;
-// }
-
-// Send data with retries
-// static bool espnow_send_data(const uint8_t *data, size_t len) {
-//     if (len > ESPNOW_MAX_PAYLOAD_SIZE) {
-//         ESP_LOGE(TAG, "Message too large (%d > %d)", len, ESPNOW_MAX_PAYLOAD_SIZE);
-//         return false;
-//     }
-
-//     current_delivery.acked = false;
-//     current_delivery.retry_count = 0;
-//     current_delivery.timestamp = get_current_time();
-
-//     for (int retry = 0; retry < ESPNOW_MAX_RETRIES; retry++) {
-//         current_delivery.retry_count = retry + 1;
-        
-//         esp_err_t ret = esp_now_send(espnow_config.dest_mac, data, len);
-//         if (ret != ESP_OK) {
-//             ESP_LOGE(TAG, "Send failed (attempt %d): %s", 
-//                     retry + 1, esp_err_to_name(ret));
-//             vTaskDelay(pdMS_TO_TICKS(ESPNOW_RETRY_DELAY_MS));
-//             continue;
-//         }
-
-//         if (espnow_config.enable_ack) {
-//             // Wait for acknowledgment
-//             uint32_t timeout_ms = 100;
-//             uint32_t start = xTaskGetTickCount();
-            
-//             while (!current_delivery.acked && 
-//                   (xTaskGetTickCount() - start) < pdMS_TO_TICKS(timeout_ms)) {
-//                 vTaskDelay(pdMS_TO_TICKS(10));
-//             }
-
-//             if (current_delivery.acked) {
-//                 ESP_LOGI(TAG, "Message acknowledged after %d attempts", retry + 1);
-//                 return true;
-//             }
-//         } else {
-//             // No ack required
-//             return true;
-//         }
-//     }
-
-//     ESP_LOGE(TAG, "Failed to send message after %d attempts", ESPNOW_MAX_RETRIES);
-//     return false;
-// }
-
-     void wifi_init(void) {
+void wifi_init(void) 
+{
     // Initialize networking stack
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -433,11 +181,12 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
   
     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
              ssid);
-  }
+}
 
 
  void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
-    int data_len, int rssi) {
+    int data_len, int rssi) 
+{
 // Copy data to process it safely
 if (data_len > 0 && data_len < sizeof(last_message)) {
 memcpy(last_message, data, data_len);
@@ -469,142 +218,211 @@ status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failed");
 
 
 #if CONFIG_SENDER
-// void vTaskESPNOW_TX(void *pvParameters) {
-//   ESP_LOGI(TAG, "ESP-NOW TX task started");
-  
-//   // Get device MAC
-//   esp_efuse_mac_get_default(device_id);
-//   ESP_LOGI(TAG, "%s",device_id);
-  
-//   // Initialize ESP-NOW
-//   // if (espnow_init() != ESP_OK) {
-//   //     ESP_LOGE(TAG, "Failed to initialize ESP-NOW");
-//   //     vTaskDelete(NULL);
-//   //     return;
-//   // }
-
-//   espnow_message_t received_data;
-//   char timestamp[20];
-
-//   while (1) {
-//       // Wait for data from queue
-//       if (xQueueReceive(espnow_queue, &received_data, portMAX_DELAY) == pdTRUE) {
-//           // Get current timestamp
-//           time_t now = time(NULL);
-//           struct tm *timeinfo = localtime(&now);
-//           strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
-
-//           // Format the message
-//           int msg_len = snprintf((char *)tx_buffer, sizeof(tx_buffer),
-//               "ID[%02X:%02X:%02X:%02X:%02X:%02X]S[%d]B[%d]T[%d]D[%s]",
-//               device_id[0], device_id[1], device_id[2],
-//               device_id[3], device_id[4], device_id[5],
-//               received_data.soil_moisture,
-//               received_data.battery_level,
-//               received_data.temperature,
-//               timestamp);
-
-//           if (msg_len >= sizeof(tx_buffer)) {
-//               ESP_LOGE(TAG, "Message truncated!");
-//               msg_len = sizeof(tx_buffer) - 1;
-//           }
-
-//           // Send the data
-//           esp_err_t ret = esp_now_send(espnow_config.dest_mac, tx_buffer, msg_len);
-//           if (ret == ESP_OK) {
-//               ESP_LOGI(TAG, "Data sent successfully");
-//           } else {
-//               ESP_LOGE(TAG, "Send failed: %s", esp_err_to_name(ret));
-//           }
-
-//           // Clear buffers
-//           memset(tx_buffer, 0, sizeof(tx_buffer));
-//           vTaskDelay(pdMS_TO_TICKS(5000));
-//       }
-//   }
-// }
 
 void vTaskESPNOW_TX(void *pvParameters) {
-    ESP_LOGI(TAG, "ESP-NOW TX task started");
+    // ESP_LOGI(TAG, "ESP-NOW TX task started");
     
-    // Get device MAC
-    esp_efuse_mac_get_default(device_id);
-    ESP_LOGI(TAG, "Device ID: %02X:%02X:%02X:%02X:%02X:%02X", 
-             device_id[0], device_id[1], device_id[2], 
-             device_id[3], device_id[4], device_id[5]);
+    // // Get device MAC
+    // esp_efuse_mac_get_default(device_id);
+    // ESP_LOGI(TAG, "Device ID: %02X:%02X:%02X:%02X:%02X:%02X", 
+    //          device_id[0], device_id[1], device_id[2], 
+    //          device_id[3], device_id[4], device_id[5]);
     
+    // TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
+    // bool at_least_one_peer_authenticated = false;
+    // espnow_message_t received_data;
+    // int message_count = 0;
+    
+    // // Peer discovery before sending
+    // ESP_LOGI(TAG, "Starting peer discovery...");
+    // espnow_start_discovery(5000);
+    // vTaskDelay(pdMS_TO_TICKS(5000));
+    
+    // while (1) {
+    //     // Check for authenticated peers
+    //     int auth_peer_count = espnow_get_peer_count();
+    //     ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
+        
+    //     if (auth_peer_count > 0) {
+    //         if (!at_least_one_peer_authenticated) {
+    //             ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second interval");
+    //             at_least_one_peer_authenticated = true;
+    //             send_interval = pdMS_TO_TICKS(1000);
+    //         }
+            
+    //         // Get the first authenticated peer
+    //         uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+    //         if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
+    //             if (xQueueReceive(espnow_queue, &received_data, 0) == pdTRUE) {
+    //                 char timestamp[20];
+    //                 time_t now = time(NULL);
+    //                 struct tm *timeinfo = localtime(&now);
+    //                 strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
+                    
+    //                 // Format message
+    //                 char message[128];
+    //                 int msg_len = snprintf(message, sizeof(message),
+    //                                        "ID[%02X:%02X:%02X:%02X:%02X:%02X] S[%d] B[%d] T[%d] D[%s]",
+    //                                        device_id[0], device_id[1], device_id[2],
+    //                                        device_id[3], device_id[4], device_id[5],
+    //                                        received_data.soil_moisture,
+    //                                        received_data.battery_level,
+    //                                        received_data.temperature,
+    //                                        timestamp);
+                    
+    //                 if (msg_len >= sizeof(message)) {
+    //                     ESP_LOGE(TAG, "Message truncated!");
+    //                     msg_len = sizeof(message) - 1;
+    //                 }
+                    
+    //                 // Send message
+    //                 esp_err_t ret = esp_now_send(peer_mac, (uint8_t *)message, msg_len + 1);
+    //                 if (ret == ESP_OK) {
+    //                     ESP_LOGI(TAG, "Data sent successfully to peer");
+    //                 } else {
+    //                     ESP_LOGE(TAG, "Send failed: %s", esp_err_to_name(ret));
+    //                 }
+    //             }
+    //         } else {
+    //             ESP_LOGE(TAG, "Failed to get peer MAC address");
+    //             espnow_start_discovery(5000);
+    //         }
+    //     } else {
+    //         if (at_least_one_peer_authenticated) {
+    //             ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second interval");
+    //             at_least_one_peer_authenticated = false;
+    //             send_interval = pdMS_TO_TICKS(10000);
+    //         }
+            
+    //         ESP_LOGI(TAG, "No peers yet, sending broadcast");
+    //         espnow_broadcast_auth();
+    //     }
+        
+    //     vTaskDelay(send_interval);
+    //     message_count++;
+    // }
+    int message_count = 0;
     TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
     bool at_least_one_peer_authenticated = false;
-    espnow_message_t received_data;
-    int message_count = 0;
-    
-    // Peer discovery before sending
+  
+    // Give time for peer discovery
     ESP_LOGI(TAG, "Starting peer discovery...");
     espnow_start_discovery(5000);
     vTaskDelay(pdMS_TO_TICKS(5000));
-    
+  
+    // Get our own PCB name for message inclusion
+    const char *own_pcb_name = espnow_get_peer_name(NULL);
+    espnow_message_t sensor_data;
+  
     while (1) {
-        // Check for authenticated peers
-        int auth_peer_count = espnow_get_peer_count();
-        ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
-        
-        if (auth_peer_count > 0) {
-            if (!at_least_one_peer_authenticated) {
-                ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second interval");
-                at_least_one_peer_authenticated = true;
-                send_interval = pdMS_TO_TICKS(1000);
-            }
-            
-            // Get the first authenticated peer
-            uint8_t peer_mac[ESP_NOW_ETH_ALEN];
-            if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
-                if (xQueueReceive(espnow_queue, &received_data, 0) == pdTRUE) {
-                    char timestamp[20];
-                    time_t now = time(NULL);
-                    struct tm *timeinfo = localtime(&now);
-                    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
-                    
-                    // Format message
-                    char message[128];
-                    int msg_len = snprintf(message, sizeof(message),
-                                           "ID[%02X:%02X:%02X:%02X:%02X:%02X] S[%d] B[%d] T[%d] D[%s]",
-                                           device_id[0], device_id[1], device_id[2],
-                                           device_id[3], device_id[4], device_id[5],
-                                           received_data.soil_moisture,
-                                           received_data.battery_level,
-                                           received_data.temperature,
-                                           timestamp);
-                    
-                    if (msg_len >= sizeof(message)) {
-                        ESP_LOGE(TAG, "Message truncated!");
-                        msg_len = sizeof(message) - 1;
-                    }
-                    
-                    // Send message
-                    esp_err_t ret = esp_now_send(peer_mac, (uint8_t *)message, msg_len + 1);
-                    if (ret == ESP_OK) {
-                        ESP_LOGI(TAG, "Data sent successfully to peer");
-                    } else {
-                        ESP_LOGE(TAG, "Send failed: %s", esp_err_to_name(ret));
-                    }
-                }
-            } else {
-                ESP_LOGE(TAG, "Failed to get peer MAC address");
-                espnow_start_discovery(5000);
-            }
-        } else {
-            if (at_least_one_peer_authenticated) {
-                ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second interval");
-                at_least_one_peer_authenticated = false;
-                send_interval = pdMS_TO_TICKS(10000);
-            }
-            
-            ESP_LOGI(TAG, "No peers yet, sending broadcast");
-            espnow_broadcast_auth();
+      // Get authenticated peer count
+      int auth_peer_count = espnow_get_peer_count();
+      ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
+  
+      if (auth_peer_count > 0) {
+        // If we just discovered our first peer, switch to 1-second interval
+        if (!at_least_one_peer_authenticated) {
+          ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second "
+                        "send interval");
+          at_least_one_peer_authenticated = true;
+          send_interval = pdMS_TO_TICKS(1000); // 1 second interval
         }
-        
-        vTaskDelay(send_interval);
-        message_count++;
+  
+        // Get the first authenticated peer and send to it
+        uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+        if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
+          const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
+  
+          // Check if there's sensor data available
+          if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+            // Get current timestamp
+            char timestamp[20];
+            time_t now = time(NULL);
+            struct tm *timeinfo = localtime(&now);
+            strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
+  
+            // Format the message with sensor data
+            char message[128];
+            int msg_len = snprintf(
+                message, sizeof(message),
+                "PCB:%s to PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+                peer_pcb_name, message_count++, sensor_data.soil_moisture,
+                sensor_data.battery_level, sensor_data.temperature, timestamp);
+  
+            if (msg_len >= sizeof(message)) {
+              ESP_LOGE(TAG, "Message truncated!");
+              msg_len = sizeof(message) - 1;
+            }
+  
+            ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_pcb_name);
+            esp_err_t send_result = espnow_send(peer_mac, message, msg_len + 1);
+            if (send_result != ESP_OK) {
+              ESP_LOGE(TAG, "Failed to send message: %s",
+                       esp_err_to_name(send_result));
+            }
+          } else {
+            // Send regular message without sensor data if queue is empty
+            char message[64];
+            snprintf(message, sizeof(message),
+                     "Hello from PCB:%s to PCB:%s! Count: %d", own_pcb_name,
+                     peer_pcb_name, message_count++);
+  
+            ESP_LOGI(TAG, "Sending to PCB %s: %s", peer_pcb_name, message);
+            esp_err_t send_result =
+                espnow_send(peer_mac, message, strlen(message) + 1);
+            if (send_result != ESP_OK) {
+              ESP_LOGE(TAG, "Failed to send message: %s",
+                       esp_err_to_name(send_result));
+            }
+          }
+        } else {
+          ESP_LOGE(TAG, "Failed to get MAC address for peer index 0");
+          // If getting the MAC address fails, restart discovery
+          espnow_start_discovery(5000);
+        }
+  
+        // Demonstration of changing our PCB name dynamically if needed
+        if (message_count % 30 == 0) {
+          char new_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
+          snprintf(new_pcb_name, sizeof(new_pcb_name), "SENSOR-%d",
+                   message_count / 30);
+          ESP_LOGI(TAG, "Changing PCB name to: %s", new_pcb_name);
+          espnow_set_pcb_name(new_pcb_name);
+          // Update our local reference
+          own_pcb_name = espnow_get_peer_name(NULL);
+        }
+      } else {
+        // Reset to 10-second interval if no peers are authenticated
+        if (at_least_one_peer_authenticated) {
+          ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second "
+                        "send interval");
+          at_least_one_peer_authenticated = false;
+          send_interval = pdMS_TO_TICKS(10000); // 10 seconds
+        }
+  
+        // No peers discovered yet, send broadcast
+        ESP_LOGI(TAG, "No peers yet, sending broadcast from PCB: %s",
+                 own_pcb_name);
+  
+        // Use the existing espnow_broadcast_auth function
+        espnow_broadcast_auth();
+  
+        // Also send a regular message for backward compatibility
+        char message[64];
+        snprintf(message, sizeof(message),
+                 "Broadcast from PCB:%s, looking for peers", own_pcb_name);
+        espnow_send(ESPNOW_BROADCAST_MAC, message, strlen(message) + 1);
+  
+        // Restart discovery periodically if no peers found
+        if (message_count % 5 == 0) {
+          ESP_LOGI(TAG, "Restarting peer discovery...");
+          espnow_start_discovery(5000);
+        }
+      }
+  
+      // Wait before sending next message
+      vTaskDelay(send_interval);
+      message_count++;
     }
 }
 
