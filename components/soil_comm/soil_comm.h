@@ -50,5 +50,9 @@ bool remove_espnow_peer(const uint8_t *mac_addr);
 void get_mac_for_device(uint8_t deviceAddress, uint8_t *mac_addr);
 uint8_t get_device_from_mac(const uint8_t *mac_addr);
 bool register_device_mac_mapping(uint8_t device_addr, const uint8_t *mac_addr);
+static void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
+  int data_len, int rssi);
+static void on_data_sent(const uint8_t *mac_addr,
+  esp_now_send_status_t status);
 
 #endif // ESPNOW_COM_H
