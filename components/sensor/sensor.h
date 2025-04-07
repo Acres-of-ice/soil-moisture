@@ -36,5 +36,6 @@ void task_tx(void *pvParameters);
 void task_rx(void *pvParameters);
 void sensor_task(void *pvParameters);
 void lora_init();
+//void get_sensor_readings(sensor_readings_t *output_readings);
 
 #endif // SENSOR_H

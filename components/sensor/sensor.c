@@ -112,8 +112,23 @@ static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 
 
-
+extern SemaphoreHandle_t readings_mutex;
 QueueHandle_t espnow_queue = NULL;
+
+// Structure for plain float values
+typedef struct {
+    float temperature;
+    float humidity;
+    float battery
+  } sensor_readings_t;
+
+sensor_readings_t readings = {.temperature = 99.0f,
+    .humidity = 99.0f,
+    .battery = 99.0f};
+
+sensor_readings_t simulated_readings = {.temperature = 15.0f,
+              .humidity = 25.0f,
+              .battery = 0.0f};
 
 
 void i2c_init()
@@ -664,3 +679,32 @@ void lora_init()
 #endif
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
 }
+
+// void get_sensor_readings(sensor_readings_t *output_readings) {
+//     if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+//       if (site_config.simulate) {
+//         // Copy simulated readings to output
+//         output_readings->temperature = simulated_readings.temperature;
+//         output_readings->humidity = simulated_readings.humidity;
+//         output_readings->battery = simulated_readings.battery;
+//       } else {
+//         // Copy all readings
+//         output_readings->temperature = readings.temperature;
+//         output_readings->humidity = readings.humidity;
+//         output_readings->battery = readings.battery;
+//       }
+//       // Added: Log all sensor values at debug level
+//       ESP_LOGD(TAG,
+//                "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
+//                "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s",
+//                output_readings->temperature, output_readings->humidity,
+//                output_readings->water_temp, output_readings->wind,
+//                output_readings->fountain_pressure, output_readings->discharge);
+  
+//       xSemaphoreGive(readings_mutex);
+//       xSemaphoreGive(readings_mutex);
+//     } else {
+//       // Return last known values if mutex timeout
+//       ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
+//     }
+//   }

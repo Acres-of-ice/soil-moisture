@@ -73,10 +73,10 @@ void sensor_readTask(void *pvParameters)
     }
 }
 
-void app_main(void)
-{
-    // Detect the DS18B20 sensor in the bus
-    sensor_detect();
-    // Start task to read the temperature from DS18B20 sensor
-    xTaskCreate(&sensor_readTask, "sensor_readTask", 4096, NULL, 5, NULL);
-}
+// void app_main(void)
+// {
+//     // Detect the DS18B20 sensor in the bus
+//     sensor_detect();
+//     // Start task to read the temperature from DS18B20 sensor
+//     xTaskCreate(&sensor_readTask, "sensor_readTask", 4096, NULL, 5, NULL);
+// }
