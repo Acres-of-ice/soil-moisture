@@ -1,6 +1,11 @@
 #ifndef SENSOR_H
 #define SENSOR_H
 
+typedef struct {
+    float temperature;
+    float humidity;
+    float battery;
+  } sensor_readings_t;
 
 typedef struct {
     uint8_t soil_moisture;  // buf[0]
@@ -36,6 +41,6 @@ void task_tx(void *pvParameters);
 void task_rx(void *pvParameters);
 void sensor_task(void *pvParameters);
 void lora_init();
-//void get_sensor_readings(sensor_readings_t *output_readings);
+void get_sensor_readings(sensor_readings_t *output_readings);
 
 #endif // SENSOR_H

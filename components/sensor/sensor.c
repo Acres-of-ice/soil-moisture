@@ -112,15 +112,11 @@ static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 
 
-extern SemaphoreHandle_t readings_mutex;
+ SemaphoreHandle_t readings_mutex;
 QueueHandle_t espnow_queue = NULL;
 
 // Structure for plain float values
-typedef struct {
-    float temperature;
-    float humidity;
-    float battery
-  } sensor_readings_t;
+
 
 sensor_readings_t readings = {.temperature = 99.0f,
     .humidity = 99.0f,
@@ -537,6 +533,7 @@ void task_rx(void *pvParameters)
 
 void sensor_task(void *pvParameters)
 {
+    static sensor_readings_t local_readings = {0};
                  /*INITIALISING ADC FOR MOISTURE SENSOR*/
         adc_oneshot_unit_handle_t adc1_handle;
         adc_oneshot_unit_init_cfg_t init_config1 = {
@@ -637,6 +634,15 @@ void sensor_task(void *pvParameters)
                 ESP_LOGE("SensorTask", "Failed to send data to queue");
             }
         }
+        local_readings.humidity = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        local_readings.temperature = (uint8_t)temperature;
+        local_readings.battery = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+            // Now take mutex only for the quick copy operation
+    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+        // Quick memcpy to update the shared readings
+        memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+        xSemaphoreGive(readings_mutex);
+      }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
@@ -680,31 +686,34 @@ void lora_init()
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
 }
 
-// void get_sensor_readings(sensor_readings_t *output_readings) {
-//     if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-//       if (site_config.simulate) {
-//         // Copy simulated readings to output
-//         output_readings->temperature = simulated_readings.temperature;
-//         output_readings->humidity = simulated_readings.humidity;
-//         output_readings->battery = simulated_readings.battery;
-//       } else {
-//         // Copy all readings
-//         output_readings->temperature = readings.temperature;
-//         output_readings->humidity = readings.humidity;
-//         output_readings->battery = readings.battery;
-//       }
-//       // Added: Log all sensor values at debug level
-//       ESP_LOGD(TAG,
-//                "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
-//                "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s",
-//                output_readings->temperature, output_readings->humidity,
-//                output_readings->water_temp, output_readings->wind,
-//                output_readings->fountain_pressure, output_readings->discharge);
+void get_sensor_readings(sensor_readings_t *output_readings) {
+    if (readings_mutex == NULL) {
+        readings_mutex = xSemaphoreCreateMutex();
+      }
+    if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    //   if (site_config.simulate) {
+    //     // Copy simulated readings to output
+    //     output_readings->temperature = simulated_readings.temperature;
+    //     output_readings->humidity = simulated_readings.humidity;
+    //     output_readings->battery = simulated_readings.battery;
+    //   } else {
+        // Copy all readings
+        output_readings->temperature = readings.temperature;
+        output_readings->humidity = readings.humidity;
+        output_readings->battery = readings.battery;
+     // }
+      // Added: Log all sensor values at debug level
+    //   ESP_LOGD(TAG,
+    //            "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
+    //            "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s",
+    //            output_readings->temperature, output_readings->humidity,
+    //            output_readings->water_temp, output_readings->wind,
+    //            output_readings->fountain_pressure, output_readings->discharge);
   
-//       xSemaphoreGive(readings_mutex);
-//       xSemaphoreGive(readings_mutex);
-//     } else {
-//       // Return last known values if mutex timeout
-//       ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
-//     }
-//   }
+      xSemaphoreGive(readings_mutex);
+      xSemaphoreGive(readings_mutex);
+    } else {
+      // Return last known values if mutex timeout
+      ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
+    }
+  }

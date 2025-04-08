@@ -427,6 +427,101 @@ static esp_err_t http_server_download_handler(httpd_req_t *req)
     return ret;
 }
 
+static esp_err_t http_server_logs_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "Logs download requested");
+    const char *filepath = "/spiffs/log.csv";
+    struct stat file_stat;
+
+    // Try to take mutex with timeout
+    if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire file mutex for download");
+       // update_status_message("Download Failed");
+        return ESP_FAIL;
+    }
+  
+    if (stat(filepath, &file_stat) == -1) {
+        ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
+
+    FILE *fd = fopen(filepath, "r");
+    if (!fd) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
+  
+    // // Prepare for download
+    // suspend_tasks();
+
+    ESP_LOGI(TAG, "Starting file transfer: %s (%ld bytes)", filepath, file_stat.st_size);
+    // Set response headers
+    httpd_resp_set_type(req, "text/csv");
+    // Set filename for download
+    char filename[64];
+    //char* timeStr = fetchTime();
+    //int year, month, day, hour, minute;
+    //sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
+    snprintf(filename, sizeof(filename), "%s_logs.csv", CONFIG_SITE_NAME);
+
+    char content_disposition[128];
+    snprintf(content_disposition, sizeof(content_disposition), "attachment; filename=\"%s\"", filename);
+    httpd_resp_set_hdr(req, "Content-Disposition", content_disposition);
+
+    // Send file in chunks
+    char *chunk = heap_caps_malloc(4096, MALLOC_CAP_DMA);
+    if (!chunk) {
+        ESP_LOGE(TAG, "Failed to allocate chunk memory");
+        fclose(fd);
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
+
+    size_t bytes_sent = 0;
+    size_t chunk_size;
+    esp_err_t ret = ESP_OK;
+
+    while ((chunk_size = fread(chunk, 1, 4096, fd)) > 0) {
+        if (httpd_resp_send_chunk(req, chunk, chunk_size) != ESP_OK) {
+            ESP_LOGE(TAG, "File send failed at %zu bytes", bytes_sent);
+            ret = ESP_FAIL;
+            break;
+        }
+        bytes_sent += chunk_size;
+        ESP_LOGD(TAG, "Sent %zu of %ld bytes", bytes_sent, file_stat.st_size);
+    }
+
+    // Cleanup
+    free(chunk);
+    fclose(fd);
+    xSemaphoreGive(file_mutex);
+
+    if (ret == ESP_OK) {
+        httpd_resp_send_chunk(req, NULL, 0);
+        ESP_LOGI(TAG, "File sent successfully: %zu bytes", bytes_sent);
+    }
+
+    return ret;
+}
+static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req)
+{
+    ESP_LOGD(TAG, "Sensor readings requested");
+    static sensor_readings_t http_readings;
+    get_sensor_readings(&http_readings);
+
+    static char resp[128];  // Increased buffer size
+    snprintf(resp, sizeof(resp), 
+             "{\"temp\": %.1f,  \"humidity\": %.1f, \"battery\": %.1f, }", 
+             http_readings.temperature,  http_readings.humidity, http_readings.battery);
+    
+    ESP_LOGD(TAG, "Sending sensor readings: %s", resp);
+    
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, resp);
+}
+
 // Initialize SPIFFS
 esp_err_t init_spiffs() {
     esp_err_t ret = ESP_OK;
@@ -438,18 +533,7 @@ esp_err_t init_spiffs() {
     };
     
      ret = esp_vfs_spiffs_register(&conf);
-    // if (ret != ESP_OK) {
-    //   ESP_LOGE("SPIFFS", "Failed to initialize SPIFFS (%s)",
-    //            esp_err_to_name(ret));
-    //   return ret;
-    // }
-  
-    // ret = esp_spiffs_info("spiffs", &totalBytes, &usedBytes);
-    // if (ret != ESP_OK) {
-    //   ESP_LOGE("SPIFFS", "Failed to get SPIFFS partition information");
-    //   return ret;
-    // }
-  
+
     // Check if the file exists and its size
     FILE *dataFile = fopen(data_path, "r");
     if (!dataFile) {
@@ -502,14 +586,9 @@ esp_err_t init_spiffs() {
   }
 static esp_err_t http_server_generic_handler(httpd_req_t *req)
 {   
-   //  init_spiffs();
+
     esp_err_t ret = init_spiffs();
-    // if (ret != ESP_OK)
-    //   return ret;
-    // if (ret != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to mount SPIFFS");
-    //     return;
-    // }
+ 
     // First check if server is s till active
     if (!http_server_handle || !http_server_active) {
         ESP_LOGW(TAG, "Server inactive, rejecting request");
@@ -537,13 +616,16 @@ static esp_err_t http_server_generic_handler(httpd_req_t *req)
     if (strcmp(uri, "/download") == 0) {
         return http_server_download_handler(req);
     } 
-    // else if (strcmp(uri, "/logs") == 0) {
-    //     return http_server_logs_handler(req);
-    // } else if (strcmp(uri, "/getInitialState") == 0) {
+    else if (strcmp(uri, "/logs") == 0) {
+        return http_server_logs_handler(req);
+    } 
+    //else if (strcmp(uri, "/getInitialState") == 0) {
     //     return http_server_getInitialState_handler(req);
-    // } else if (strcmp(uri, "/sensorReadings") == 0) {
-    //     return http_server_sensor_readings_handler(req);
-    // } else if (strcmp(uri, "/getSiteName") == 0) {
+    // } 
+    else if (strcmp(uri, "/sensorReadings") == 0) {
+        return http_server_sensor_readings_handler(req);
+    } 
+    //else if (strcmp(uri, "/getSiteName") == 0) {
     //     return http_server_site_name_handler(req);
     // }
    // File serving code
