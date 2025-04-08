@@ -14,6 +14,11 @@
 #include "http_server.h"
 #include "wifi_app.h"
 #include "esp_log.h"
+#include "esp_now.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
+#include "esp_mac.h"
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "WIFI";
@@ -49,6 +54,9 @@ static SemaphoreHandle_t timer_mutex = NULL;
 static esp_timer_handle_t reconnect_timer = NULL;
 static bool reconnect_timer_active = false;
 static wifi_ap_record_t ap_records[MAX_NETWORKS];
+
+bool sta_enabled = false;  // WiFi status flag
+bool wifi_enabled = false; // WiFi status flag
 
 esp_err_t init_mdns_service(void) {
   esp_err_t err;
@@ -265,7 +273,7 @@ static void wifi_app_event_handler(void *netif, esp_event_base_t event_base,
  */
 static void wifi_app_event_handler_init(void) {
   // Event loop for the WiFi driver
-  ESP_ERROR_CHECK(esp_event_loop_create_default());
+ // ESP_ERROR_CHECK(esp_event_loop_create_default());
 
   // Event handler for the connection
   esp_event_handler_instance_t instance_wifi_event;
@@ -285,15 +293,19 @@ static void wifi_app_event_handler_init(void) {
 static void wifi_app_default_wifi_init(void) {
   // Initialize the TCP stack
   ESP_ERROR_CHECK(esp_netif_init());
-
+  printf("\nInside default task1 \n");
   // Default WiFi config - operations must be in this order!
   wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
+  printf("\nInside default task2 \n");
   ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
+  printf("\nInside default task3 \n");
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-
+  printf("\nInside default task4 \n");
   // Create default interfaces for both AP and STA
   esp_netif_ap = esp_netif_create_default_wifi_ap();
+  printf("\nInside default task5 \n");
   esp_netif_sta = esp_netif_create_default_wifi_sta();
+  printf("\nInside default task6 \n");
 }
 
 static void wifi_app_ap_config(void) {
@@ -489,15 +501,16 @@ static void wifi_app_sta_config(void) {
  */
 void wifi_app_task(void *pvParameters) {
  ESP_LOGI(TAG, "Inside wifi task");
- printf("Inside wifi task");
-  wifi_app_queue_message_t msg;
+ wifi_app_queue_message_t msg;
 
-  // Initialize the event handler
-  wifi_app_event_handler_init();
+ // Initialize the event handler
+ wifi_app_event_handler_init();
 
-  // Initialize the TCP/IP stack and WiFi config
-  wifi_app_default_wifi_init();
-
+ // Initialize the TCP/IP stack and WiFi config
+ // wifi_app_default_wifi_init();
+ wifi_app_espnow_wifi_init();
+ vTaskDelay(2000);
+ wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
 #ifdef CONFIG_AWS
   vTaskDelay(2000);
   wifi_app_send_message(WIFI_APP_MSG_START_STA);
@@ -799,12 +812,150 @@ void wifi_init(void) {
   }
   ESP_ERROR_CHECK(ret);
 
-  // Disable default WiFi logging messages
-
   // Allocate memory for the wifi configuration
   wifi_config = (wifi_config_t *)malloc(sizeof(wifi_config_t));
   memset(wifi_config, 0x00, sizeof(wifi_config_t));
 
   // Create message queue
   wifi_app_queue_handle = xQueueCreate(5, sizeof(wifi_app_queue_message_t));
+}
+
+// void wifi_init(void) {
+//   // Initialize NVS
+//   esp_err_t ret = nvs_flash_init();
+//   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
+//       ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+//     ESP_ERROR_CHECK(nvs_flash_erase());
+//     ret = nvs_flash_init();
+//   }
+//   ESP_ERROR_CHECK(ret);
+
+//   // Disable default WiFi logging messages
+
+//   // Allocate memory for the wifi configuration
+//   wifi_config = (wifi_config_t *)malloc(sizeof(wifi_config_t));
+//   memset(wifi_config, 0x00, sizeof(wifi_config_t));
+
+//   ESP_ERROR_CHECK(esp_netif_init());
+//   ESP_ERROR_CHECK(esp_event_loop_create_default());
+//   //     // Create default AP interface
+//     // esp_netif_create_default_wifi_ap();
+
+// //     // Get MAC address for unique SSID
+//     uint8_t mac[6];
+//     ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+//     char ssid[32];
+//     snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
+  
+// //     // Initialize and configure WiFi
+//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+//     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
+
+
+  
+// //     // Set up AP configuration
+//     wifi_config_t ap_config = {0};
+//     strcpy((char *)ap_config.ap.ssid, ssid);
+//     ap_config.ap.ssid_len = strlen(ssid);
+//     strcpy((char *)ap_config.ap.password, "12345678");
+//     ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
+//     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+//     ap_config.ap.max_connection = 4;
+  
+// //     // Apply config and start WiFi
+//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+//     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+//     ESP_ERROR_CHECK(esp_wifi_start());
+
+
+  
+// //     // Power saving settings
+//     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+//     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
+//     ESP_ERROR_CHECK(
+//         esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+  
+//     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
+//              ssid);
+//   // Create message queue
+//   wifi_app_queue_handle = xQueueCreate(5, sizeof(wifi_app_queue_message_t));
+// }
+
+/**
+ * Initialize web server network interfaces without reinitializing WiFi
+ * Assumes ESP-NOW has already initialized WiFi in APSTA mode
+ */
+void wifi_app_espnow_wifi_init(void) {
+  ESP_LOGI(TAG,
+           "Setting up web server with existing ESP-NOW WiFi configuration");
+
+  // Step 1: Create message queue for web server
+  if (wifi_app_queue_handle == NULL) {
+    wifi_app_queue_handle = xQueueCreate(5, sizeof(wifi_app_queue_message_t));
+    if (wifi_app_queue_handle == NULL) {
+      ESP_LOGE(TAG, "Failed to create WiFi app queue");
+      return;
+    }
+  }
+
+  // Step 2: Verify WiFi is initialized and in correct mode
+  wifi_mode_t current_mode;
+  esp_err_t ret = esp_wifi_get_mode(&current_mode);
+
+  if (ret == ESP_ERR_WIFI_NOT_INIT) {
+    ESP_LOGW(TAG, "WiFi not initialized - running default initialization");
+    wifi_app_default_wifi_init();
+    return;
+  }
+
+  if (current_mode != WIFI_MODE_APSTA) {
+    ESP_LOGW(TAG, "WiFi not in APSTA mode - correcting mode");
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+  }
+
+  // Step 3: Locate or create network interfaces needed for web server
+  // Find existing AP interface
+  esp_netif_t *netif = esp_netif_next(NULL);
+  while (netif != NULL) {
+    if (esp_netif_get_desc(netif) != NULL &&
+        strcmp("ap", esp_netif_get_desc(netif)) == 0) {
+      ESP_LOGI(TAG, "Found existing AP interface");
+      esp_netif_ap = netif;
+      break;
+    }
+    netif = esp_netif_next(netif);
+  }
+
+  // Find existing STA interface
+  netif = esp_netif_next(NULL);
+  while (netif != NULL) {
+    if (esp_netif_get_desc(netif) != NULL &&
+        strcmp("sta", esp_netif_get_desc(netif)) == 0) {
+      ESP_LOGI(TAG, "Found existing STA interface");
+      esp_netif_sta = netif;
+      break;
+    }
+    netif = esp_netif_next(netif);
+  }
+
+  // Create interfaces if not found
+  if (esp_netif_ap == NULL) {
+    ESP_LOGI(TAG, "Creating AP interface for web server");
+    esp_netif_ap = esp_netif_create_default_wifi_ap();
+  }
+
+  if (esp_netif_sta == NULL) {
+    ESP_LOGI(TAG, "Creating STA interface for web server");
+    esp_netif_sta = esp_netif_create_default_wifi_sta();
+  }
+
+  // Step 4: Set up event handlers for web server functionality
+  static bool event_handlers_registered = false;
+  if (!event_handlers_registered) {
+    wifi_app_event_handler_init();
+    event_handlers_registered = true;
+  }
+
+  ESP_LOGI(TAG, "Web server network interfaces initialized successfully");
 }

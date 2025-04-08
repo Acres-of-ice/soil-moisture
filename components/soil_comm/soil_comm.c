@@ -19,6 +19,9 @@
 #define ESPNOW_RETRY_DELAY_MS         200
 #define ESPNOW_TX_TASK_STACK_SIZE     4096
 
+#define SENSOR_ADDRESS                0x01
+uint8_t g_nodeAddress = 0x00;
+
 
 // External queue for receiving sensor data
 extern QueueHandle_t espnow_queue;
@@ -138,53 +141,53 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 
 
 
-void wifi_init(void) 
-{
-    // Initialize networking stack
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+// void wifi_init(void) 
+// {
+//     // Initialize networking stack
+//     ESP_ERROR_CHECK(esp_netif_init());
+//     ESP_ERROR_CHECK(esp_event_loop_create_default());
   
-    // Create default AP interface
-    esp_netif_create_default_wifi_ap();
+//     // Create default AP interface
+//     esp_netif_create_default_wifi_ap();
   
-    // Get MAC address for unique SSID
-    uint8_t mac[6];
-    ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
-    char ssid[32];
-    snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
+//     // Get MAC address for unique SSID
+//     uint8_t mac[6];
+//     ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
+//     char ssid[32];
+//     snprintf(ssid, sizeof(ssid), "ESP-NOW-RSSI-%02X%02X", mac[0], mac[1]);
   
-    // Initialize and configure WiFi
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
+//     // Initialize and configure WiFi
+//     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+//     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA)); // APSTA mode for both AP and ESP-NOW
 
 
   
-    // Set up AP configuration
-    wifi_config_t ap_config = {0};
-    strcpy((char *)ap_config.ap.ssid, ssid);
-    ap_config.ap.ssid_len = strlen(ssid);
-    strcpy((char *)ap_config.ap.password, "12345678");
-    ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
-    ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    ap_config.ap.max_connection = 4;
+//     // Set up AP configuration
+//     wifi_config_t ap_config = {0};
+//     strcpy((char *)ap_config.ap.ssid, ssid);
+//     ap_config.ap.ssid_len = strlen(ssid);
+//     strcpy((char *)ap_config.ap.password, "12345678");
+//     ap_config.ap.channel = CONFIG_ESPNOW_CHANNEL;
+//     ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+//     ap_config.ap.max_connection = 4;
   
-    // Apply config and start WiFi
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_start());
+//     // Apply config and start WiFi
+//     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+//     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+//     ESP_ERROR_CHECK(esp_wifi_start());
 
 
   
-    // Power saving settings
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
-    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
-    ESP_ERROR_CHECK(
-        esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+//     // Power saving settings
+//     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+//     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(84)); // Maximum transmission power
+//     ESP_ERROR_CHECK(
+//         esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
   
-    ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
-             ssid);
-}
+//     ESP_LOGI(TAG, "WiFi AP started: SSID=%s, Password=12345678, IP=192.168.4.1",
+//              ssid);
+// }
 
 
  void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
@@ -219,6 +222,372 @@ MAC2STR(mac_addr),
 status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failed");
 }
 
+/**
+ * Initialize WiFi for ESP-NOW communication
+ * This function handles the core WiFi initialization needed specifically for
+ * ESP-NOW
+ */
+static void wifi_init_for_espnow(void) {
+    ESP_LOGI(TAG, "Initializing WiFi for ESP-NOW communication");
+  
+    // Step 1: Basic system initialization
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
+        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+  
+    // Step 2: Initialize TCP/IP stack and event loop
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+  
+    // Step 3: Create network interface for ESP-NOW
+    esp_netif_create_default_wifi_ap();
+  
+    // Step 4: Initialize WiFi with default configuration
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+  
+    // Step 5: Set APSTA mode required for ESP-NOW
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+  
+    // Step 6: Start WiFi
+    ESP_ERROR_CHECK(esp_wifi_start());
+  
+    // Step 7: Configure ESP-NOW specific settings
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(
+        84)); // Maximum TX power for reliable communication
+    ESP_ERROR_CHECK(
+        esp_wifi_set_channel(CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+  
+    ESP_LOGI(TAG, "ESP-NOW WiFi initialization complete on channel %d",
+             CONFIG_ESPNOW_CHANNEL);
+  }
+
+  // Function to get MAC address for a device
+// void get_mac_for_device(uint8_t deviceAddress, uint8_t *mac_addr) {
+//     // Search in mappings
+//     for (int i = 0; i < 10; i++) {
+//       if (device_mappings[i].device_addr == deviceAddress) {
+//         memcpy(mac_addr, device_mappings[i].mac_addr, ESP_NOW_ETH_ALEN);
+//         return;
+//       }
+//     }
+  
+//     // If not found, log an error instead of generating a MAC
+//     ESP_LOGE(TAG, "No MAC mapping found for device 0x%02X", deviceAddress);
+  
+//     // Zero out the MAC to indicate it's invalid
+//     memset(mac_addr, 0, ESP_NOW_ETH_ALEN);
+//   }
+  
+  uint8_t get_device_from_mac(const uint8_t *mac_addr) 
+  {
+    ESP_LOGI(TAG,"inside get device from mac");
+    // Handle special case for broadcast address
+    if (memcmp(mac_addr, ESPNOW_BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0) 
+    {
+      ESP_LOGD(TAG, "Broadcast address detected, using special broadcast value");
+      return 0xFE; // Special value for broadcast (not 0xFF which means "invalid")
+    }
+  
+    // Get PCB name from the library
+    const char *pcb_name = espnow_get_peer_name(mac_addr);
+  
+     if (pcb_name != NULL && pcb_name[0] != '\0' &&
+         strncmp(pcb_name, "Unknown-", 8) != 0) 
+         {
+  
+    //   // Check for known PCB names
+       if (strcasecmp(pcb_name, "SENSOR") == 0) 
+       {
+       ESP_LOGD(TAG, "Identified as CONDUCTOR by PCB name");
+       return SENSOR_ADDRESS;
+       } 
+       // else if (strcasecmp(pcb_name, "SOURCE_VALVE") == 0) {
+    // //     ESP_LOGD(TAG, "Identified as SOURCE_VALVE by PCB name");
+    // //     return SOURCE_NOTE_ADDRESS;
+    // //   } else if (strcasecmp(pcb_name, "DRAIN_VALVE") == 0) {
+    // //     ESP_LOGD(TAG, "Identified as DRAIN_VALVE by PCB name");
+    // //     return DRAIN_NOTE_ADDRESS;
+    // //   } else if (strcasecmp(pcb_name, "AIR_VALVE") == 0) {
+    // //     ESP_LOGD(TAG, "Identified as AIR_VALVE by PCB name");
+    // //     return AIR_NOTE_ADDRESS;
+    // //   } else if (strcasecmp(pcb_name, "GSM") == 0) {
+    // //     ESP_LOGD(TAG, "Identified as GSM by PCB name");
+    // //     return GSM_ADDRESS;
+    // //   } else if (strcasecmp(pcb_name, "AWS") == 0) {
+    // //     ESP_LOGD(TAG, "Identified as AWS by PCB name");
+    // //     return AWS_ADDRESS;
+    // //   }
+  
+    //   // Check for partial matches in PCB name
+    // //   if (strcasestr(pcb_name, "conductor") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'conductor' in '%s' -> CONDUCTOR_ADDRESS",
+    // //              pcb_name);
+    // //     return CONDUCTOR_ADDRESS;
+    // //   } else if (strcasestr(pcb_name, "drain") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'drain' in '%s' -> DRAIN_NOTE_ADDRESS",
+    // //              pcb_name);
+    // //     return DRAIN_NOTE_ADDRESS;
+    // //   } else if (strcasestr(pcb_name, "source") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'source' in '%s' -> SOURCE_NOTE_ADDRESS",
+    // //              pcb_name);
+    // //     return SOURCE_NOTE_ADDRESS;
+    // //   } else if (strcasestr(pcb_name, "air") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'air' in '%s' -> AIR_NOTE_ADDRESS",
+    // //              pcb_name);
+    // //     return AIR_NOTE_ADDRESS;
+    // //   } else if (strcasestr(pcb_name, "gsm") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'gsm' in '%s' -> GSM_ADDRESS", pcb_name);
+    // //     return GSM_ADDRESS;
+    // //   } else if (strcasestr(pcb_name, "aws") != NULL) {
+    // //     ESP_LOGI(TAG, "Partial match 'aws' in '%s' -> AWS_ADDRESS", pcb_name);
+    // //     return AWS_ADDRESS;
+       }
+  
+    //   ESP_LOGW(TAG, "PCB name '%s' doesn't match any known device", pcb_name);
+    // }
+  
+    // If still not found, try pattern matching as a last resort
+    // if (mac_addr[4] == 0xAA) {
+    //   // This looks like one of our generated MACs
+    //   ESP_LOGI(TAG,
+    //            "Using deterministic mapping based on MAC pattern for " MACSTR,
+    //            MAC2STR(mac_addr));
+    //   return mac_addr[5];
+    // }
+    snprintf(pcb_name, 16, "SENSOR-%02X%02X", mac_addr[4], mac_addr[5]);
+    //ESP_LOGW(TAG, "Unknown MAC address: " MACSTR, MAC2STR(mac_addr));
+    return pcb_name; // Return invalid device address
+  }
+
+  void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
+    if (mac_addr == NULL) {
+      ESP_LOGE(TAG, "Invalid ESP-NOW send callback MAC address");
+      return;
+    }
+  
+    // Get device address from MAC
+    uint8_t device_addr = get_device_from_mac(mac_addr);
+    if (device_addr == 0xFF) {
+      ESP_LOGD(TAG, "Send callback for unknown device MAC: " MACSTR,
+               MAC2STR(mac_addr));
+      return;
+    }
+  
+    // Get PCB name for better logging
+    const char *pcb_name = espnow_get_peer_name(mac_addr);
+  
+    // if (status == ESP_NOW_SEND_SUCCESS) {
+    //   ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
+    //            device_addr);
+  
+    //   // Process acknowledgment based on device address
+    //   if (device_addr == DRAIN_NOTE_ADDRESS) {
+    //     if (!DRAIN_NOTE_acknowledged) {
+    //       DRAIN_NOTE_acknowledged = true;
+    //       xSemaphoreGive(DRAIN_NOTE_AckSemaphore);
+    //       ESP_LOGD(TAG, "Gave DRAIN_NOTE_AckSemaphore");
+    //     } else if (!HEAT_acknowledged) {
+    //       HEAT_acknowledged = true;
+    //       xSemaphoreGive(HEAT_AckSemaphore);
+    //       ESP_LOGD(TAG, "Gave HEAT_AckSemaphore");
+    //     }
+    //   } else if (device_addr == SOURCE_NOTE_ADDRESS) {
+    //     if (on_off_counter % 2 != 0) { // SPRAY MODE ORDER
+    //       if (!AIR_NOTE_acknowledged) {
+    //         AIR_NOTE_acknowledged = true;
+    //         xSemaphoreGive(AIR_NOTE_AckSemaphore);
+    //         ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (SPRAY MODE)");
+    //       } else {
+    //         SOURCE_NOTE_acknowledged = true;
+    //         xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
+    //         ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (SPRAY MODE)");
+    //       }
+    //     } else { // DRAIN MODE ORDER
+    //       if (!SOURCE_NOTE_acknowledged) {
+    //         SOURCE_NOTE_acknowledged = true;
+    //         xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
+    //         ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (DRAIN MODE)");
+    //       } else {
+    //         AIR_NOTE_acknowledged = true;
+    //         xSemaphoreGive(AIR_NOTE_AckSemaphore);
+    //         ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (DRAIN MODE)");
+    //       }
+    //     }
+    //   }
+    // } else {
+    //   ESP_LOGW(TAG, "ESP-NOW message send failed to %s (0x%02X)", pcb_name,
+    //            device_addr);
+    // }
+  }
+
+  void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
+    int rssi) {
+if (mac_addr == NULL || data == NULL || data_len <= 0) {
+ESP_LOGE(TAG, "Invalid ESP-NOW receive callback parameters");
+return;
+}
+
+// Get the device address of the sender
+uint8_t sender_device_addr = get_device_from_mac(mac_addr);
+
+// Get the PCB name of the sender for logging
+const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+// Log message with PCB name and RSSI
+ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
+sender_device_addr, rssi);
+
+// Log signal quality if needed
+// if ((rssi < -75) && (!IS_SITE("Sakti"))) {
+// ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+// update_status_message("Poor signal: RSSI: %d dBm", rssi);
+// }
+
+// // Check for command messages
+// if (data_len > 0) {
+// // Ensure we have enough data for a complete message
+// if (data_len - 1 < 50) {
+// ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+// return;
+// }
+
+// comm_t message = {0};
+// if (!deserialize_message(data + 1, data_len - 1, &message)) {
+// ESP_LOGE(TAG, "Failed to deserialize command message");
+// return;
+// }
+
+// // Update the source with the actual sender's device address
+// message.source = sender_device_addr;
+
+// ESP_LOGI(TAG, "Processing command 0x%02X from 0x%02X (%s), seq %d",
+// message.command, sender_device_addr, pcb_name, message.seq_num);
+
+// // Process the message
+// processReceivedMessage(&message);
+// return;
+// }
+
+// ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
+}
+
+const char *get_pcb_name(uint8_t nodeAddress) {
+  switch (nodeAddress) {
+    case SENSOR_ADDRESS:
+    return "SENSOR";
+  // case CONDUCTOR_ADDRESS:
+  //   return "CONDUCTOR";
+  // case SOURCE_NOTE_ADDRESS:
+  //   return "SOURCE_VALVE";
+  // case DRAIN_NOTE_ADDRESS:
+  //   return "DRAIN_VALVE";
+  // case AIR_NOTE_ADDRESS:
+  //   return "AIR_VALVE";
+  // case GSM_ADDRESS:
+  //   return "GSM";
+  // case AWS_ADDRESS:
+  //   return "AWS";
+  default:
+    return "UNKNOWN PCB";
+  }
+}
+  
+
+esp_err_t espnow_init2(void) 
+{
+  //ESP_LOGI(TAG,"inside espnow_init");
+    wifi_init_for_espnow();
+    vTaskDelay(pdMS_TO_TICKS(500));
+    g_nodeAddress = SENSOR_ADDRESS;
+    // uint8_t mac_addr = 0x00;
+    // Create configuration for the espnow library
+    espnow_config_t config = {
+        .pcb_name = get_pcb_name(g_nodeAddress), // Define MY_ADDRESS based on your device type
+        .wifi_channel = CONFIG_ESPNOW_CHANNEL,
+        .send_delay_ms = 1000,      // Optional: adjust based on your needs
+        .enable_encryption = false, // Set to true if you need encryption
+        .require_auth = true,       // Enable authentication
+        .auth_key = "AIR4201",      // Set a secret auth key shared by all devices
+        .auth_broadcast_interval_ms = 0, // Broadcast auth every 5 seconds
+        .discovery_timeout_ms = 180000,  // 30 seconds timeout for discovery
+        .max_auth_attempts = 2,          // Maximum auth attempts per peer
+        .recv_cb = custom_recv_cb, // Create a wrapper function that processes
+                                   // received data
+        .send_cb = custom_send_cb, // Use your existing callback
+    };
+  
+    // Initialize the library
+    esp_err_t ret =
+        espnow_init(&config); // Use espnow_lib_init instead of esp_now_init
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to initialize ESP-NOW: %s", esp_err_to_name(ret));
+      return ret;
+    }
+  
+    // Get and display self MAC address
+    uint8_t self_mac[ESP_NOW_ETH_ALEN];
+    ret = espnow_get_own_mac(self_mac);
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to get MAC address: %s", esp_err_to_name(ret));
+      return ret;
+    }
+  
+    vTaskDelay(pdMS_TO_TICKS(500));
+  
+    // ESP_LOGI(TAG, "Self MAC Address: " MACSTR ", PCB Name: %s", MAC2STR(self_mac),
+    //          get_pcb_name(g_nodeAddress));
+  
+    // Create message queue
+    if (message_queue == NULL) {
+      message_queue = xQueueCreate(20, 60);
+      if (message_queue == NULL) {
+        ESP_LOGE(TAG, "Failed to create message queue");
+        espnow_deinit();
+        return ESP_FAIL;
+      }
+    }
+  
+    // Start with a delay before discovery
+    ESP_LOGI(TAG, "Wait 5 seconds before starting discovery...");
+    vTaskDelay(pdMS_TO_TICKS(5000));
+  
+    // Start discovery with multiple authentication broadcasts
+    ESP_LOGI(TAG, "Starting peer discovery...");
+    espnow_start_discovery(20000); // 20 second discovery timeout
+  
+    // Broadcast authentication multiple times during discovery
+    for (int i = 0; i < 5; i++) {
+      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
+      espnow_broadcast_auth();
+      vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 seconds between broadcasts
+    }
+  
+    // Wait for discovery to complete
+    ESP_LOGI(TAG, "Waiting for discovery to complete...");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+  
+    // Now update device mappings based on discovered peers
+    //update_device_mappings_from_discovered_peers();
+  
+    // Broadcast authentication again after updating mappings
+    ESP_LOGI(TAG, "Broadcasting final authentication round...");
+    for (int i = 0; i < 3; i++) {
+      espnow_broadcast_auth();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+  
+    // Final verification of device mappings
+    //verify_device_mappings();
+  
+    ESP_LOGD(TAG, "ESP-NOW initialized successfully");
+    return ESP_OK;
+  }
 
 #if CONFIG_SENDER
 

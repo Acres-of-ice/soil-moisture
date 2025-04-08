@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset='utf-8'>
+	<meta name='viewport' content='width=device-width, initial-scale=1, shrink-to-fit=no'>
+
+  <script src="jquery.min.js"></script>
+	<link rel="stylesheet" href="index.css">
+
+	<title>ACRES OF ICE</title>
+</head>
+
+<body class="dark">
+	<nav class='sidebar close'>
+		<header>
+				<div class='text header-text' style="margin-left: 10;">
+					<span class='name'>ACRES</span>
+					<span class='profession'>OF &nbsp; ICE</span>
+				</div>
+			</div>
+
+			<svg class='bx bx-chevron-right toggle' xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M10.707 17.707 16.414 12l-5.707-5.707-1.414 1.414L13.586 12l-4.293 4.293z"/></svg>
+
+		</header>
+
+		<div class='menu-bar'>
+			<div class='menu'>
+
+				<ul class='menu-links' id="main_manu">
+          <li class='nav-link btn sidebarbutto1 active' onclick="changLink(1)">
+              <a href="javascript:void(0)">
+                  <svg xmlns="http://www.w3.org/2000/svg"  class='bx bx-home-alt icon' width="24" height="24" viewBox="0 0 24 24"><path d="M5 22h14a2 2 0 0 0 2-2v-9a1 1 0 0 0-.29-.71l-8-8a1 1 0 0 0-1.41 0l-8 8A1 1 0 0 0 3 11v9a2 2 0 0 0 2 2zm5-2v-5h4v5zm-5-8.59 7-7 7 7V20h-3v-5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v5H5z"/></svg>
+                  <span class='text nav-text' id="site-name">Loading...</span>
+              </a>
+          </li>
+
+					<li class='nav-link btn sidebarbutto2 ' onclick="changLink(2)">
+						<a href="javascript:void(0)">
+							<svg xmlns="http://www.w3.org/2000/svg" class='bx bx-bar-chart-alt-2 icon' width="24" height="24" viewBox="0 0 24 24"><path d="M20 7h-4V4c0-1.103-.897-2-2-2h-4c-1.103 0-2 .897-2 2v5H4c-1.103 0-2 .897-2 2v9a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V9c0-1.103-.897-2-2-2zM4 11h4v8H4v-8zm6-1V4h4v15h-4v-9zm10 9h-4V9h4v10z"/></svg>
+							<span class='text nav-text'>Sensors</span>
+						</a>
+					</li>
+					<li class='nav-link btn sidebarbutto2 ' onclick="changLink(3)">
+              <a href="javascript:void(0)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span class="text nav-text">OTA Update</span>
+              </a>
+          </li>
+          <li class='nav-link btn sidebarbutto2' onclick="fileDownload()">
+              <a href="javascript:void(0)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span class="text nav-text">Download</span>
+              </a>
+          </li>
+          <li class='nav-link btn sidebarbutto2' onclick="logsDownload()">
+              <a href="javascript:void(0)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="8" y1="13" x2="16" y2="13"></line>
+                      <line x1="8" y1="17" x2="16" y2="17"></line>
+                      <line x1="10" y1="9" x2="12" y2="9"></line>
+                  </svg>
+                  <span class="text nav-text">Download Logs</span>
+              </a>
+          </li>
+				</ul>
+			</div>
+
+	</nav>
+
+	<section class="home">
+
+    <div style="position: sticky; top: 0; display: flex; flex-direction: row; justify-content: space-between; align-items: center;" class="text">
+        <h1 style="font-weight: 600; font-size: 30px; text-transform: uppercase;">
+            <span id="page_title">Loading...</span>
+        </h1> 
+        <span style="font-weight: 600; font-size: 30px;" id="time"></span>
+    </div>
+
+
+		<div style="position: sticky; top: 0;" class="content">
+
+
+			<iframe onload="this.style.height=(this.contentWindow.document.body.scrollHeight+50)+'px';"
+				style=" height: 429px; width: 100%; border-radius: 22px;" id="myframe" src="outputs.html" frameborder="0"></iframe>
+		</div>
+
+
+	</section>
+
+	<script>
+    // Global variable to store the site name
+    var globalSiteName = 'Loading...';
+
+    function getSiteName() {
+        $.getJSON('/getSiteName', function(data) {
+            if (data.siteName) {
+                globalSiteName = data.siteName;
+                $('.nav-text#site-name').text(globalSiteName);
+                console.log("Site name updated:", globalSiteName);
+            } else {
+                console.error("Site name not received from server");
+            }
+        }).fail(function(jqXHR, textStatus, errorThrown) {
+            console.error("Failed to fetch site name:", textStatus, errorThrown);
+        });
+    }
+
+    function changLink(id) {
+        if(id === 1){
+            document.getElementById("myframe").src = "outputs.html";
+            document.title = 'Modes | ACRES OF ICE';
+            $('#page_title').html(globalSiteName + ' Modes')
+        }
+        else if(id === 2){
+            document.getElementById("myframe").src = "sensors.html";
+            document.title = 'Sensors |  ACRES OF ICE' ;
+            $('#page_title').html(globalSiteName + ' Sensors')
+        }
+        else if(id === 3){
+            document.getElementById("myframe").src = "ota.html";
+            document.title = 'Firmware Upgrade |  ACRES OF ICE' ;
+            $('#page_title').html(globalSiteName + ' OTA')
+        }
+    }
+
+    function getCurrentDate() {
+      const today = new Date();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const month = monthNames[today.getMonth()];
+      const day = today.getDate();
+      return `${month}-${day}`;
+    }
+    function fileDownload() {
+        var link = document.createElement('a');
+        link.href = '/download';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log('Download initiated');
+    }
+    function logsDownload() {
+        var link = document.createElement('a');
+        link.href = '/logs';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log('Logs download initiated');
+    }
+  $(document).ready(function() {
+      getSiteName();
+      changLink(1);
+  });
+
+	</script>
+
+	<script>
+		var header = document.getElementById("main_manu");
+		var btns = header.getElementsByClassName("btn");
+		for (var i = 0; i < btns.length; i++) {
+			btns[i].addEventListener("click", function () {
+				var current = document.getElementsByClassName("active");
+				current[0].className = current[0].className.replace(" active", "");
+				this.className += " active";
+			});
+		}
+	</script>
+
+	</body>
+<html>

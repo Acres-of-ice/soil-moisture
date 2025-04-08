@@ -6,8 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "mdns.h"
 
-bool sta_enabled = false;  // WiFi status flag
-bool wifi_enabled = false; // WiFi status flag
+
 extern bool http_server_active;
 
 typedef enum wifi_app_message {
@@ -101,6 +100,7 @@ void wifi_init(void);
 void start_shutdown_timer(int shutdown_delay_seconds);
 void wifi_app_shutdown_callback(void* arg);
 void wifi_app_force_shutdown_callback(void* arg);
+void wifi_app_espnow_wifi_init(void);
 esp_err_t init_mdns_service(void);
 
 #define MAX_NETWORKS 5

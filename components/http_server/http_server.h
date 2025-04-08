@@ -70,7 +70,7 @@ void http_server_fw_update_reset_timer(void);
 
 void http_server_monitor(void *parameter);
 
-void suspend_tasks(void);
+//void suspend_tasks(void);
 void resume_tasks(void);
 
 #endif /* MAIN_HTTP_SERVER_H_ */

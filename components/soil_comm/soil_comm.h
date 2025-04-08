@@ -54,6 +54,13 @@ uint8_t get_device_from_mac(const uint8_t *mac_addr);
 bool register_device_mac_mapping(uint8_t device_addr, const uint8_t *mac_addr);
 void on_data_received(const uint8_t *mac_addr, const uint8_t *data,int data_len, int rssi);
 void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status);
-void wifi_init(void);
+uint8_t get_device_from_mac(const uint8_t *mac_addr);
+void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status);
+void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
+  int rssi);
+static void wifi_init_for_espnow(void);
+const char *get_pcb_name(uint8_t nodeAddress);
+esp_err_t espnow_init2(void);
+//void wifi_init(void);
 
 #endif // ESPNOW_COM_H

@@ -20,7 +20,13 @@
 #include "sensor.h"
 #include "soil_comm.h"
 #include "espnow_lib.h"
+#include "wifi_app.h"
 
+
+TaskHandle_t wifiTaskHandle = NULL;
+#define WIFI_APP_TASK_STACK_SIZE (1024 * 5)
+#define WIFI_APP_TASK_PRIORITY 5
+#define WIFI_APP_TASK_CORE_ID 0
 
 static const char* TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
@@ -51,8 +57,8 @@ espnow_config_t config = {
 
 void app_main(void)
 {
+    printf("inside main");
     vext_on(); // ✅ Turn on OLED power
-
     vTaskDelay(pdMS_TO_TICKS(100));  // Short delay
     /*lora initialisation*/
     // wifi_init_sta();
@@ -68,19 +74,14 @@ void app_main(void)
     ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    wifi_init();
+    espnow_init2();
+    //wifi_init();
     i2c_init();
-    //lora_init();
-    uint8_t mac[6];
-    ESP_ERROR_CHECK(esp_efuse_mac_get_default(mac));
-    snprintf(pcb_name, sizeof(pcb_name), "SENSOR-%02X%02X", mac[4], mac[5]);
-    ESP_ERROR_CHECK(espnow_init(&config));
-
-    ESP_ERROR_CHECK(espnow_start_discovery(30000));
-
-    ESP_LOGI(TAG, "ESP-NOW initialized with PCB name: %s", pcb_name);
 
     vTaskDelay(pdMS_TO_TICKS(2000));
+    xTaskCreatePinnedToCore(
+        wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
+        WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
 
 #if CONFIG_SENDER
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
@@ -89,6 +90,7 @@ void app_main(void)
 
 #if CONFIG_RECEIVER
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
+
 #endif
 
 }

@@ -337,8 +337,21 @@ static esp_err_t send_chunk_with_retry(httpd_req_t *req, const char *chunk, size
 }
 
 static esp_err_t http_server_generic_handler(httpd_req_t *req)
-{
-    // First check if server is still active
+{   
+    esp_err_t ret = ESP_OK;
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = NULL,
+        .max_files = 10,
+        .format_if_mount_failed = true
+    };
+    
+     ret = esp_vfs_spiffs_register(&conf);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG, "Failed to mount SPIFFS");
+    //     return;
+    // }
+    // First check if server is s till active
     if (!http_server_handle || !http_server_active) {
         ESP_LOGW(TAG, "Server inactive, rejecting request");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Server shutting down");
@@ -428,7 +441,7 @@ static esp_err_t http_server_generic_handler(httpd_req_t *req)
 
     size_t chunksize;
     size_t bytes_sent = 0;
-    esp_err_t ret = ESP_OK;
+    
     
     do {
         chunksize = fread(chunk, 1, OPTIMAL_CHUNK_SIZE, fd);
@@ -599,7 +612,7 @@ esp_err_t http_server_OTA_update_handler(httpd_req_t *req)
 {
   // Prepare for OTA
   // prepare_for_ota();
-  suspend_tasks();
+  //suspend_tasks();
 
   // Set OTA ready flag and give semaphore
   ota_ready = true;
