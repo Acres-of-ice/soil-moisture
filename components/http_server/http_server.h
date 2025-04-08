@@ -69,6 +69,7 @@ void http_server_fw_update_reset_callback(void *arg);
 void http_server_fw_update_reset_timer(void);
 
 void http_server_monitor(void *parameter);
+//static esp_err_t http_server_download_handler(httpd_req_t *req);
 
 //void suspend_tasks(void);
 void resume_tasks(void);

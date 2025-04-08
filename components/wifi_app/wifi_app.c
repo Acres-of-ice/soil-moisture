@@ -509,8 +509,10 @@ void wifi_app_task(void *pvParameters) {
  // Initialize the TCP/IP stack and WiFi config
  // wifi_app_default_wifi_init();
  wifi_app_espnow_wifi_init();
+ ESP_LOGI(TAG,"wifi app task1");
  vTaskDelay(2000);
  wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
+ ESP_LOGI(TAG,"wifi app task2");
 #ifdef CONFIG_AWS
   vTaskDelay(2000);
   wifi_app_send_message(WIFI_APP_MSG_START_STA);
@@ -525,7 +527,7 @@ void wifi_app_task(void *pvParameters) {
   //   wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
   //   // wifi_enabled = true;
   // }
-
+ 
   for (;;) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
@@ -533,9 +535,9 @@ void wifi_app_task(void *pvParameters) {
 
     if (xQueueReceive(wifi_app_queue_handle, &msg, portMAX_DELAY)) {
       switch (msg.msgID) {
-
+      
       case WIFI_APP_MSG_START_HTTP_SERVER:
-
+      ESP_LOGI(TAG,"wifi app task3");
         http_server_active = true;
         // stop_wifi_blinking();
 
@@ -576,7 +578,7 @@ void wifi_app_task(void *pvParameters) {
         // eTaskGetState(smsManagerTaskHandle) != eSuspended) {
         //     vTaskSuspend(smsManagerTaskHandle);
         // }
-
+        ESP_LOGI(TAG,"wifi app task4");
         vTaskDelay(pdMS_TO_TICKS(500));
         http_server_start();
         break;

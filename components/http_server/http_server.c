@@ -31,9 +31,16 @@ static httpd_handle_t http_server_handle = NULL;
 SemaphoreHandle_t file_mutex = NULL;
 
 extern QueueHandle_t wifi_app_queue_handle;
-
+#define SPIFFS_MOUNT_POINT "/spiffs"
 // Firmware update status
 static int g_fw_update_status = OTA_UPDATE_PENDING;
+ #define CONFIG_SITE_NAME "TEST"
+
+ size_t totalBytes = 0;
+size_t usedBytes = 0;
+char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
+char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
+//data_statistics_t data_stats = {0};
 
 // HTTP server monitor task handle
 // static TaskHandle_t task_http_server_monitor = NULL;
@@ -335,9 +342,93 @@ static esp_err_t send_chunk_with_retry(httpd_req_t *req, const char *chunk, size
     
     return ESP_FAIL;
 }
+static esp_err_t http_server_download_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "File download requested");
+    const char *filepath = "/spiffs/data.csv";
+    struct stat file_stat;
+    if (file_mutex == NULL) {
+        file_mutex = xSemaphoreCreateMutex();
+        if (file_mutex == NULL) {
+          ESP_LOGE(TAG, "Failed to create file mutex");
+          return ESP_FAIL;
+        }
+      }
+    // Try to take mutex with timeout
+    if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire file mutex for download");
+       // update_status_message("Download Failed");
+        return ESP_FAIL;
+    }
+  
+    if (stat(filepath, &file_stat) == -1) {
+        ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
 
-static esp_err_t http_server_generic_handler(httpd_req_t *req)
-{   
+    FILE *fd = fopen(filepath, "r");
+    if (!fd) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
+  
+    // // Prepare for download
+    // suspend_tasks();
+
+    ESP_LOGI(TAG, "Starting file transfer: %s (%ld bytes)", filepath, file_stat.st_size);
+    // Set response headers
+    httpd_resp_set_type(req, "text/csv");
+    // Set filename for download
+    char filename[64];
+    //char* timeStr = fetchTime();
+    //int year , month, day, hour, minute;
+    //sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
+    snprintf(filename, sizeof(filename), "%s_data.csv", CONFIG_SITE_NAME);
+
+    static char content_disposition[128];
+    snprintf(content_disposition, sizeof(content_disposition), "attachment; filename=\"%s\"", filename);
+    httpd_resp_set_hdr(req, "Content-Disposition", content_disposition);
+
+    // Send file in chunks
+    char *chunk = heap_caps_malloc(4096, MALLOC_CAP_DMA);
+    if (!chunk) {
+        ESP_LOGE(TAG, "Failed to allocate chunk memory");
+        fclose(fd);
+        xSemaphoreGive(file_mutex);
+        return ESP_FAIL;
+    }
+
+    size_t bytes_sent = 0;
+    size_t chunk_size;
+    esp_err_t ret = ESP_OK;
+
+    while ((chunk_size = fread(chunk, 1, 4096, fd)) > 0) {
+        if (httpd_resp_send_chunk(req, chunk, chunk_size) != ESP_OK) {
+            ESP_LOGE(TAG, "File send failed at %zu bytes", bytes_sent);
+            ret = ESP_FAIL;
+            break;
+        }
+        bytes_sent += chunk_size;
+        ESP_LOGD(TAG, "Sent %zu of %ld bytes", bytes_sent, file_stat.st_size);
+    }
+
+    // Cleanup
+    free(chunk);
+    fclose(fd);
+    xSemaphoreGive(file_mutex);
+
+    if (ret == ESP_OK) {
+        httpd_resp_send_chunk(req, NULL, 0);
+        ESP_LOGI(TAG, "File sent successfully: %zu bytes", bytes_sent);
+    }
+
+    return ret;
+}
+
+// Initialize SPIFFS
+esp_err_t init_spiffs() {
     esp_err_t ret = ESP_OK;
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
@@ -347,6 +438,74 @@ static esp_err_t http_server_generic_handler(httpd_req_t *req)
     };
     
      ret = esp_vfs_spiffs_register(&conf);
+    // if (ret != ESP_OK) {
+    //   ESP_LOGE("SPIFFS", "Failed to initialize SPIFFS (%s)",
+    //            esp_err_to_name(ret));
+    //   return ret;
+    // }
+  
+    // ret = esp_spiffs_info("spiffs", &totalBytes, &usedBytes);
+    // if (ret != ESP_OK) {
+    //   ESP_LOGE("SPIFFS", "Failed to get SPIFFS partition information");
+    //   return ret;
+    // }
+  
+    // Check if the file exists and its size
+    FILE *dataFile = fopen(data_path, "r");
+    if (!dataFile) {
+      ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
+  
+      dataFile = fopen(data_path, "w");
+      vTaskDelay(10);
+      if (dataFile) {
+        fputs("sensor", dataFile);
+        fclose(dataFile);
+      } else {
+        ESP_LOGI("SYSTEM",
+                 "Error opening sensor_data.csv for initialization. Errno: %d",
+                 errno);
+        char err_buf[100];
+        strerror_r(errno, err_buf, sizeof(err_buf));
+        ESP_LOGE(TAG, "Error details: %s", err_buf);
+      }
+    } else {
+      ESP_LOGI("SYSTEM", "Sensor data file already exists");
+      fclose(dataFile);
+    }
+  
+    // Check if the file exists and its size
+    FILE *logFile = fopen(log_path, "r");
+    if (!logFile) {
+      ESP_LOGI("SYSTEM", "Initialising empty log file");
+  
+      logFile = fopen(log_path, "w");
+      vTaskDelay(10);
+      if (logFile) {
+        const char *header = "Time,Level,Tag,Message\n";
+        fputs(header, logFile);
+        fclose(logFile);
+      } else {
+        ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
+                 errno);
+        char err_buf[100];
+        strerror_r(errno, err_buf, sizeof(err_buf));
+        ESP_LOGE(TAG, "Error details: %s", err_buf);
+      }
+    } else {
+      ESP_LOGI("SYSTEM", "Log file already exists");
+      fclose(logFile);
+    }
+  
+    ESP_LOGW("SPIFFS", "Spiffs Partition size: total: %d, used: %d", totalBytes,
+             usedBytes);
+    return ESP_OK;
+  }
+static esp_err_t http_server_generic_handler(httpd_req_t *req)
+{   
+   //  init_spiffs();
+    esp_err_t ret = init_spiffs();
+    // if (ret != ESP_OK)
+    //   return ret;
     // if (ret != ESP_OK) {
     //     ESP_LOGE(TAG, "Failed to mount SPIFFS");
     //     return;
@@ -374,9 +533,11 @@ static esp_err_t http_server_generic_handler(httpd_req_t *req)
     // Check for API endpoints first (keep existing API endpoint handling)
     // if (strcmp(uri, "/outputVal") == 0) {
     //     return http_server_outputVal_handler(req);
-    // } else if (strcmp(uri, "/download") == 0) {
-    //     return http_server_download_handler(req);
-    // } else if (strcmp(uri, "/logs") == 0) {
+    // } else 
+    if (strcmp(uri, "/download") == 0) {
+        return http_server_download_handler(req);
+    } 
+    // else if (strcmp(uri, "/logs") == 0) {
     //     return http_server_logs_handler(req);
     // } else if (strcmp(uri, "/getInitialState") == 0) {
     //     return http_server_getInitialState_handler(req);
