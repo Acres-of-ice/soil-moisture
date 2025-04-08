@@ -6,5 +6,8 @@ set(SPIFFS_IMAGE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/spiffs")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+
 project(soil_moisture)
+spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)
+
 

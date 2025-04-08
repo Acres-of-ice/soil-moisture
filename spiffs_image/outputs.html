@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="stylesheet" href="outputs.css">
+    <!-- <script async src="jQueryv3.3.1.js"></script> -->
+    <script src="jquery.min.js"></script>
+</head>
+
+<body class="dark">
+
+    <div>
+        <!-- State Machine Status -->
+        <div class="toggle_button state-machine">
+            <h2>Current State</h2>
+            <span id="current-state" class="current-state">IDLE</span>
+        </div>
+
+        <!-- Automation -->
+        <div style="display: flex; margin-bottom: 30px;">
+            <div style="margin-right: 20px;">
+                <h2>Automation</h2>
+                <div style="display: flex;">
+                    <div class="toggle_button">
+                        <h3 style="margin-right: 10px;" id="AUTO_status">OFF</h3>
+                        <label class="switch">
+
+                            <input type="checkbox" name="colorCheckbox" id="AUTO_checkbox" onclick="setMode('AUTO')"
+                                value="blue">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+      <!-- SPRAY and DRAIN -->
+      <div style="display: flex; margin-bottom: 30px;">
+          <div style="margin-right: 20px;">
+              <h2>SPRAY</h2>
+              <div style="display: flex;">
+                  <div class="toggle_button">
+                      <h3 style="margin-right: 10px;" id="SPRAY_status">OFF</h3>
+                      <label class="switch">
+
+                          <input type="checkbox" name="colorCheckbox" id="SPRAY_checkbox" onclick="setMode('SPRAY')"
+                              value="blue">
+                          <span class="slider round"></span>
+                      </label>
+                  </div>
+              </div>
+          </div>
+
+          <div style="margin-right: 20px;">
+              <h2>DRAIN</h2>
+              <div style="display: flex;">
+                  <div class="toggle_button">
+                      <h3 style="margin-right: 10px;" id="DRAIN_status">OFF</h3>
+                      <label class="switch">
+                          <input type="checkbox" name="colorCheckbox" id="DRAIN_checkbox" onclick="setMode('DRAIN')"
+                              value="blue">
+                          <span class="slider round"></span>
+                      </label>
+                  </div>
+              </div>
+          </div>
+    </div>
+
+    <script>
+    function logAllElements() {
+        console.log('All elements with IDs:', document.querySelectorAll('[id]'));
+        console.log('All checkboxes:', document.querySelectorAll('input[type="checkbox"]'));
+        console.log('All status elements:', document.querySelectorAll('[id$="_status"]'));
+    }
+
+    // Call this when the page loads
+    // window.onload = logAllElements;
+    </script>
+
+    <script async src="outputs.js"></script>
+</body>
+
+</html>

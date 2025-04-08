@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firmware Update</title>
+    <link rel="stylesheet" href="ota.css">
+</head>
+<body class="dark">
+    <div id="OTA" class="toggle_button state-machine">
+        <h2>Firmware Update</h2>
+        <div class="firmware-info">
+            Latest Firmware:
+            <div id="latest_firmware"></div>
+        </div>
+        <div class="buttons">
+            <input type="file" id="selected_file" style="display:none;" onchange="getFileInfo()">
+            <input type="button" value="Select File" onclick="document.getElementById('selected_file').click();">
+            <input type="button" value="Update Firmware" onclick="updateFirmware();">
+        </div>
+          <div class="file-info">
+            <h4 id="file_info">Placeholder: Selected file information will appear here</h4>
+          </div>
+          <div class="update-status">
+            <h3>Update Status:</h3>
+            <div id="ota_update_status">
+              <p>Placeholder: Firmware update status will be displayed here</p>
+              <p>Current status: No update in progress</p>
+            </div>
+          </div>
+    </div>
+    <script async src="jquery.min.js"></script>
+    <script async src="ota.js"></script>
+</body>
+</html>
