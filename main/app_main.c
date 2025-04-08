@@ -28,6 +28,11 @@ TaskHandle_t wifiTaskHandle = NULL;
 #define WIFI_APP_TASK_PRIORITY 5
 #define WIFI_APP_TASK_CORE_ID 0
 
+TaskHandle_t dataLoggingTaskHandle = NULL;
+#define DATA_LOG_TASK_STACK_SIZE (1024 * 8)
+#define DATA_LOG_TASK_PRIORITY 7
+#define DATA_LOG_TASK_CORE_ID 1
+
 static const char* TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -82,6 +87,11 @@ void app_main(void)
     xTaskCreatePinnedToCore(
         wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
         WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
+        vTaskDelay(pdMS_TO_TICKS(10000));
+      xTaskCreatePinnedToCore(
+      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
+      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(10000));
 
 #if CONFIG_SENDER
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);

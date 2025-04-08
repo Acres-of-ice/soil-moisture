@@ -25,7 +25,12 @@
 #include "onewire_bus.h"
 #include "ds18b20.h"
 #include "sensor.h"
+#include <math.h>
 
+#include "esp_spiffs.h"
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 #include "ra01s.h"
@@ -108,6 +113,8 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT      BIT1
 
 
+#define SPIFFS_MOUNT_POINT "/spiffs"
+
 
 static int s_retry_num = 0;
 
@@ -115,6 +122,9 @@ static int s_retry_num = 0;
  SemaphoreHandle_t readings_mutex;
 QueueHandle_t espnow_queue = NULL;
 
+extern SemaphoreHandle_t file_mutex;
+extern char *log_path;
+extern char *data_path;
 // Structure for plain float values
 
 
@@ -716,4 +726,178 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       // Return last known values if mutex timeout
       ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
     }
+  }
+
+  void dataLoggingTask(void *pvParameters) 
+  {
+    
+    char data_entry[256];
+    static sensor_readings_t data_readings;
+  
+    while (1) {
+      if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+        ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      }
+      
+      get_sensor_readings(&data_readings);
+      
+      snprintf(data_entry, sizeof(data_entry),
+               "%.2f,%.2f,%.2f\n",
+                data_readings.temperature, data_readings.humidity,
+                data_readings.battery);
+    
+      // Added error handling for file append operation
+      if (!appendFile(data_path, data_entry)) {
+        ESP_LOGE(TAG, "Failed to append to data file: %s", data_entry);
+        // Consider adding error recovery logic here
+      } else {
+        ESP_LOGI(TAG, "%s", data_entry);
+      }
+     
+      // Changed to vTaskDelay for simplicity and to handle task suspension better
+      vTaskDelay(pdMS_TO_TICKS(60000));
+    }
+  }
+
+  esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove) {
+    FILE *file = fopen(path, "r+");
+    if (!file) {
+      ESP_LOGE(TAG, "Failed to open file for modification: %s", path);
+      return ESP_FAIL;
+    }
+  
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+  
+    if (file_size <= bytes_to_remove) {
+      // If we need to remove more bytes than the file size, just clear the file
+      fclose(file);
+      file = fopen(path, "w");
+      if (!file) {
+        ESP_LOGE(TAG, "Failed to clear file: %s", path);
+        return ESP_FAIL;
+      }
+      fclose(file);
+      return ESP_OK;
+    }
+  
+    char buffer[1024];
+    size_t bytes_read, bytes_written;
+    long read_pos = floor(bytes_to_remove);
+    long write_pos = 0;
+  
+    while (read_pos < file_size) {
+      fseek(file, read_pos, SEEK_SET);
+      bytes_read = fread(buffer, 1, 1024, file);
+      if (bytes_read == 0) {
+        break; // End of file or error
+      }
+  
+      fseek(file, write_pos, SEEK_SET);
+      bytes_written = fwrite(buffer, 1, bytes_read, file);
+      if (bytes_written != bytes_read) {
+        ESP_LOGE(TAG, "Failed to write data while removing oldest entries");
+        fclose(file);
+        return ESP_FAIL;
+      }
+  
+      read_pos += bytes_read;
+      write_pos += bytes_written;
+    }
+  
+    // Truncate the file
+    int fd = fileno(file);
+    if (ftruncate(fd, write_pos) != 0) {
+      ESP_LOGE(TAG, "Failed to truncate file");
+      fclose(file);
+      return ESP_FAIL;
+    }
+  
+    fclose(file);
+    return ESP_OK;
+  }
+
+  void get_spiffs_usage(size_t *total, size_t *used) {
+    esp_err_t ret = esp_spiffs_info("storage", total, used);
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to get SPIFFS partition information");
+      *total = 0;
+      *used = 0;
+    }
+  }
+
+  bool is_path_in_spiffs(const char *path) {
+    return strncmp(path, SPIFFS_MOUNT_POINT, strlen(SPIFFS_MOUNT_POINT)) == 0;
+  }
+
+  bool appendFile(const char *path, const char *message) 
+  {
+    ESP_LOGI(TAG,"inside data logging 1");
+    ESP_LOGV(TAG, "Appending to file: %s", path);
+    bool success = false;
+
+    if (file_mutex == NULL) {
+        file_mutex = xSemaphoreCreateMutex();
+        if (file_mutex == NULL) {
+          ESP_LOGE(TAG, "Failed to create file mutex");
+          return ESP_FAIL;
+        }
+      }
+  
+    // Take mutex with timeout
+    if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+      ESP_LOGE(TAG, "Failed to acquire file mutex");
+      return false;
+    }
+    ESP_LOGI(TAG,"inside data logging 2");
+    // Check SPIFFS space
+    if (is_path_in_spiffs(path)) {
+      size_t message_size = strlen(message);
+      size_t total, used, free_space;
+      get_spiffs_usage(&total, &used);
+      free_space = total - used;
+  
+      if (free_space < message_size ||
+          (used + message_size > total * 0.65)) {
+        ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest entries");
+        double space_to_free = (total * 0.1) + message_size;
+        esp_err_t data_remove_result =
+            remove_oldest_entries(data_path, space_to_free / 2);
+        esp_err_t log_remove_result =
+            remove_oldest_entries(log_path, space_to_free / 2);
+  
+        if (data_remove_result != ESP_OK && log_remove_result != ESP_OK) {
+          ESP_LOGE(
+              TAG,
+              "Failed to remove oldest entries from both data and log files");
+          xSemaphoreGive(file_mutex);
+          return false;
+        }
+      }
+    }
+  
+    FILE *file = fopen(path, "a");
+    if (!file) {
+      ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
+      xSemaphoreGive(file_mutex);
+      return false;
+    }
+  
+    // Write to file
+    if (fputs(message, file) == EOF) {
+      ESP_LOGE(TAG, "Failed to append to file: %s", path);
+    } else {
+      fflush(file);
+      success = true;
+    }
+  
+    if (fclose(file) != 0) {
+      ESP_LOGE(TAG, "Failed to close file properly: %s", path);
+      success = false;
+    }
+  
+    // Release mutex
+    xSemaphoreGive(file_mutex);
+    return success;
   }

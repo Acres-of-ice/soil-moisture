@@ -36,6 +36,10 @@ extern QueueHandle_t wifi_app_queue_handle;
 static int g_fw_update_status = OTA_UPDATE_PENDING;
  #define CONFIG_SITE_NAME "TEST"
 
+ const char *DATA_FILE_HEADER =
+    "moisture, Temp, Battery, Time";
+                     
+
  size_t totalBytes = 0;
 size_t usedBytes = 0;
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
@@ -542,7 +546,7 @@ esp_err_t init_spiffs() {
       dataFile = fopen(data_path, "w");
       vTaskDelay(10);
       if (dataFile) {
-        fputs("sensor", dataFile);
+        fputs(DATA_FILE_HEADER, dataFile);
         fclose(dataFile);
       } else {
         ESP_LOGI("SYSTEM",

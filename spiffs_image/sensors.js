@@ -16,12 +16,12 @@ function getSensorData() {
 }
 
 function updateSensorReadings(data) {
-    updateSensorValue('temp', data.temp, '°C');
-    updateSensorValue('cnt', data.cnt, '');
-    updateSensorValue('wind', data.wind, 'm/s');
-    updateSensorValue('fountain_pressure', data.fountain_pressure, 'cm');
-    updateSensorValue('water_temp', data.water_temp, '°C');
-    updateSensorValue('discharge', data.discharge, 'l/min');
+    updateSensorValue('moisture', data.temp, '°C');
+    updateSensorValue('temparature', data.cnt, '°C');
+    updateSensorValue('battery', data.wind, 'm/s');
+    // updateSensorValue('fountain_pressure', data.fountain_pressure, 'cm');
+    // updateSensorValue('water_temp', data.water_temp, '°C');
+    // updateSensorValue('discharge', data.discharge, 'l/min');
 }
 
 function updateSensorValue(id, value, unit) {

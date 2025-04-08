@@ -42,5 +42,10 @@ void task_rx(void *pvParameters);
 void sensor_task(void *pvParameters);
 void lora_init();
 void get_sensor_readings(sensor_readings_t *output_readings);
+void dataLoggingTask(void *pvParameters);
+esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove);
+void get_spiffs_usage(size_t *total, size_t *used);
+bool is_path_in_spiffs(const char *path);
+bool appendFile(const char *path, const char *message);
 
 #endif // SENSOR_H
