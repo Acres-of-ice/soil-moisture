@@ -293,22 +293,22 @@ static void wifi_app_event_handler_init(void) {
 static void wifi_app_default_wifi_init(void) {
   // Initialize the TCP stack
   ESP_ERROR_CHECK(esp_netif_init());
-  printf("\nInside default task1 \n");
+  //printf("\nInside default task1 \n");
   // Default WiFi config - operations must be in this order!
   wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
-  printf("\nInside default task2 \n");
-  ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
-  printf("\nInside default task3 \n");
+  //printf("\nInside default task2 \n");
+  //ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
+  //printf("\nInside default task3 \n");
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-  printf("\nInside default task4 \n");
+ // printf("\nInside default task4 \n");
   // Create default interfaces for both AP and STA
   esp_netif_ap = esp_netif_create_default_wifi_ap();
-  printf("\nInside default task5 \n");
+  //printf("\nInside default task5 \n");
   esp_netif_sta = esp_netif_create_default_wifi_sta();
-  printf("\nInside default task6 \n");
+  //printf("\nInside default task6 \n");
 }
 
-static void wifi_app_ap_config(void) {
+void wifi_app_ap_config(void) {
   wifi_config_t ap_config = {
       .ap = {.channel = WIFI_AP_CHANNEL,
              .max_connection = WIFI_AP_MAX_CONNECTIONS,
@@ -319,9 +319,9 @@ static void wifi_app_ap_config(void) {
   strlcpy((char *)ap_config.ap.password, WIFI_AP_PASSWORD,
           sizeof(ap_config.ap.password));
 
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-  ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &ap_config));
-  ESP_ERROR_CHECK(esp_wifi_start());
+  //ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+  //ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_APSTA, &ap_config));
+  //ESP_ERROR_CHECK(esp_wifi_start());
   // Configure DNS for AP mode
   esp_netif_dns_info_t dns_info = {
       .ip.u_addr.ip4.addr = ipaddr_addr("192.168.4.1"), // AP's default IP
@@ -366,9 +366,9 @@ static void wifi_app_sta_config(void) {
     ESP_LOGI(TAG, "Starting full network scan cycle %d/5", full_cycle + 1);
 
     // Set STA mode first
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    vTaskDelay(pdMS_TO_TICKS(500));
+    //ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    //ESP_ERROR_CHECK(esp_wifi_start());
+    //vTaskDelay(pdMS_TO_TICKS(500));
 
     // Try each network once in this cycle
     for (int i = 0; i < MAX_NETWORKS; i++) {
@@ -553,7 +553,7 @@ void wifi_app_task(void *pvParameters) {
         //       "Could not get i2c mutex for LCD update - continuing shutdown");
         // }
         ESP_LOGI(TAG, "WIFI_APP_MSG_START_HTTP_SERVER");
-        wifi_app_ap_config();
+        //wifi_app_ap_config();
 
         // Suspend data logging and backup tasks
         // if (adcTaskHandle != NULL) {
@@ -637,17 +637,17 @@ void wifi_app_task(void *pvParameters) {
 
         esp_err_t err;
 
-        err = esp_wifi_stop();
-        if (err != ESP_OK) {
-          ESP_LOGE(TAG, "Failed to stop Wi-Fi: %s", esp_err_to_name(err));
-        }
+        // err = esp_wifi_stop();
+        // if (err != ESP_OK) {
+        //   ESP_LOGE(TAG, "Failed to stop Wi-Fi: %s", esp_err_to_name(err));
+        // }
 
         // Set Wi-Fi mode to NONE
-        err = esp_wifi_set_mode(WIFI_MODE_NULL);
-        if (err != ESP_OK) {
-          ESP_LOGE(TAG, "Failed to set Wi-Fi mode to NULL: %s",
-                   esp_err_to_name(err));
-        }
+        // err = esp_wifi_set_mode(WIFI_MODE_NULL);
+        // if (err != ESP_OK) {
+        //   ESP_LOGE(TAG, "Failed to set Wi-Fi mode to NULL: %s",
+        //            esp_err_to_name(err));
+        // }
         mdns_free();
 
         ESP_LOGI(TAG, "Web server disabled successfully");

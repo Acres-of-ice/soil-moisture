@@ -21,7 +21,10 @@
 #include "soil_comm.h"
 #include "espnow_lib.h"
 #include "wifi_app.h"
+#include "valve_control.h"
 
+//i2c_master_bus_handle_t i2c0bus = NULL;
+uint8_t g_nodeAddress = 0x00;
 
 TaskHandle_t wifiTaskHandle = NULL;
 #define WIFI_APP_TASK_STACK_SIZE (1024 * 5)
@@ -33,6 +36,11 @@ TaskHandle_t dataLoggingTaskHandle = NULL;
 #define DATA_LOG_TASK_PRIORITY 7
 #define DATA_LOG_TASK_CORE_ID 1
 
+TaskHandle_t valveTaskHandle = NULL;
+#define VALVE_TASK_STACK_SIZE (1024 * 6)
+#define VALVE_TASK_PRIORITY 11
+#define VALVE_TASK_CORE_ID 0
+
 static const char* TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -40,6 +48,9 @@ int last_rssi = 0;
 bool message_received = false;
 char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH] = {0};
 char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
+
+SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
+SemaphoreHandle_t stateMutex = NULL;
 
 
 espnow_config_t config = {
@@ -62,9 +73,9 @@ espnow_config_t config = {
 
 void app_main(void)
 {
-    printf("inside main");
-    vext_on(); // ✅ Turn on OLED power
-    vTaskDelay(pdMS_TO_TICKS(100));  // Short delay
+    printf("\ninside main\n");
+    //vext_on(); // ✅ Turn on OLED power
+    //vTaskDelay(pdMS_TO_TICKS(100));  // Short delay
     /*lora initialisation*/
     // wifi_init_sta();
     // vTaskDelay(5); 
@@ -72,6 +83,10 @@ void app_main(void)
     // wait_for_sntp_sync();
     // wifi_stop();
     // Initialize NVS
+    spi_mutex = xSemaphoreCreateMutex();
+    if (spi_mutex == NULL) {
+      ESP_LOGE(TAG, "SPI mutex Failed to create ");
+    }
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
     ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -79,28 +94,37 @@ void app_main(void)
     ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    espnow_init2();
+    //wifi_app_ap_config();
     //wifi_init();
-    i2c_init();
-
+    //i2c_init();
+    //i2c_master_init_(&i2c0bus);
+    espnow_init2();
     vTaskDelay(pdMS_TO_TICKS(2000));
-    xTaskCreatePinnedToCore(
-        wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
-        WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
-        vTaskDelay(pdMS_TO_TICKS(10000));
-      xTaskCreatePinnedToCore(
-      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
-      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(10000));
+    stateMutex = xSemaphoreCreateMutex();
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+      VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+      VALVE_TASK_PRIORITY, &valveTaskHandle,
+      VALVE_TASK_CORE_ID);
+vTaskDelay(pdMS_TO_TICKS(200000));
+
 
 #if CONFIG_SENDER
+    
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
     xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
 
 #if CONFIG_RECEIVER
+    ESP_LOGI(TAG,"inside receive");
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
-
+    xTaskCreatePinnedToCore(
+      wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
+      WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
+      vTaskDelay(pdMS_TO_TICKS(10000));
+    xTaskCreatePinnedToCore(
+      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
+      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
+      vTaskDelay(pdMS_TO_TICKS(10000));
 #endif
 
 }

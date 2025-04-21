@@ -96,6 +96,7 @@ void wifi_app_call_callback(void);
 int8_t wifi_app_get_rssi(void);
 
 void wifi_app_task(void *pvParameters);
+ void wifi_app_ap_config(void);
 void wifi_init(void);
 void start_shutdown_timer(int shutdown_delay_seconds);
 void wifi_app_shutdown_callback(void* arg);

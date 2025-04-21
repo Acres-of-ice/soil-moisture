@@ -27,6 +27,7 @@ typedef struct {
 
 
 void i2c_init();
+//esp_err_t i2c_master_init_(i2c_master_bus_handle_t *bus_handle);
 void i2c_scan();
 void reset_i2c_bus();
 void vext_on();

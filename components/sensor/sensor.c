@@ -64,8 +64,10 @@ uint8_t rx_buf[256] = {0}; // Maximum Payload size of SX1261/62/68 is 255
 uint8_t received[256] = {0};
 uint8_t response[256] = {0};
 
-#define SCL_GPIO 18       // GPIO for SCL
-#define SDA_GPIO 17       // GPIO for SDA
+#define SCL_GPIO 18//9       // GPIO for SCL
+#define SDA_GPIO 17//8       // GPIO for SDA
+#define I2C_MASTER_SCL_IO  9
+#define I2C_MASTER_SDA_IO  8
 #define I2C_MASTER_FREQ_HZ 100000  // I2C clock frequency
 #define I2C_MASTER_NUM I2C_NUM_0   // I2C port number
 #define OLED_ADDR            0x3C  /*!< OLED Display I2C Address */
@@ -150,6 +152,27 @@ void i2c_init()
     i2c_param_config(I2C_MASTER_NUM, &i2c_conf);
     i2c_driver_install(I2C_MASTER_NUM, i2c_conf.mode, 0, 0, 0);
 }
+
+// esp_err_t i2c_master_init_(i2c_master_bus_handle_t *bus_handle)
+// {
+//     i2c_master_bus_config_t i2c_mst_config = {
+//         .clk_source = I2C_CLK_SRC_DEFAULT,
+//         .i2c_port = I2C_MASTER_NUM,
+//         .scl_io_num = I2C_MASTER_SCL_IO,
+//         .sda_io_num = I2C_MASTER_SDA_IO,
+//         .glitch_ignore_cnt = 7,
+//         .flags.enable_internal_pullup = true,
+//     };
+
+//     esp_err_t ret = i2c_new_master_bus(&i2c_mst_config, bus_handle);
+//     if (ret != ESP_OK) {
+//         ESP_LOGE(TAG, "Failed to initialize I2C master bus: %s", esp_err_to_name(ret));
+//     } else {
+//         ESP_LOGI(TAG, "I2C master bus initialized successfully");
+//     }
+
+//     return ret;
+// }
 
 void i2c_scan() {
     ESP_LOGI(TAG, "Scanning I2C bus...");
@@ -258,7 +281,7 @@ void wifi_init_sta(void)
             .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
         },
     };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
@@ -616,9 +639,11 @@ void sensor_task(void *pvParameters)
     //      ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
     //      vTaskDelete(NULL);
     //  }
+    if (espnow_queue == NULL){
      espnow_queue = xQueueCreate(20, sizeof(espnow_message_t));
      if (espnow_queue == NULL) {
-     ESP_LOGE("Queue", "Failed to create queue!");
+      ESP_LOGE(TAG, "Failed to create  queue");
+     }
      }
 
     while (1) 
@@ -648,6 +673,10 @@ void sensor_task(void *pvParameters)
         local_readings.temperature = (uint8_t)temperature;
         local_readings.battery = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
             // Now take mutex only for the quick copy operation
+        if (readings_mutex == NULL) 
+        {
+          readings_mutex = xSemaphoreCreateMutex();
+        }
     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
         // Quick memcpy to update the shared readings
         memcpy(&readings, &local_readings, sizeof(sensor_readings_t));

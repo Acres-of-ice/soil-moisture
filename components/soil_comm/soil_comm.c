@@ -12,6 +12,7 @@
 #include "nvs_flash.h"
 #include "sensor.h"
 #include "espnow_lib.h"
+#include "valve_control.h"
 
 // Configuration
 #define ESPNOW_QUEUE_SIZE             20
@@ -20,7 +21,7 @@
 #define ESPNOW_TX_TASK_STACK_SIZE     4096
 
 #define SENSOR_ADDRESS                0x01
-uint8_t g_nodeAddress = 0x00;
+extern uint8_t g_nodeAddress;
 
 
 // External queue for receiving sensor data
@@ -442,7 +443,7 @@ const char *pcb_name = espnow_get_peer_name(mac_addr);
 // Log message with PCB name and RSSI
 ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
 sender_device_addr, rssi);
-
+message_received = true;
 // Log signal quality if needed
 // if ((rssi < -75) && (!IS_SITE("Sakti"))) {
 // ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
@@ -477,26 +478,26 @@ sender_device_addr, rssi);
 // ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
 }
 
-const char *get_pcb_name(uint8_t nodeAddress) {
-  switch (nodeAddress) {
-    case SENSOR_ADDRESS:
-    return "SENSOR";
-  // case CONDUCTOR_ADDRESS:
-  //   return "CONDUCTOR";
-  // case SOURCE_NOTE_ADDRESS:
-  //   return "SOURCE_VALVE";
-  // case DRAIN_NOTE_ADDRESS:
-  //   return "DRAIN_VALVE";
-  // case AIR_NOTE_ADDRESS:
-  //   return "AIR_VALVE";
-  // case GSM_ADDRESS:
-  //   return "GSM";
-  // case AWS_ADDRESS:
-  //   return "AWS";
-  default:
-    return "UNKNOWN PCB";
-  }
-}
+// const char *get_pcb_name(uint8_t nodeAddress) {
+//   switch (nodeAddress) {
+//     case SENSOR_ADDRESS:
+//     return "SENSOR";
+//   // case CONDUCTOR_ADDRESS:
+//   //   return "CONDUCTOR";
+//   // case SOURCE_NOTE_ADDRESS:
+//   //   return "SOURCE_VALVE";
+//   // case DRAIN_NOTE_ADDRESS:
+//   //   return "DRAIN_VALVE";
+//   // case AIR_NOTE_ADDRESS:
+//   //   return "AIR_VALVE";
+//   // case GSM_ADDRESS:
+//   //   return "GSM";
+//   // case AWS_ADDRESS:
+//   //   return "AWS";
+//   default:
+//     return "UNKNOWN PCB";
+//   }
+// }
   
 
 esp_err_t espnow_init2(void) 
@@ -806,7 +807,7 @@ void vTaskESPNOW_TX(void *pvParameters) {
 void vTaskESPNOW_RX(void *pvParameters) 
 {
     ESP_LOGI(TAG, "ESP-NOW RX task started");
-    
+    printf("\nESP-NOW RX task started\n");
     espnow_recv_data_t recv_data;
     
     while (1) {
