@@ -22,6 +22,18 @@
 
 #define SENSOR_ADDRESS                0x01
 extern uint8_t g_nodeAddress;
+extern bool Valve_A_Acknowledged;
+extern bool Valve_B_Acknowledged;
+extern bool Pump_Acknowledged;
+extern bool Soil_pcb_Acknowledged;
+
+extern SemaphoreHandle_t Valve_A_AckSemaphore;
+extern SemaphoreHandle_t Valve_B_AckSemaphore;
+extern SemaphoreHandle_t Pump_AckSemaphore;
+extern SemaphoreHandle_t Soil_AckSemaphore;
+
+#define MAX_QUEUE_SIZE 8
+#define MAX_RETRIES 10
 
 
 // External queue for receiving sensor data
@@ -39,8 +51,22 @@ uint8_t tx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 QueueHandle_t message_queue = NULL;
 uint8_t sequence_number = 0;
+#define SITE_NAME_LENGTH 2  // Fixed length for site name
+#define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
+#define HEX_SIZE                                                               \
+  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
+   sizeof(uint16_t) *                                                          \
+       6) // 2 bytes site name + timestamp + counter + sensor data
 
-
+typedef struct {
+  uint8_t address;
+  uint8_t command;
+  uint8_t source;
+  uint8_t retries;
+  uint8_t seq_num;
+  char data[HEX_SIZE * 2 + 1]; // Add this line to include hex data
+  // } lora_message_t;
+} comm_t;
 
 typedef struct {
     uint8_t mac[6];
@@ -79,6 +105,93 @@ static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status
     } else {
         ESP_LOGW(TAG, "Message failed to deliver to " MACSTR, MAC2STR(mac_addr));
     }
+}
+
+#define HEX_BUFFER_SIZE 8
+#define MAX_HEX_SIZE (HEX_SIZE * 2 + 1)
+
+typedef struct {
+  char buffer[HEX_BUFFER_SIZE][MAX_HEX_SIZE];
+  int head;
+  int tail;
+  int count;
+  SemaphoreHandle_t mutex;
+} HexCircularBuffer;
+
+HexCircularBuffer hex_buffer = {0};
+
+char *get_hex_from_buffer(void) {
+  char *hex = NULL;
+
+  if (xSemaphoreTake(hex_buffer.mutex, portMAX_DELAY) == pdTRUE) {
+    if (hex_buffer.count > 0) {
+      hex = malloc(MAX_HEX_SIZE);
+      if (hex != NULL) {
+        strncpy(hex, hex_buffer.buffer[hex_buffer.tail], MAX_HEX_SIZE);
+        hex_buffer.tail = (hex_buffer.tail + 1) % HEX_BUFFER_SIZE;
+        hex_buffer.count--;
+      }
+    }
+    xSemaphoreGive(hex_buffer.mutex);
+  } else {
+    ESP_LOGE(TAG, "Failed to take mutex for getting hex from buffer");
+  }
+
+  return hex;
+}
+bool ESPNOW_isQueueEmpty() {
+  return (message_queue == NULL || uxQueueMessagesWaiting(message_queue) == 0);
+}
+
+void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
+  uint8_t retries) {
+comm_t message = {
+.address = address,
+.command = command,
+.source = source,
+.retries = retries,
+.seq_num = sequence_number++,
+.data = {0} // Initialize data to empty string
+};
+
+// Special handling for hex data commands
+if (command == 0xA3) {
+char *hex_data = get_hex_from_buffer();
+if (hex_data != NULL) {
+strncpy(message.data, hex_data, sizeof(message.data) - 1);
+message.data[sizeof(message.data) - 1] = '\0';
+free(hex_data);
+
+// Queue the message 5 times for command 0xA3, incrementing retries each
+// time
+for (int i = 0; i < 5; i++) {
+// Update retries for each queued message
+message.retries = retries + i;
+
+if (xQueueSend(message_queue, &message, 0) != pdPASS) {
+ESP_LOGE(TAG, "Failed to queue message (attempt %d, retries %d)",
+i + 1, message.retries);
+} else {
+ESP_LOGV(TAG,
+"Queued command 0x%02X to address 0x%02X (attempt %d, "
+"retries %d)",
+command, address, i + 1, message.retries);
+}
+}
+return; // Exit the function after queuing 5 times
+} else {
+ESP_LOGE(TAG, "Failed to get hex data from buffer");
+return;
+}
+}
+
+
+// For all other commands, queue once
+if (xQueueSend(message_queue, &message, 0) != pdPASS) {
+ESP_LOGE(TAG, "Failed to queue message");
+} else {
+ESP_LOGV(TAG, "Queued command 0x%02X to address 0x%02X", command, address);
+}
 }
 
 // ESP-NOW receive callback
@@ -140,7 +253,78 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
     return xQueueReceive(espnow_recv_queue, data, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
+bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
+  uint8_t source) {
+  //clearMessageQueue();
 
+// Determine which semaphore we're waiting on (keep your existing logic)
+SemaphoreHandle_t ackSemaphore = NULL;
+if (valveAddress == A_VALVE_ADDRESS) {
+if (!Valve_A_Acknowledged) {
+ackSemaphore = Valve_A_AckSemaphore;
+} 
+} else if (valveAddress == B_VALVE_ADDRESS) {
+  if (!Valve_B_Acknowledged) {
+      ackSemaphore = Valve_B_AckSemaphore;
+    } 
+}else if (valveAddress == PUMP_ADDRESS) {
+  if (!Pump_Acknowledged) {
+      ackSemaphore = Pump_AckSemaphore;
+    } 
+}else if (valveAddress == SOIL_PCB) {
+  if (!Soil_pcb_Acknowledged) {
+      ackSemaphore = Soil_AckSemaphore;
+    } 
+}
+
+if (ackSemaphore == NULL) {
+ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X",
+valveAddress);
+return false;
+}
+
+bool commandAcknowledged = false;
+
+for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
+// Track this command for delivery confirmation
+//track_packet(valveAddress, command, sequence_number);
+
+// Send the message
+ESPNOW_queueMessage(valveAddress, command, source, retry);
+
+// Wait for the message to be sent from queue
+while (!ESPNOW_isQueueEmpty()) {
+vTaskDelay(pdMS_TO_TICKS(20));
+}
+
+// Wait for acknowledgment via semaphore (the espnow_send_cb will give
+// semaphore on success)
+if (xSemaphoreTake(ackSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE) {
+commandAcknowledged = true;
+ESP_LOGI(TAG, "%s acknowledged command 0x%02X from %s on attempt %d",
+get_pcb_name(valveAddress), command, get_pcb_name(source),
+retry + 1);
+
+// Give the semaphore back immediately after successful take
+xSemaphoreGive(ackSemaphore);
+break;
+}
+
+if (!commandAcknowledged) {
+ESP_LOGI(TAG,
+"No acknowledgment received for %s, command 0x%02X. Retry %d/%d",
+get_pcb_name(valveAddress), command, retry + 1, MAX_RETRIES);
+}
+}
+
+if (!commandAcknowledged) {
+ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
+get_pcb_name(valveAddress), MAX_RETRIES);
+//update_status_message("No ack %s", get_pcb_name(valveAddress));
+}
+
+return commandAcknowledged;
+}
 
 // void wifi_init(void) 
 // {
@@ -368,64 +552,127 @@ static void wifi_init_for_espnow(void) {
 
   void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     if (mac_addr == NULL) {
-      ESP_LOGE(TAG, "Invalid ESP-NOW send callback MAC address");
-      return;
+        ESP_LOGE(TAG, "Invalid ESP-NOW send callback MAC address");
+        return;
     }
-  
+
     // Get device address from MAC
     uint8_t device_addr = get_device_from_mac(mac_addr);
     if (device_addr == 0xFF) {
-      ESP_LOGD(TAG, "Send callback for unknown device MAC: " MACSTR,
-               MAC2STR(mac_addr));
-      return;
+        ESP_LOGD(TAG, "Send callback for unknown device MAC: " MACSTR,
+                MAC2STR(mac_addr));
+        return;
     }
-  
+
     // Get PCB name for better logging
     const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+    if (status == ESP_NOW_SEND_SUCCESS) {
+        ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
+                device_addr);
+
+        // Process acknowledgment based on device address
+        switch(device_addr) {
+            case A_VALVE_ADDRESS:
+                if (!Valve_A_Acknowledged) {
+                     Valve_A_Acknowledged = true;
+                    xSemaphoreGive(Valve_A_AckSemaphore);
+                    ESP_LOGD(TAG, "Gave DRAIN_NOTE_AckSemaphore (Valve A)");
+                }
+                break;
+                
+            case B_VALVE_ADDRESS:
+                if (!Valve_B_Acknowledged) {
+                    Valve_B_Acknowledged = true;
+                    xSemaphoreGive(Valve_B_AckSemaphore);
+                    ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (Valve B)");
+                }
+                break;
+                
+                
+            case PUMP_ADDRESS:
+                if (!Pump_Acknowledged) {
+                    Pump_Acknowledged = true;
+                    xSemaphoreGive(Pump_AckSemaphore);
+                    ESP_LOGD(TAG, "Gave PUMP_AckSemaphore");
+                }
+                break;
+                
+            case SOIL_PCB:
+            if (!Soil_pcb_Acknowledged) {
+              Soil_pcb_Acknowledged = true;
+              xSemaphoreGive(Soil_AckSemaphore);
+              ESP_LOGD(TAG, "Gave PUMP_AckSemaphore");
+          }
+                break;
+                
+            default:
+                ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X", device_addr);
+                break;
+        }
+    } else {
+        ESP_LOGW(TAG, "ESP-NOW message send failed to %s (0x%02X)", pcb_name,
+                device_addr);
+        
+    }
+}
+
+  // void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  //   if (mac_addr == NULL) {
+  //     ESP_LOGE(TAG, "Invalid ESP-NOW send callback MAC address");
+  //     return;
+  //   }
   
-    // if (status == ESP_NOW_SEND_SUCCESS) {
-    //   ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
-    //            device_addr);
+  //   // Get device address from MAC
+  //   uint8_t device_addr = get_device_from_mac(mac_addr);
+  //   if (device_addr == 0xFF) {
+  //     ESP_LOGD(TAG, "Send callback for unknown device MAC: " MACSTR,
+  //              MAC2STR(mac_addr));
+  //     return;
+  //   }
   
-    //   // Process acknowledgment based on device address
-    //   if (device_addr == DRAIN_NOTE_ADDRESS) {
-    //     if (!DRAIN_NOTE_acknowledged) {
-    //       DRAIN_NOTE_acknowledged = true;
-    //       xSemaphoreGive(DRAIN_NOTE_AckSemaphore);
-    //       ESP_LOGD(TAG, "Gave DRAIN_NOTE_AckSemaphore");
-    //     } else if (!HEAT_acknowledged) {
-    //       HEAT_acknowledged = true;
-    //       xSemaphoreGive(HEAT_AckSemaphore);
-    //       ESP_LOGD(TAG, "Gave HEAT_AckSemaphore");
-    //     }
-    //   } else if (device_addr == SOURCE_NOTE_ADDRESS) {
-    //     if (on_off_counter % 2 != 0) { // SPRAY MODE ORDER
-    //       if (!AIR_NOTE_acknowledged) {
-    //         AIR_NOTE_acknowledged = true;
-    //         xSemaphoreGive(AIR_NOTE_AckSemaphore);
-    //         ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (SPRAY MODE)");
-    //       } else {
-    //         SOURCE_NOTE_acknowledged = true;
-    //         xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
-    //         ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (SPRAY MODE)");
-    //       }
-    //     } else { // DRAIN MODE ORDER
-    //       if (!SOURCE_NOTE_acknowledged) {
-    //         SOURCE_NOTE_acknowledged = true;
-    //         xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
-    //         ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (DRAIN MODE)");
-    //       } else {
-    //         AIR_NOTE_acknowledged = true;
-    //         xSemaphoreGive(AIR_NOTE_AckSemaphore);
-    //         ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (DRAIN MODE)");
-    //       }
-    //     }
-    //   }
-    // } else {
-    //   ESP_LOGW(TAG, "ESP-NOW message send failed to %s (0x%02X)", pcb_name,
-    //            device_addr);
-    // }
-  }
+  //   // Get PCB name for better logging
+  //   const char *pcb_name = espnow_get_peer_name(mac_addr);
+  
+  //   // if (status == ESP_NOW_SEND_SUCCESS) {
+  //   //   ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
+  //   //            device_addr);
+  
+  //     // Process acknowledgment based on device address
+  //     if (device_addr == A_VALVE_ADDRESS) {
+  //       if (!DRAIN_NOTE_acknowledged) {
+  //         DRAIN_NOTE_acknowledged = true;
+  //         xSemaphoreGive(DRAIN_NOTE_AckSemaphore);
+  //         ESP_LOGD(TAG, "Gave DRAIN_NOTE_AckSemaphore");
+  //       } 
+  //     } else if (device_addr == B_VALVE_ADDRESS) {
+  //       if (on_off_counter % 2 != 0) { // SPRAY MODE ORDER
+  //         if (!AIR_NOTE_acknowledged) {
+  //           AIR_NOTE_acknowledged = true;
+  //           xSemaphoreGive(AIR_NOTE_AckSemaphore);
+  //           ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (SPRAY MODE)");
+  //         } else {
+  //           SOURCE_NOTE_acknowledged = true;
+  //           xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
+  //           ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (SPRAY MODE)");
+  //         }
+  //       } else { // DRAIN MODE ORDER
+  //         if (!SOURCE_NOTE_acknowledged) {
+  //           SOURCE_NOTE_acknowledged = true;
+  //           xSemaphoreGive(SOURCE_NOTE_AckSemaphore);
+  //           ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (DRAIN MODE)");
+  //         } else {
+  //           AIR_NOTE_acknowledged = true;
+  //           xSemaphoreGive(AIR_NOTE_AckSemaphore);
+  //           ESP_LOGD(TAG, "Gave AIR_NOTE_AckSemaphore (DRAIN MODE)");
+  //         }
+  //       }
+  //     }
+  //   } else {
+  //     ESP_LOGW(TAG, "ESP-NOW message send failed to %s (0x%02X)", pcb_name,
+  //              device_addr);
+  // //  }
+  // }
 
   void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     int rssi) {

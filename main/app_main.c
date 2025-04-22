@@ -25,6 +25,10 @@
 
 //i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
+SemaphoreHandle_t Valve_A_AckSemaphore = NULL;
+SemaphoreHandle_t Valve_B_AckSemaphore = NULL;
+SemaphoreHandle_t Pump_AckSemaphore = NULL;
+SemaphoreHandle_t Soil_AckSemaphore = NULL;
 
 TaskHandle_t wifiTaskHandle = NULL;
 #define WIFI_APP_TASK_STACK_SIZE (1024 * 5)
@@ -71,6 +75,14 @@ espnow_config_t config = {
   // .max_auth_attempts;     // Maximum authentication attempts per peer
 };
 
+void init_semaphores(void) {
+
+  Valve_A_AckSemaphore = xSemaphoreCreateBinary();
+  Valve_B_AckSemaphore = xSemaphoreCreateBinary();
+  Pump_AckSemaphore = xSemaphoreCreateBinary();
+  Soil_AckSemaphore = xSemaphoreCreateBinary();
+}
+
 void app_main(void)
 {
     printf("\ninside main\n");
@@ -116,6 +128,7 @@ vTaskDelay(pdMS_TO_TICKS(200000));
 
 #if CONFIG_RECEIVER
     ESP_LOGI(TAG,"inside receive");
+    init_semaphores();
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
     xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,

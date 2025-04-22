@@ -26,22 +26,33 @@ typedef enum { PRESSURE_NORMAL, PRESSURE_OUT_OF_RANGE } pressure_state_t;
 typedef enum {
     STATE_IDLE,
     STATE_IRR_START_A,
+    STATE_A_VALVE_OPEN,
+    STATE_B_VALVE_OPEN,
+    STATE_A_VALVE_CLOSE,
+    STATE_B_VALVE_CLOSE,
     STATE_IRR_START_B,
     STATE_IRR_DONE_A,
     STATE_IRR_DONE_B,
-    STATE_DRAIN_WAIT_AIR_NOTE,
-    STATE_DRAIN_DONE,
-    STATE_SPRAY_START,
-    STATE_SPRAY_FEEDBACK_DRAIN_NOTE,
-    STATE_SPRAY_HEAT_DRAIN_NOTE,
-    STATE_SPRAY_WAIT_AIR_NOTE,
-    STATE_SPRAY_WAIT_SOURCE_NOTE,
-    STATE_SPRAY_DONE,
-    STATE_SPRAY_CALIBRATION,
+    STATE_PUMP_ON_A,
+    STATE_PUMP_ON_B,
+    STATE_PUMP_OFF_A,
+    STATE_PUMP_OFF_B,
+    STATE_A_FEEDBACK,
+    STATE_B_FEEDBACK,
     STATE_ERROR,
     STATE_UNKNOWN
   } ValveState;
 
+  #define CONDUCTOR_ADDRESS 0x01   // Master node
+  #define A_VALVE_ADDRESS 0x02 // Master node
+  #define B_VALVE_ADDRESS 0x03  // Slave node
+  #define AIR_NOTE_ADDRESS 0x04    // Slave node
+  #define AWS_ADDRESS 0x33         // Slave node
+  #define GSM_ADDRESS 0x99         // Slave node
+  #define SOIL_PCB    0x05
+  #define PUMP_ADDRESS 0x06
+
+void update_moisture_readings(int a);
 void updateValveState(void *pvParameters);
 ValveState getCurrentState();
 void setCurrentState(ValveState newState);

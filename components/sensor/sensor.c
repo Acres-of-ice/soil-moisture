@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "valve_control.h"
 
 
 #include "ra01s.h"
@@ -660,7 +661,7 @@ void sensor_task(void *pvParameters)
         message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
         message.temperature = (uint8_t)temperature;
         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-        
+        update_moisture_readings(message.soil_moisture);
         UBaseType_t available = uxQueueSpacesAvailable(espnow_queue);
         ESP_LOGI("SensorTask", "Queue space available: %d", available);
         

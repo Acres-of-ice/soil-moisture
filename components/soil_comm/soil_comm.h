@@ -20,8 +20,8 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
 //bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message);
 
 // Command sending with retries and acknowledgment
-//bool sendCommandWithRetry(uint8_t deviceAddress, uint8_t command,
-  //                        uint8_t source);
+bool sendCommandWithRetry(uint8_t deviceAddress, uint8_t command,
+                         uint8_t source);
 //bool sendCommandNoAck(uint8_t deviceAddress, uint8_t command, uint8_t source);
 
 // Queue management
@@ -42,6 +42,7 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
                          uint8_t retries);
 //void reset_acknowledgements();
 bool ESPNOW_isQueueEmpty();
+#define COMM_isQueueEmpty ESPNOW_isQueueEmpty
 // bool receivedConductorMessageRecently();
 
 // Peer management

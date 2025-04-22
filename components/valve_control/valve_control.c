@@ -46,9 +46,10 @@ static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
 static const char *PRESSURE_STATE_STR[] = {
     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
 
-bool DRAIN_NOTE_acknowledged = false;
-bool HEAT_acknowledged = false;
-bool SOURCE_NOTE_acknowledged = false;
+bool Valve_A_Acknowledged = false;
+bool Valve_B_Acknowledged = false;
+bool Pump_Acknowledged = false;
+bool Soil_pcb_Acknowledged = false;
 bool AIR_NOTE_acknowledged = false;
 bool DRAIN_NOTE_feedback = false;
 bool SOURCE_NOTE_feedback = false;
@@ -56,15 +57,16 @@ bool heat_on = false;
 
 
 
-#define CONDUCTOR_ADDRESS 0x01   // Master node
-#define SOURCE_NOTE_ADDRESS 0x02 // Master node
-#define DRAIN_NOTE_ADDRESS 0x03  // Slave node
-#define AIR_NOTE_ADDRESS 0x04    // Slave node
-#define AWS_ADDRESS 0x33         // Slave node
-#define GSM_ADDRESS 0x99         // Slave node
-#define SOIL_PCB    0x05
+
 
 #define STATE_TIMEOUT_MS (60000)
+
+static int moisture_level =0;
+
+void update_moisture_readings(int a) 
+{
+  moisture_level = a;
+}
 
 // Helper functions to determine states
 static temperature_state_t get_temperature_state(float temperature) {
@@ -101,28 +103,26 @@ const char *valveStateToString(ValveState state) {
     return "IRR A Start";
   case STATE_IRR_START_B:
     return "IRR A Start";
-  // case STATE_DRAIN_HEAT_DRAIN_NOTE:
-  //   return "DM Heat D";
-  // case STATE_DRAIN_WAIT_SOURCE_NOTE:
-  //   return "DM Wait S";
-  // case STATE_DRAIN_WAIT_AIR_NOTE:
-  //   return "DM Wait A";
-  // case STATE_DRAIN_DONE:
-  //   return "DM Done";
-  // case STATE_SPRAY_START:
-  //   return "SM Start";
-  // case STATE_SPRAY_FEEDBACK_DRAIN_NOTE:
-  //   return "SM Fdbk D";
-  // case STATE_SPRAY_HEAT_DRAIN_NOTE:
-  //   return "SM Heat D";
-  // case STATE_SPRAY_WAIT_AIR_NOTE:
-  //   return "SM Wait A";
-  // case STATE_SPRAY_WAIT_SOURCE_NOTE:
-  //   return "SM Wait S";
-  // case STATE_SPRAY_DONE:
-  //   return "SM Done";
-  // case STATE_SPRAY_CALIBRATION:
-  //   return "SM Calibrating";
+  case STATE_A_VALVE_OPEN:
+    return "Valve A open";
+  case STATE_B_VALVE_OPEN:
+    return "Valve B open";
+  case STATE_A_FEEDBACK:
+    return "SA Fdbck";
+  case STATE_B_FEEDBACK:
+    return "SB Fdbck";
+  case STATE_A_VALVE_CLOSE:
+    return "Valve A close";
+  case STATE_B_VALVE_CLOSE:
+    return "Valve B close";
+  case STATE_PUMP_ON_A:
+    return "PUMP ON";
+  case STATE_PUMP_ON_B:
+    return "PUMP ON";
+  case STATE_PUMP_OFF_A:
+    return "PUMP OFF";
+  case STATE_PUMP_OFF_B:
+    return "PUMP OFF";
   case STATE_ERROR:
     return "SM Error";
   default:
@@ -166,14 +166,16 @@ const char *get_pcb_name(uint8_t nodeAddress) {
   switch (nodeAddress) {
   case CONDUCTOR_ADDRESS:
     return "CONDUCTOR";
-  case SOURCE_NOTE_ADDRESS:
-    return "SOURCE_VALVE";
-  case DRAIN_NOTE_ADDRESS:
-    return "DRAIN_VALVE";
+  case A_VALVE_ADDRESS:
+    return "Sector A Valve";
+  case B_VALVE_ADDRESS:
+    return "Sector B Valve";
   case AIR_NOTE_ADDRESS:
     return "AIR_VALVE";
   case SOIL_PCB:
     return "Sensor PCB";
+  case PUMP_ADDRESS:
+    return "Pump PCB";
   case GSM_ADDRESS:
     return "GSM";
   case AWS_ADDRESS:
@@ -226,240 +228,159 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(10)); // Add small delay before retry
         continue;
       } else {
-        if (IRR_B()) {
-          newState = STATE_IRR_START_B;
-          DRAIN_mode = pdTRUE;
-          SPRAY_mode = pdFALSE;
-        } else if (IRR_A() || (on_off_counter == 1)) {
-          newState = STATE_IRR_START_A;
-          SPRAY_mode = pdTRUE;
-          DRAIN_mode = pdFALSE;
+        if (moisture_level<20) {
+          newState = STATE_B_VALVE_OPEN;
+        } else if (moisture_level<20) {
+          newState = STATE_A_VALVE_OPEN;
         } else {
           xSemaphoreGive(spi_mutex);
         }
       }
       break;
-
-    // case STATE_DRAIN_START:
-
-    //   if (!sendCommandWithRetry(DRAIN_NOTE_ADDRESS, 0x11, nodeAddress)) {
-    //     ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-    //     newState = STATE_IDLE;
-    //     xSemaphoreGive(spi_mutex);
-    //     vTaskDelay(1000);
-    //     break;
-    //   }
-    //   newState = STATE_DRAIN_FEEDBACK_DRAIN_NOTE;
-
-    //   if (IS_SITE("Test") || (on_off_counter == 1)) {
-    //     DRAIN_NOTE_feedback = true;
-    //     SOURCE_NOTE_feedback = true;
-    //     ESP_LOGW(TAG, "Feedback assumed");
-    //   }
-    //   stateEntryTime = xTaskGetTickCount();
-    //   break;
-
-    // case STATE_DRAIN_FEEDBACK_DRAIN_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS)) {
-    //     if (DRAIN_NOTE_feedback) {
-    //       if (!sendCommandWithRetry(SOURCE_NOTE_ADDRESS, 0x10, nodeAddress)) {
-    //         ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //         newState = STATE_IDLE;
-    //         xSemaphoreGive(spi_mutex);
-    //         vTaskDelay(1000);
-    //         break;
-    //       }
-    //       stateEntryTime = xTaskGetTickCount();
-    //       newState = STATE_DRAIN_WAIT_SOURCE_NOTE;
-    //       break;
-    //     } else {
-    //       if (heat_on) {
-    //         ESP_LOGE(TAG, "Stuck drain but continuing %s\n",
-    //                  valveStateToString(newState));
-    //         DRAIN_NOTE_feedback = true;
-    //         stateEntryTime = xTaskGetTickCount();
-    //         newState = STATE_DRAIN_FEEDBACK_DRAIN_NOTE;
-    //       } else {
-    //         ESP_LOGE(TAG, "Stuck at %s\n", valveStateToString(newState));
-    //         newState = STATE_DRAIN_HEAT_DRAIN_NOTE;
-    //       }
-    //       break;
-    //     }
-    //   }
-    //   break;
-
-    // case STATE_DRAIN_HEAT_DRAIN_NOTE:
-
-    //   heat_on = true;
-    //   if (!sendCommandWithRetry(DRAIN_NOTE_ADDRESS, 0x21, nodeAddress)) {
-    //     ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //     stateEntryTime = xTaskGetTickCount();
-    //     newState = STATE_DRAIN_FEEDBACK_DRAIN_NOTE;
-    //     break;
-    //   }
-    //   newState = STATE_DRAIN_FEEDBACK_DRAIN_NOTE;
-    //   stateEntryTime = xTaskGetTickCount();
-    //   break;
-
-    // case STATE_DRAIN_WAIT_SOURCE_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS * 0.3)) {
-    //     stateEntryTime = xTaskGetTickCount();
-    //     if (!sendCommandWithRetry(SOURCE_NOTE_ADDRESS, 0x21, nodeAddress)) {
-    //       ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //       xSemaphoreGive(spi_mutex);
-    //       newState = STATE_IDLE;
-    //       xSemaphoreGive(spi_mutex);
-    //       vTaskDelay(1000);
-    //       break;
-    //     }
-    //     newState = STATE_DRAIN_WAIT_AIR_NOTE;
-    //   }
-    //   break;
-
-    // case STATE_DRAIN_WAIT_AIR_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS)) {
-    //     newState = STATE_DRAIN_DONE;
-    //   }
-    //   break;
-
-    // case STATE_DRAIN_DONE:
-    //   xSemaphoreGive(spi_mutex);
-    //   if (AUTO_mode) {
-    //     on_off_counter++;
-    //     // Check if we need to enter error state
-    //     if (errorConditionMet) {
-    //       errorEntryTime = xTaskGetTickCount();
-    //       newState = STATE_ERROR;
-    //       break;
-    //     }
-    //   }
-
-    //   ESP_LOGI(TAG, "Mode timer started");
-    //   vTaskDelay(pdMS_TO_TICKS(MODE_TIMEOUT_MS));
-    //   ESP_LOGI(TAG, "Mode timer stopped");
-    //   newState = STATE_IDLE;
-    //   break;
-
-    // case STATE_ERROR:
-    //   if (canExitErrorState()) {
-    //     ESP_LOGI(TAG, "Exiting error state");
-    //     errorConditionMet = false; // Reset error flag
-    //     newState = STATE_IDLE;
-    //   } else {
-    //     // Stay in error state and check again after delay
-    //     vTaskDelay(pdMS_TO_TICKS(60000)); // Check every 10 seconds
-    //   }
-    //   break;
-
-    // case STATE_SPRAY_START:
-
-    //   if (!sendCommandWithRetry(DRAIN_NOTE_ADDRESS, 0x10, nodeAddress)) {
-    //     ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //     newState = STATE_IDLE;
-    //     xSemaphoreGive(spi_mutex);
-    //     vTaskDelay(1000);
-    //     break;
-    //   }
-    //   stateEntryTime = xTaskGetTickCount();
-    //   newState = STATE_SPRAY_FEEDBACK_DRAIN_NOTE;
-    //   if (IS_SITE("Test") || (on_off_counter == 1)) {
-    //     DRAIN_NOTE_feedback = true;
-    //     SOURCE_NOTE_feedback = true;
-    //     ESP_LOGW(TAG, "Feedback assumed");
-    //   }
-    //   break;
-
-    // case STATE_SPRAY_FEEDBACK_DRAIN_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS)) {
-    //     ESP_LOGD(TAG, "DRAIN valve timeout");
-
-    //     if (DRAIN_NOTE_feedback) {
-    //       if (!sendCommandWithRetry(SOURCE_NOTE_ADDRESS, 0x20, nodeAddress)) {
-    //         ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //         newState = STATE_IDLE;
-    //         xSemaphoreGive(spi_mutex);
-    //         vTaskDelay(1000);
-    //         break;
-    //       }
-    //       stateEntryTime = xTaskGetTickCount();
-    //       newState = STATE_SPRAY_WAIT_AIR_NOTE;
-    //       break;
-    //     } else {
-    //       if (heat_on) {
-    //         ESP_LOGE(TAG, "Stuck spray but continuing %s\n",
-    //                  valveStateToString(newState));
-    //         DRAIN_NOTE_feedback = true;
-    //         stateEntryTime = xTaskGetTickCount();
-    //         newState = STATE_SPRAY_FEEDBACK_DRAIN_NOTE;
-    //       } else {
-    //         ESP_LOGE(TAG, "Stuck at %s\n", valveStateToString(newState));
-    //         newState = STATE_SPRAY_HEAT_DRAIN_NOTE;
-    //       }
-    //       break;
-    //     }
-    //   }
-    //   break;
-
-    // case STATE_SPRAY_HEAT_DRAIN_NOTE:
-    //   heat_on = true;
-    //   if (!sendCommandWithRetry(DRAIN_NOTE_ADDRESS, 0x21, nodeAddress)) {
-    //     ESP_LOGE(TAG, "Send Failed at %s\n", valveStateToString(newState));
-    //     stateEntryTime = xTaskGetTickCount();
-    //     newState = STATE_SPRAY_FEEDBACK_DRAIN_NOTE;
-    //     break;
-    //   }
-    //   stateEntryTime = xTaskGetTickCount();
-    //   newState = STATE_SPRAY_FEEDBACK_DRAIN_NOTE;
-    //   break;
-
-    // case STATE_SPRAY_WAIT_AIR_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS)) {
-    //     ESP_LOGD(TAG, "AIR valve timeout");
-
-    //     sendCommandWithRetry(SOURCE_NOTE_ADDRESS, 0x11, nodeAddress);
-    //     newState = STATE_SPRAY_WAIT_SOURCE_NOTE;
-    //     stateEntryTime = xTaskGetTickCount();
-    //   }
-    //   break;
-
-    // case STATE_SPRAY_WAIT_SOURCE_NOTE:
-    //   if (isTimeoutReached(VALVE_TIMEOUT_MS)) {
-    //     newState = STATE_SPRAY_DONE;
-    //   }
-    //   break;
-
-    // case STATE_SPRAY_DONE:
-    //   xSemaphoreGive(spi_mutex);
-    //   if (AUTO_mode) {
-    //     on_off_counter++;
-    //     ESP_LOGD(TAG, "Mode timer started");
-    //     vTaskDelay(pdMS_TO_TICKS(MODE_TIMEOUT_MS));
-    //     ESP_LOGD(TAG, "Mode timer stopped");
-    //     // If calibration is not done, move to a calibration state
-    //     // if (!is_calibration_done() && !IS_SITE("Test")) {
-    //     if (!is_calibration_done()) {
-    //       newState = STATE_SPRAY_CALIBRATION;
-    //       check_and_start_calibration(on_off_counter);
-    //     } else {
-    //       newState = STATE_IDLE;
-    //     }
-    //   } else {
-    //     newState = STATE_IDLE;
-    //   }
-
-    //   break;
-
-    // case STATE_SPRAY_CALIBRATION:
-    //   // Stay in this state until calibration is done
-    //   if (is_calibration_done()) {
-    //     ESP_LOGI(TAG, "Calibration completed");
-    //     newState = STATE_IDLE;
-    //   } else {
-    //     // Check calibration status periodically
-    //     vTaskDelay(pdMS_TO_TICKS(1000)); // Check every second
-    //   }
-    //   break;
-
+    case STATE_A_VALVE_OPEN:
+       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress))
+       {
+        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+        newState = STATE_IDLE;
+        xSemaphoreGive(spi_mutex);
+        vTaskDelay(1000);
+        break;
+       }
+       newState = STATE_A_FEEDBACK;
+       stateEntryTime = xTaskGetTickCount();
+       break;
+    case STATE_A_FEEDBACK:
+      if (DRAIN_NOTE_feedback)
+      {
+        ESP_LOGI(TAG,"Fdbck received from Valve A");
+        newState = STATE_PUMP_ON_A;
+        break;
+      }
+        ESP_LOGI(TAG,"Fdbck receive failed from Valve A");
+        newState = STATE_IDLE;
+        xSemaphoreGive(spi_mutex);
+        vTaskDelay(1000);
+        break;
+    case STATE_PUMP_ON_A:
+      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
+      {
+       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+      newState = STATE_IDLE;
+      xSemaphoreGive(spi_mutex);
+      vTaskDelay(1000);
+      break;
+      }
+      newState = STATE_IRR_START_A;
+      break;
+    case STATE_IRR_START_A:
+      while(moisture_level<80)
+      {
+        ESP_LOGI(TAG,"Doing irrigation for sector A");
+        vTaskDelay(1000);
+      }
+      newState = STATE_IRR_DONE_A;
+      break;
+    case STATE_IRR_DONE_A:
+      ESP_LOGI(TAG,"Irrigation for sector A done");
+      newState = STATE_PUMP_OFF_A;
+      break;
+    case STATE_PUMP_OFF_A:
+      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
+      {
+      ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+      newState = STATE_IDLE;
+      xSemaphoreGive(spi_mutex);
+      vTaskDelay(1000);
+      break;
+      }
+      ESP_LOGI(TAG,"Closing Pump");
+      newState = STATE_A_VALVE_CLOSE;
+      break;
+    case STATE_A_VALVE_CLOSE:
+      if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
+      {
+      ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+      newState = STATE_IDLE;
+      xSemaphoreGive(spi_mutex);
+      vTaskDelay(1000);
+      break;
+      }
+      newState = STATE_IDLE;
+      xSemaphoreGive(spi_mutex);
+      vTaskDelay(1000);
+      break;
+    case STATE_B_VALVE_OPEN:
+      if (!sendCommandWithRetry(B_VALVE_ADDRESS, 0x11, nodeAddress))
+      {
+       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
+      }
+      newState = STATE_B_FEEDBACK;
+      stateEntryTime = xTaskGetTickCount();
+      break;
+   case STATE_B_FEEDBACK:
+     if (DRAIN_NOTE_feedback)
+     {
+       ESP_LOGI(TAG,"Fdbck received from Valve B");
+       newState = STATE_PUMP_ON_B;
+       break;
+     }
+       ESP_LOGI(TAG,"Fdbck receive failed from Valve B");
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
+    case STATE_PUMP_ON_B:
+       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
+       {
+        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
+       }
+       newState = STATE_IRR_START_B;
+       break;
+     case STATE_IRR_START_B:
+       while(moisture_level<80)
+       {
+         ESP_LOGI(TAG,"Doing irrigation for sector B");
+         vTaskDelay(1000);
+       }
+       newState = STATE_IRR_DONE_B;
+       break;
+     case STATE_IRR_DONE_B:
+       ESP_LOGI(TAG,"Irrigation for sector B done");
+       newState = STATE_PUMP_OFF_B;
+       break;
+     case STATE_PUMP_OFF_B:
+       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
+       {
+       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
+       }
+       ESP_LOGI(TAG,"Closing Pump");
+       newState = STATE_B_VALVE_CLOSE;
+       break;
+     case STATE_B_VALVE_CLOSE:
+       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
+       {
+       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
+       }
+       newState = STATE_IDLE;
+       xSemaphoreGive(spi_mutex);
+       vTaskDelay(1000);
+       break;
     default:
       ESP_LOGW(TAG, "Unexpected state: %s", valveStateToString(newState));
       break;
