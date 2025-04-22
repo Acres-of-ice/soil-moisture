@@ -1,10 +1,25 @@
 #ifndef ESPNOW_COM_H
 #define ESPNOW_COM_H
 
-
+#include "valve_control.h"
 #include "esp_now.h"
 
+#define SITE_NAME_LENGTH 2  // Fixed length for site name
+#define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
+#define HEX_SIZE                                                               \
+  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
+   sizeof(uint16_t) *                                                          \
+       6) // 2 bytes site name + timestamp + counter + sensor data
 
+typedef struct {
+  uint8_t address;
+  uint8_t command;
+  uint8_t source;
+  uint8_t retries;
+  uint8_t seq_num;
+  char data[HEX_SIZE * 2 + 1]; // Add this line to include hex data
+  // } lora_message_t;
+} comm_t;
 
 // Initialize ESP-NOW communication
 esp_err_t espnow_init();
@@ -59,6 +74,10 @@ uint8_t get_device_from_mac(const uint8_t *mac_addr);
 void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status);
 void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
   int rssi);
+  void processConductorMessage(comm_t *message);
+  void processValveAMessage(comm_t *message, ValveState newState);
+  void processValveBMessage(comm_t *message, ValveState newState);
+  void processPumpMessage(comm_t *message, ValveState newState);
 static void wifi_init_for_espnow(void);
 const char *get_pcb_name(uint8_t nodeAddress);
 esp_err_t espnow_init2(void);

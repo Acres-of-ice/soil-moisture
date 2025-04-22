@@ -27,6 +27,8 @@ extern bool Valve_B_Acknowledged;
 extern bool Pump_Acknowledged;
 extern bool Soil_pcb_Acknowledged;
 
+extern bool DRAIN_NOTE_feedback;
+
 extern SemaphoreHandle_t Valve_A_AckSemaphore;
 extern SemaphoreHandle_t Valve_B_AckSemaphore;
 extern SemaphoreHandle_t Pump_AckSemaphore;
@@ -51,22 +53,9 @@ uint8_t tx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 QueueHandle_t message_queue = NULL;
 uint8_t sequence_number = 0;
-#define SITE_NAME_LENGTH 2  // Fixed length for site name
-#define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
-#define HEX_SIZE                                                               \
-  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
-   sizeof(uint16_t) *                                                          \
-       6) // 2 bytes site name + timestamp + counter + sensor data
 
-typedef struct {
-  uint8_t address;
-  uint8_t command;
-  uint8_t source;
-  uint8_t retries;
-  uint8_t seq_num;
-  char data[HEX_SIZE * 2 + 1]; // Add this line to include hex data
-  // } lora_message_t;
-} comm_t;
+
+
 
 typedef struct {
     uint8_t mac[6];
@@ -271,12 +260,15 @@ ackSemaphore = Valve_A_AckSemaphore;
   if (!Pump_Acknowledged) {
       ackSemaphore = Pump_AckSemaphore;
     } 
-}else if (valveAddress == SOIL_PCB) {
+}else if (valveAddress == SOIL_PCB_A) {
   if (!Soil_pcb_Acknowledged) {
       ackSemaphore = Soil_AckSemaphore;
     } 
-}
-
+}else if (valveAddress == SOIL_PCB_B) {
+  if (!Soil_pcb_Acknowledged) {
+      ackSemaphore = Soil_AckSemaphore;
+    } 
+  }
 if (ackSemaphore == NULL) {
 ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X",
 valveAddress);
@@ -598,13 +590,20 @@ static void wifi_init_for_espnow(void) {
                 }
                 break;
                 
-            case SOIL_PCB:
+            case SOIL_PCB_A:
             if (!Soil_pcb_Acknowledged) {
               Soil_pcb_Acknowledged = true;
               xSemaphoreGive(Soil_AckSemaphore);
-              ESP_LOGD(TAG, "Gave PUMP_AckSemaphore");
-          }
+              ESP_LOGD(TAG, "Soil PCB A semaphore");
+              }
                 break;
+            case SOIL_PCB_B:
+                if (!Soil_pcb_Acknowledged) {
+                  Soil_pcb_Acknowledged = true;
+                  xSemaphoreGive(Soil_AckSemaphore);
+                  ESP_LOGD(TAG, "Soil PCB B semaphore");
+                  }
+                  break;
                 
             default:
                 ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X", device_addr);
@@ -673,6 +672,91 @@ static void wifi_init_for_espnow(void) {
   //              device_addr);
   // //  }
   // }
+  void processConductorMessage(comm_t *message) {
+    ValveState newState = getCurrentState();
+  
+    if (message->source == A_VALVE_ADDRESS) {
+      processValveAMessage(message, newState);
+    }  else if (message->source == B_VALVE_ADDRESS) {
+      processValveBMessage(message, newState);
+    }  else if (message->source == PUMP_ADDRESS) {
+      processPumpMessage(message, newState);
+    }  else {
+      ESP_LOGW(TAG, "Unexpected source for Conductor message: 0x%02X",
+               message->source);
+    }
+  }
+  // Process messages from VALVE A
+void processValveAMessage(comm_t *message, ValveState newState) {
+  if (message->command == 0xFE) { // Feedback command
+    if (!DRAIN_NOTE_feedback &&
+        ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
+          DRAIN_NOTE_feedback = true;
+      //update_status_message("Valve A Fdbk ack");
+    }
+  } 
+  else if (message->command == 0xA1) { // Valve A ON acknowledgment
+    Valve_A_Acknowledged = true;
+    xSemaphoreGive(Valve_A_AckSemaphore);
+    //update_status_message("Valve A ON");
+  } 
+  else if (message->command == 0xA2) { // Valve A OFF acknowledgment
+    Valve_A_Acknowledged = false;
+    xSemaphoreGive(Valve_A_AckSemaphore);
+    //update_status_message("Valve A OFF");
+  } 
+  else {
+    ESP_LOGD(TAG, "Ignored command from VALVE A: 0x%02X", message->command);
+  }
+}
+
+// Process messages from VALVE B
+void processValveBMessage(comm_t *message, ValveState newState) {
+  if (message->command == 0xFE) { // Feedback command
+    if (!DRAIN_NOTE_feedback &&
+        ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
+          DRAIN_NOTE_feedback = true;
+      //update_status_message("Valve B Fdbk ack");
+    }
+  } 
+  else if (message->command == 0xB1) { // Valve B ON acknowledgment
+    Valve_B_Acknowledged = true;
+    xSemaphoreGive(Valve_B_AckSemaphore);
+    //update_status_message("Valve B ON");
+  } 
+  else if (message->command == 0xB2) { // Valve B OFF acknowledgment
+    Valve_B_Acknowledged = false;
+    xSemaphoreGive(Valve_B_AckSemaphore);
+    //update_status_message("Valve B OFF");
+  } 
+  else {
+    ESP_LOGD(TAG, "Ignored command from VALVE B: 0x%02X", message->command);
+  }
+}
+
+// Process messages from PUMP
+void processPumpMessage(comm_t *message, ValveState newState) {
+  if (message->command == 0xFE) { // Feedback command
+    if (!DRAIN_NOTE_feedback &&
+        ((strstr(valveStateToString(newState), "Fdbk") != NULL))){
+          DRAIN_NOTE_feedback = true;
+      //update_status_message("Pump Fdbk ack");
+    }
+  } 
+  else if (message->command == 0xC1) { // Pump ON acknowledgment
+    Pump_Acknowledged = true;
+    xSemaphoreGive(Pump_AckSemaphore);
+    //update_status_message("Pump ON");
+  } 
+  else if (message->command == 0xC2) { // Pump OFF acknowledgment
+    Pump_Acknowledged = false;
+    xSemaphoreGive(Pump_AckSemaphore);
+    //update_status_message("Pump OFF");
+  } 
+  else {
+    ESP_LOGD(TAG, "Ignored command from PUMP: 0x%02X", message->command);
+  }
+}
 
   void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     int rssi) {

@@ -33,6 +33,8 @@ static TickType_t errorEntryTime = 0; // Track when we entered error state
 bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
+extern char last_sender_pcb_name[20];
+
 int on_off_counter = 1;
 
 static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
@@ -172,8 +174,10 @@ const char *get_pcb_name(uint8_t nodeAddress) {
     return "Sector B Valve";
   case AIR_NOTE_ADDRESS:
     return "AIR_VALVE";
-  case SOIL_PCB:
-    return "Sensor PCB";
+  case SOIL_PCB_A:
+    return "Sensor A PCB";
+  case SOIL_PCB_B:
+    return "Sensor B PCB";
   case PUMP_ADDRESS:
     return "Pump PCB";
   case GSM_ADDRESS:
@@ -228,10 +232,11 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(10)); // Add small delay before retry
         continue;
       } else {
-        if (moisture_level<20) {
-          newState = STATE_B_VALVE_OPEN;
-        } else if (moisture_level<20) {
+        if ((last_sender_pcb_name == SOIL_PCB_A)&&(moisture_level<20))
+        {
           newState = STATE_A_VALVE_OPEN;
+        } else if ((last_sender_pcb_name == SOIL_PCB_B)&&(moisture_level<20)) {
+          newState = STATE_B_VALVE_OPEN;
         } else {
           xSemaphoreGive(spi_mutex);
         }

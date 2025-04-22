@@ -49,8 +49,9 @@ typedef enum {
   #define AIR_NOTE_ADDRESS 0x04    // Slave node
   #define AWS_ADDRESS 0x33         // Slave node
   #define GSM_ADDRESS 0x99         // Slave node
-  #define SOIL_PCB    0x05
-  #define PUMP_ADDRESS 0x06
+  #define SOIL_PCB_A    0x05
+  #define SOIL_PCB_B    0x06
+  #define PUMP_ADDRESS 0x07
 
 void update_moisture_readings(int a);
 void updateValveState(void *pvParameters);
