@@ -45,6 +45,10 @@ TaskHandle_t valveTaskHandle = NULL;
 #define VALVE_TASK_PRIORITY 11
 #define VALVE_TASK_CORE_ID 0
 
+#define LORA_APP_TASK_STACK_SIZE (1024 * 6)
+#define LORA_APP_TASK_PRIORITY 12 // Highest priority
+#define LORA_APP_TASK_CORE_ID 0
+
 static const char* TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -120,8 +124,13 @@ void app_main(void)
 vTaskDelay(pdMS_TO_TICKS(200000));
 
 
-#if CONFIG_SENDER
-    
+#if CONFIG_SENDER_A
+    g_nodeAddress = SOIL_PCB_A;
+    xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
+    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
+#endif
+#if CONFIG_SENDER_B
+    g_nodeAddress = SOIL_PCB_B;
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
     xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
@@ -138,6 +147,36 @@ vTaskDelay(pdMS_TO_TICKS(200000));
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
       vTaskDelay(pdMS_TO_TICKS(10000));
+#endif
+
+#if VALVE_A
+  g_nodeAddress = A_VALVE_ADDRESS;
+  
+  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
+                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
+                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+
+#endif
+
+#if VALVE_B
+  g_nodeAddress = B_VALVE_ADDRESS;
+  
+  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
+                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
+                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+
+#endif
+
+#if PUMP
+  g_nodeAddress = PUMP_ADDRESS;
+  
+  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
+                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
+                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+
 #endif
 
 }

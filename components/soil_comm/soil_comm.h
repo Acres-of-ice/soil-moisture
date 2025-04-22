@@ -82,5 +82,6 @@ static void wifi_init_for_espnow(void);
 const char *get_pcb_name(uint8_t nodeAddress);
 esp_err_t espnow_init2(void);
 //void wifi_init(void);
+void vTaskESPNOW(void *pvParameters);
 
 #endif // ESPNOW_COM_H

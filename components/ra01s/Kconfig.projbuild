@@ -82,11 +82,31 @@ menu "SX126X Configuration"
 		help
 			Enable Receiver Function.
 
-	config SENDER
-		bool "Enable Sender"
+	config SENDER_A
+		bool "Enable Sender Sector A"
 		default false
 		help
-			Enable Sender Function.
+			Enable Sender A Function.
+	config SENDER_B
+		bool "Enable Sender Sector B "
+		default false
+		help
+		   Enable Sender B Function.
+	config VALVE_A
+		bool "Enable Valve Sector A"
+		default false
+		help
+			Enable Valve A Function.
+	config VALVE_B
+		bool "Enable Valve Sector B "
+		default false
+		help
+			Enable Valve B Function.
+	config PUMP
+		bool "Enable Pump "
+		default false
+		help
+			Enable Pump Function.		
 
 	config MISO_GPIO
 		int "SX126X MISO GPIO"
