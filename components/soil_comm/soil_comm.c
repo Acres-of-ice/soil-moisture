@@ -888,6 +888,135 @@ message_received = true;
 //     return "UNKNOWN PCB";
 //   }
 // }
+
+uint8_t get_device_from_pcb_name(const char *pcb_name) {
+  if (pcb_name == NULL) {
+    return 0xFF; // Invalid address
+  }
+
+  if (strcmp(pcb_name, "CONDUCTOR") == 0) {
+    ESP_LOGD(TAG, "Identified as CONDUCTOR by PCB name");
+    return CONDUCTOR_ADDRESS;
+  } else if (strcmp(pcb_name, "Sector A Valve") == 0) {
+    ESP_LOGD(TAG, "Identified as A_VALVE by PCB name");
+    return A_VALVE_ADDRESS;
+  } else if (strcmp(pcb_name, "Sector B Valve") == 0) {
+    ESP_LOGD(TAG, "Identified as B_VALVE by PCB name");
+    return B_VALVE_ADDRESS;
+  } else if (strcmp(pcb_name, "Sensor A PCB") == 0) {
+    ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
+    return SOIL_PCB_A;
+  } else if (strcmp(pcb_name, "Sensor B PCB") == 0) {
+    ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
+    return SOIL_PCB_B;
+  } else if (strcmp(pcb_name, "Pump PCB") == 0) {
+    ESP_LOGD(TAG, "Identified as PUMP by PCB name");
+    return PUMP_ADDRESS;
+  }
+
+  return 0xFF; // Unknown PCB name
+}
+
+void update_device_mappings_from_discovered_peers(void) {
+  ESP_LOGI(TAG, "Updating device mappings from discovered peers");
+  int peer_count = espnow_get_peer_count();
+  ESP_LOGI(TAG, "Processing %d discovered peers", peer_count);
+
+  for (int i = 0; i < peer_count; i++) {
+    uint8_t mac_addr[ESP_NOW_ETH_ALEN];
+    if (espnow_get_peer_mac(i, mac_addr) == ESP_OK) {
+      const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+      ESP_LOGI(TAG, "Processing peer %d: MAC " MACSTR ", PCB Name: %s", i,
+               MAC2STR(mac_addr), pcb_name ? pcb_name : "Unknown");
+
+      if (pcb_name != NULL && strncmp(pcb_name, "Unknown-", 8) != 0) {
+        // Try to map the PCB name to a device address
+        uint8_t device_addr = get_device_from_pcb_name(pcb_name);
+
+        if (device_addr != 0xFF) {
+          // Valid device address, register the mapping
+          ESP_LOGI(TAG, "  Mapped to device 0x%02X (%s)", device_addr,
+                   get_pcb_name(device_addr));
+          register_device_mac_mapping(device_addr, mac_addr);
+
+          // Verify the mapping was successful by checking if authenticated
+          if (espnow_is_authenticated(mac_addr)) {
+            ESP_LOGI(TAG, "  Successfully authenticated peer as %s",
+                     get_pcb_name(device_addr));
+          } else {
+            ESP_LOGW(TAG, "  Authentication pending for %s",
+                     get_pcb_name(device_addr));
+
+            // Try to authenticate this peer
+            espnow_authenticate_peer(mac_addr);
+            vTaskDelay(pdMS_TO_TICKS(100)); // Brief delay for processing
+          }
+        } 
+        // else {
+        //   // No exact match, check for partial matches in the PCB name
+        //   ESP_LOGW(TAG, "  No exact match for PCB name: %s", pcb_name);
+
+        //   // Check for partial matches (case insensitive)
+        //   if (strcasestr(pcb_name, "conductor") != NULL) {
+        //     ESP_LOGI(
+        //         TAG,
+        //         "  Partial match 'conductor' -> CONDUCTOR_ADDRESS (0x%02X)",
+        //         CONDUCTOR_ADDRESS);
+        //     register_device_mac_mapping(CONDUCTOR_ADDRESS, mac_addr);
+        //   } else if (strcasestr(pcb_name, "drain") != NULL) {
+        //     ESP_LOGI(TAG,
+        //              "  Partial match 'drain' -> DRAIN_NOTE_ADDRESS (0x%02X)",
+        //              DRAIN_NOTE_ADDRESS);
+        //     register_device_mac_mapping(DRAIN_NOTE_ADDRESS, mac_addr);
+        //   } else if (strcasestr(pcb_name, "source") != NULL) {
+        //     ESP_LOGI(TAG,
+        //              "  Partial match 'source' -> SOURCE_NOTE_ADDRESS (0x%02X)",
+        //              SOURCE_NOTE_ADDRESS);
+        //     register_device_mac_mapping(SOURCE_NOTE_ADDRESS, mac_addr);
+        //   } else if (strcasestr(pcb_name, "air") != NULL) {
+        //     ESP_LOGI(TAG, "  Partial match 'air' -> AIR_NOTE_ADDRESS (0x%02X)",
+        //              AIR_NOTE_ADDRESS);
+        //     register_device_mac_mapping(AIR_NOTE_ADDRESS, mac_addr);
+        //   } else {
+        //     ESP_LOGW(TAG, "  No partial match found either");
+        //   }
+        // }
+      } else {
+        ESP_LOGW(TAG, "  No valid PCB name available for this peer");
+
+        // For unknown peers, try to authenticate and then check PCB name again
+        ESP_LOGI(TAG, "  Attempting authentication to retrieve PCB name");
+        if (espnow_authenticate_peer(mac_addr)) {
+          // Wait a brief moment for the authentication to be processed
+          vTaskDelay(pdMS_TO_TICKS(200));
+
+          // Check for PCB name again after authentication
+          const char *new_pcb_name = espnow_get_peer_name(mac_addr);
+
+          if (new_pcb_name != NULL &&
+              strncmp(new_pcb_name, "Unknown-", 8) != 0) {
+            ESP_LOGI(TAG, "  After authentication, PCB name is: %s",
+                     new_pcb_name);
+            // Now try mapping again with the retrieved name
+            uint8_t device_addr = get_device_from_pcb_name(new_pcb_name);
+            if (device_addr != 0xFF) {
+              ESP_LOGI(TAG, "  Now mapped to device 0x%02X (%s)", device_addr,
+                       get_pcb_name(device_addr));
+              register_device_mac_mapping(device_addr, mac_addr);
+            }
+          } else {
+            ESP_LOGW(TAG, "  Still no valid PCB name after authentication");
+          }
+        } else {
+          ESP_LOGW(TAG, "  Authentication failed for unknown peer");
+        }
+      }
+    } else {
+      ESP_LOGE(TAG, "  Failed to get MAC for peer %d", i);
+    }
+  }
+}
   
 
 esp_err_t espnow_init2(void) 
@@ -964,7 +1093,7 @@ esp_err_t espnow_init2(void)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
   
     // Now update device mappings based on discovered peers
-    //update_device_mappings_from_discovered_peers();
+    update_device_mappings_from_discovered_peers();
   
     // Broadcast authentication again after updating mappings
     ESP_LOGI(TAG, "Broadcasting final authentication round...");
