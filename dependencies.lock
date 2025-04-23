@@ -31,5 +31,5 @@ direct_dependencies:
 - espressif/ssd1306
 - idf
 manifest_hash: 3368d5638cc37e1d629e73fb7f274e9b73856fa7c33e3aa246ecf224ba0baac2
-target: esp32s3
+target: esp32
 version: 2.0.0

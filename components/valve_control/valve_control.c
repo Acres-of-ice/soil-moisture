@@ -208,6 +208,7 @@ static bool isStateTimedOut(ValveState state) {
 
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
+  ESP_LOGI(TAG,"inside LOGI");
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
@@ -226,16 +227,17 @@ void updateValveState(void *pvParameters) {
     switch (newState) {
     case STATE_IDLE:
       //reset_acknowledgements();
+      ESP_LOGI(TAG,"IDLE STATE");
       if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to get SPI mutex for LoRa config");
         //update_status_message("Wait for backup");
         vTaskDelay(pdMS_TO_TICKS(10)); // Add small delay before retry
         continue;
       } else {
-        if ((last_sender_pcb_name == SOIL_PCB_A)&&(moisture_level<20))
+        if ((moisture_level<20))
         {
           newState = STATE_A_VALVE_OPEN;
-        } else if ((last_sender_pcb_name == SOIL_PCB_B)&&(moisture_level<20)) {
+        } else if ((moisture_level<20)) {
           newState = STATE_B_VALVE_OPEN;
         } else {
           xSemaphoreGive(spi_mutex);
@@ -243,6 +245,7 @@ void updateValveState(void *pvParameters) {
       }
       break;
     case STATE_A_VALVE_OPEN:
+       ESP_LOGI(TAG,"VALVE OPEN STATE");
        if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress))
        {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));

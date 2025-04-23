@@ -38,6 +38,17 @@ extern SemaphoreHandle_t Soil_AckSemaphore;
 #define MAX_RETRIES 10
 
 
+
+// MAC address mapping storage for device addresses to MAC addresses
+typedef struct {
+  uint8_t device_addr;
+  uint8_t mac_addr[ESP_NOW_ETH_ALEN];
+} device_mac_mapping_t;
+
+#define MAX_DEVICE_MAPPINGS 10
+static device_mac_mapping_t device_mappings[MAX_DEVICE_MAPPINGS] = {0};
+static int num_device_mappings = 0;
+
 // External queue for receiving sensor data
 extern QueueHandle_t espnow_queue;
 
@@ -444,22 +455,73 @@ static void wifi_init_for_espnow(void) {
              CONFIG_ESPNOW_CHANNEL);
   }
 
-  // Function to get MAC address for a device
-// void get_mac_for_device(uint8_t deviceAddress, uint8_t *mac_addr) {
-//     // Search in mappings
-//     for (int i = 0; i < 10; i++) {
-//       if (device_mappings[i].device_addr == deviceAddress) {
-//         memcpy(mac_addr, device_mappings[i].mac_addr, ESP_NOW_ETH_ALEN);
-//         return;
-//       }
-//     }
+  bool register_device_mac_mapping(uint8_t device_addr, const uint8_t *mac_addr) {
+    if (num_device_mappings >= MAX_DEVICE_MAPPINGS) {
+      ESP_LOGE(TAG, "Cannot register more device mappings");
+      return false;
+    }
   
-//     // If not found, log an error instead of generating a MAC
-//     ESP_LOGE(TAG, "No MAC mapping found for device 0x%02X", deviceAddress);
+    // Check if mapping already exists
+    for (int i = 0; i < num_device_mappings; i++) {
+      if (device_mappings[i].device_addr == device_addr) {
+        // Update existing mapping
+        memcpy(device_mappings[i].mac_addr, mac_addr, ESP_NOW_ETH_ALEN);
+        ESP_LOGI(TAG, "Updated MAC mapping for device 0x%02X (%s)", device_addr,
+                 get_pcb_name(device_addr));
   
-//     // Zero out the MAC to indicate it's invalid
-//     memset(mac_addr, 0, ESP_NOW_ETH_ALEN);
-//   }
+        // Re-authenticate the peer with the updated mapping
+        if (espnow_authenticate_peer(mac_addr)) {
+          // Log the PCB name after authentication to verify
+          const char *pcb_name = espnow_get_peer_name(mac_addr);
+          ESP_LOGI(TAG,
+                   "After re-auth: Device 0x%02X (%s) -> MAC " MACSTR
+                   " -> PCB Name: %s",
+                   device_addr, get_pcb_name(device_addr), MAC2STR(mac_addr),
+                   pcb_name ? pcb_name : "Unknown");
+        }
+        return true;
+      }
+    }
+    // Add new mapping
+    device_mappings[num_device_mappings].device_addr = device_addr;
+    memcpy(device_mappings[num_device_mappings].mac_addr, mac_addr,
+           ESP_NOW_ETH_ALEN);
+    num_device_mappings++;
+  
+    // Authenticate the peer with detailed logging
+    return true;
+  }
+
+// Function to get MAC address for a device
+void get_mac_for_device(uint8_t deviceAddress, uint8_t *mac_addr) {
+  // Search in mappings
+  for (int i = 0; i < num_device_mappings; i++) {
+    if (device_mappings[i].device_addr == deviceAddress) {
+      memcpy(mac_addr, device_mappings[i].mac_addr, ESP_NOW_ETH_ALEN);
+      return;
+    }
+  }
+
+  // If not found, log an error instead of generating a MAC
+  ESP_LOGE(TAG, "No MAC mapping found for device 0x%02X", deviceAddress);
+
+  // Zero out the MAC to indicate it's invalid
+  memset(mac_addr, 0, ESP_NOW_ETH_ALEN);
+}
+
+bool is_peer_authenticated(uint8_t device_addr) {
+  uint8_t mac_addr[ESP_NOW_ETH_ALEN];
+
+  // Get MAC address for device
+  for (int i = 0; i < num_device_mappings; i++) {
+    if (device_mappings[i].device_addr == device_addr) {
+      memcpy(mac_addr, device_mappings[i].mac_addr, ESP_NOW_ETH_ALEN);
+      return espnow_is_authenticated(mac_addr);
+    }
+  }
+
+  return false;
+}
   
   uint8_t get_device_from_mac(const uint8_t *mac_addr) 
   {
@@ -474,72 +536,69 @@ static void wifi_init_for_espnow(void) {
     // Get PCB name from the library
     const char *pcb_name = espnow_get_peer_name(mac_addr);
   
-     if (pcb_name != NULL && pcb_name[0] != '\0' &&
-         strncmp(pcb_name, "Unknown-", 8) != 0) 
-         {
-  
-    //   // Check for known PCB names
-       if (strcasecmp(pcb_name, "SENSOR") == 0) 
-       {
-       ESP_LOGD(TAG, "Identified as CONDUCTOR by PCB name");
-       return SENSOR_ADDRESS;
-       } 
-       // else if (strcasecmp(pcb_name, "SOURCE_VALVE") == 0) {
-    // //     ESP_LOGD(TAG, "Identified as SOURCE_VALVE by PCB name");
-    // //     return SOURCE_NOTE_ADDRESS;
-    // //   } else if (strcasecmp(pcb_name, "DRAIN_VALVE") == 0) {
-    // //     ESP_LOGD(TAG, "Identified as DRAIN_VALVE by PCB name");
-    // //     return DRAIN_NOTE_ADDRESS;
-    // //   } else if (strcasecmp(pcb_name, "AIR_VALVE") == 0) {
-    // //     ESP_LOGD(TAG, "Identified as AIR_VALVE by PCB name");
-    // //     return AIR_NOTE_ADDRESS;
-    // //   } else if (strcasecmp(pcb_name, "GSM") == 0) {
-    // //     ESP_LOGD(TAG, "Identified as GSM by PCB name");
-    // //     return GSM_ADDRESS;
-    // //   } else if (strcasecmp(pcb_name, "AWS") == 0) {
-    // //     ESP_LOGD(TAG, "Identified as AWS by PCB name");
-    // //     return AWS_ADDRESS;
-    // //   }
-  
-    //   // Check for partial matches in PCB name
-    // //   if (strcasestr(pcb_name, "conductor") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'conductor' in '%s' -> CONDUCTOR_ADDRESS",
-    // //              pcb_name);
-    // //     return CONDUCTOR_ADDRESS;
-    // //   } else if (strcasestr(pcb_name, "drain") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'drain' in '%s' -> DRAIN_NOTE_ADDRESS",
-    // //              pcb_name);
-    // //     return DRAIN_NOTE_ADDRESS;
-    // //   } else if (strcasestr(pcb_name, "source") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'source' in '%s' -> SOURCE_NOTE_ADDRESS",
-    // //              pcb_name);
-    // //     return SOURCE_NOTE_ADDRESS;
-    // //   } else if (strcasestr(pcb_name, "air") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'air' in '%s' -> AIR_NOTE_ADDRESS",
-    // //              pcb_name);
-    // //     return AIR_NOTE_ADDRESS;
-    // //   } else if (strcasestr(pcb_name, "gsm") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'gsm' in '%s' -> GSM_ADDRESS", pcb_name);
-    // //     return GSM_ADDRESS;
-    // //   } else if (strcasestr(pcb_name, "aws") != NULL) {
-    // //     ESP_LOGI(TAG, "Partial match 'aws' in '%s' -> AWS_ADDRESS", pcb_name);
-    // //     return AWS_ADDRESS;
-       }
-  
-    //   ESP_LOGW(TAG, "PCB name '%s' doesn't match any known device", pcb_name);
+    if (pcb_name != NULL && pcb_name[0] != '\0' &&
+      strncmp(pcb_name, "Unknown-", 8) != 0) {
+
+    // Check for known PCB names
+    if (strcasecmp(pcb_name, "CONDUCTOR") == 0) {
+      ESP_LOGD(TAG, "Identified as CONDUCTOR by PCB name");
+      return CONDUCTOR_ADDRESS;
+    } else if (strcasecmp(pcb_name, "Sector A Valve") == 0) {
+      ESP_LOGD(TAG, "Identified as A_VALVE by PCB name");
+      return A_VALVE_ADDRESS;
+    } else if (strcasecmp(pcb_name, "Sector B Valve") == 0) {
+      ESP_LOGD(TAG, "Identified as B_VALVE by PCB name");
+      return B_VALVE_ADDRESS;
+    } else if (strcasecmp(pcb_name, "Sensor A PCB") == 0) {
+      ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
+      return SOIL_PCB_A;
+    } else if (strcasecmp(pcb_name, "Sensor B PCB") == 0) {
+      ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
+      return SOIL_PCB_B;
+    } else if (strcasecmp(pcb_name, "Pump PCB") == 0) {
+      ESP_LOGD(TAG, "Identified as PUMP by PCB name");
+      return PUMP_ADDRESS;
+    }
+
+    // Check for partial matches in PCB name
+    // if (strcasestr(pcb_name, "conductor") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'conductor' in '%s' -> CONDUCTOR_ADDRESS",
+    //            pcb_name);
+    //   return CONDUCTOR_ADDRESS;
+    // } else if (strcasestr(pcb_name, "drain") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'drain' in '%s' -> DRAIN_NOTE_ADDRESS",
+    //            pcb_name);
+    //   return DRAIN_NOTE_ADDRESS;
+    // } else if (strcasestr(pcb_name, "source") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'source' in '%s' -> SOURCE_NOTE_ADDRESS",
+    //            pcb_name);
+    //   return SOURCE_NOTE_ADDRESS;
+    // } else if (strcasestr(pcb_name, "air") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'air' in '%s' -> AIR_NOTE_ADDRESS",
+    //            pcb_name);
+    //   return AIR_NOTE_ADDRESS;
+    // } else if (strcasestr(pcb_name, "gsm") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'gsm' in '%s' -> GSM_ADDRESS", pcb_name);
+    //   return GSM_ADDRESS;
+    // } else if (strcasestr(pcb_name, "aws") != NULL) {
+    //   ESP_LOGI(TAG, "Partial match 'aws' in '%s' -> AWS_ADDRESS", pcb_name);
+    //   return AWS_ADDRESS;
     // }
+
+    ESP_LOGW(TAG, "PCB name '%s' doesn't match any known device", pcb_name);
+  }
   
-    // If still not found, try pattern matching as a last resort
-    // if (mac_addr[4] == 0xAA) {
-    //   // This looks like one of our generated MACs
-    //   ESP_LOGI(TAG,
-    //            "Using deterministic mapping based on MAC pattern for " MACSTR,
-    //            MAC2STR(mac_addr));
-    //   return mac_addr[5];
-    // }
-    snprintf(pcb_name, 16, "SENSOR-%02X%02X", mac_addr[4], mac_addr[5]);
-    //ESP_LOGW(TAG, "Unknown MAC address: " MACSTR, MAC2STR(mac_addr));
-    return pcb_name; // Return invalid device address
+  // If still not found, try pattern matching as a last resort
+  if (mac_addr[4] == 0xAA) {
+    // This looks like one of our generated MACs
+    ESP_LOGI(TAG,
+             "Using deterministic mapping based on MAC pattern for " MACSTR,
+             MAC2STR(mac_addr));
+    return mac_addr[5];
+  }
+
+  ESP_LOGW(TAG, "Unknown MAC address: " MACSTR, MAC2STR(mac_addr));
+  return 0xFF; // Return invalid device address
   }
 
   void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -836,7 +895,7 @@ esp_err_t espnow_init2(void)
   //ESP_LOGI(TAG,"inside espnow_init");
     wifi_init_for_espnow();
     vTaskDelay(pdMS_TO_TICKS(500));
-    g_nodeAddress = SENSOR_ADDRESS;
+    //g_nodeAddress = SENSOR_ADDRESS;
     // uint8_t mac_addr = 0x00;
     // Create configuration for the espnow library
     espnow_config_t config = {
@@ -924,87 +983,7 @@ esp_err_t espnow_init2(void)
 
 
 void vTaskESPNOW_TX(void *pvParameters) {
-    // ESP_LOGI(TAG, "ESP-NOW TX task started");
-    
-    // // Get device MAC
-    // esp_efuse_mac_get_default(device_id);
-    // ESP_LOGI(TAG, "Device ID: %02X:%02X:%02X:%02X:%02X:%02X", 
-    //          device_id[0], device_id[1], device_id[2], 
-    //          device_id[3], device_id[4], device_id[5]);
-    
-    // TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
-    // bool at_least_one_peer_authenticated = false;
-    // espnow_message_t received_data;
-    // int message_count = 0;
-    
-    // // Peer discovery before sending
-    // ESP_LOGI(TAG, "Starting peer discovery...");
-    // espnow_start_discovery(5000);
-    // vTaskDelay(pdMS_TO_TICKS(5000));
-    
-    // while (1) {
-    //     // Check for authenticated peers
-    //     int auth_peer_count = espnow_get_peer_count();
-    //     ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
-        
-    //     if (auth_peer_count > 0) {
-    //         if (!at_least_one_peer_authenticated) {
-    //             ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second interval");
-    //             at_least_one_peer_authenticated = true;
-    //             send_interval = pdMS_TO_TICKS(1000);
-    //         }
-            
-    //         // Get the first authenticated peer
-    //         uint8_t peer_mac[ESP_NOW_ETH_ALEN];
-    //         if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
-    //             if (xQueueReceive(espnow_queue, &received_data, 0) == pdTRUE) {
-    //                 char timestamp[20];
-    //                 time_t now = time(NULL);
-    //                 struct tm *timeinfo = localtime(&now);
-    //                 strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
-                    
-    //                 // Format message
-    //                 char message[128];
-    //                 int msg_len = snprintf(message, sizeof(message),
-    //                                        "ID[%02X:%02X:%02X:%02X:%02X:%02X] S[%d] B[%d] T[%d] D[%s]",
-    //                                        device_id[0], device_id[1], device_id[2],
-    //                                        device_id[3], device_id[4], device_id[5],
-    //                                        received_data.soil_moisture,
-    //                                        received_data.battery_level,
-    //                                        received_data.temperature,
-    //                                        timestamp);
-                    
-    //                 if (msg_len >= sizeof(message)) {
-    //                     ESP_LOGE(TAG, "Message truncated!");
-    //                     msg_len = sizeof(message) - 1;
-    //                 }
-                    
-    //                 // Send message
-    //                 esp_err_t ret = esp_now_send(peer_mac, (uint8_t *)message, msg_len + 1);
-    //                 if (ret == ESP_OK) {
-    //                     ESP_LOGI(TAG, "Data sent successfully to peer");
-    //                 } else {
-    //                     ESP_LOGE(TAG, "Send failed: %s", esp_err_to_name(ret));
-    //                 }
-    //             }
-    //         } else {
-    //             ESP_LOGE(TAG, "Failed to get peer MAC address");
-    //             espnow_start_discovery(5000);
-    //         }
-    //     } else {
-    //         if (at_least_one_peer_authenticated) {
-    //             ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second interval");
-    //             at_least_one_peer_authenticated = false;
-    //             send_interval = pdMS_TO_TICKS(10000);
-    //         }
-            
-    //         ESP_LOGI(TAG, "No peers yet, sending broadcast");
-    //         espnow_broadcast_auth();
-    //     }
-        
-    //     vTaskDelay(send_interval);
-    //     message_count++;
-    // }
+
     int message_count = 0;
     TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
     bool at_least_one_peer_authenticated = false;

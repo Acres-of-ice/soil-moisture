@@ -114,65 +114,87 @@ void app_main(void)
     //wifi_init();
     //i2c_init();
     //i2c_master_init_(&i2c0bus);
-    espnow_init2();
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    stateMutex = xSemaphoreCreateMutex();
-    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-      VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-      VALVE_TASK_PRIORITY, &valveTaskHandle,
-      VALVE_TASK_CORE_ID);
-vTaskDelay(pdMS_TO_TICKS(200000));
+//     espnow_init2();
+//     vTaskDelay(pdMS_TO_TICKS(2000));
+//     stateMutex = xSemaphoreCreateMutex();
+//     xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+//       VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+//       VALVE_TASK_PRIORITY, &valveTaskHandle,
+//       VALVE_TASK_CORE_ID);
+// vTaskDelay(pdMS_TO_TICKS(200000));
 
 
 #if CONFIG_SENDER_A
     g_nodeAddress = SOIL_PCB_A;
+    ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+    espnow_init2();
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
     xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
 #if CONFIG_SENDER_B
     g_nodeAddress = SOIL_PCB_B;
+    ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+    espnow_init2();
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
     xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
 
 #if CONFIG_RECEIVER
     ESP_LOGI(TAG,"inside receive");
+    g_nodeAddress = CONDUCTOR_ADDRESS;
+    ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+    espnow_init2();
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    stateMutex = xSemaphoreCreateMutex();
     init_semaphores();
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
+
     xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
       WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
-      vTaskDelay(pdMS_TO_TICKS(10000));
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
+        LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
+        LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+          VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+          VALVE_TASK_PRIORITY, &valveTaskHandle,
+          VALVE_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(2000));
     xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
       vTaskDelay(pdMS_TO_TICKS(10000));
 #endif
 
-#if VALVE_A
+#if CONFIG_VALVE_A
+  ESP_LOGI(TAG,"inside valve a");
   g_nodeAddress = A_VALVE_ADDRESS;
   
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
 
 #endif
 
-#if VALVE_B
+#if CONFIG_VALVE_B
   g_nodeAddress = B_VALVE_ADDRESS;
   
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
 
 #endif
 
-#if PUMP
+#if CONFIG_PUMP
   g_nodeAddress = PUMP_ADDRESS;
   
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
