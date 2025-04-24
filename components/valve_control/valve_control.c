@@ -308,7 +308,7 @@ void updateValveState(void *pvParameters) {
     //   newState = STATE_A_VALVE_CLOSE;
     //   break;
     case STATE_A_VALVE_CLOSE:
-      if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
+      if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x10, nodeAddress)) 
       {
       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
       newState = STATE_IDLE;
@@ -380,7 +380,7 @@ void updateValveState(void *pvParameters) {
     //    newState = STATE_B_VALVE_CLOSE;
     //    break;
      case STATE_B_VALVE_CLOSE:
-       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
+       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x10, nodeAddress)) 
        {
        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
        newState = STATE_IDLE;
