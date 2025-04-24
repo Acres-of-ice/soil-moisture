@@ -33,6 +33,7 @@ static TickType_t errorEntryTime = 0; // Track when we entered error state
 bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
+extern espnow_recv_data_t recv_data;
 extern char last_sender_pcb_name[20];
 
 int on_off_counter = 1;
@@ -234,7 +235,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(10)); // Add small delay before retry
         continue;
       } else {
-        if ((moisture_level<20))
+        if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
         {
           newState = STATE_A_VALVE_OPEN;
         } else if ((moisture_level<20)) {

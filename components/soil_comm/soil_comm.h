@@ -21,6 +21,15 @@ typedef struct {
   // } lora_message_t;
 } comm_t;
 
+typedef struct {
+  char pcb_name[32];
+    int soil_moisture;
+    int temperature;
+    int battery_level;
+    char timestamp[20];
+    int8_t rssi;  // Add this field for RSSI
+} espnow_recv_data_t;
+
 // Initialize ESP-NOW communication
 esp_err_t espnow_init();
 

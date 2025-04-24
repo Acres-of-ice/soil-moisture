@@ -614,32 +614,7 @@ void sensor_task(void *pvParameters)
      onewire_device_t next_onewire_device;
      esp_err_t search_result = ESP_OK;
  
-     // Create 1-Wire device iterator
-    //  ESP_ERROR_CHECK(onewire_new_device_iter(bus, &iter));
-    //  ESP_LOGI(TAG, "Device iterator created, start searching...");
- 
-    //  do {
-    //      search_result = onewire_device_iter_get_next(iter, &next_onewire_device);
-    //      if (search_result == ESP_OK) {
-    //          ds18b20_config_t ds_cfg = {};
-    //          // Check if the found device is a DS18B20
-    //          if (ds18b20_new_device(&next_onewire_device, &ds_cfg, &ds18b20s[ds18b20_device_num]) == ESP_OK) {
-    //              //ESP_LOGI(TAG, "Found DS18B20[%d], Address: %016llX", ds18b20_device_num, next_onewire_device.address);
-    //              ds18b20_device_num++;
-    //          } else {
-    //              ESP_LOGW(TAG, "Unknown device found at Address: %016llX", next_onewire_device.address);
-    //          }
-    //      }
-    //  } while (search_result != ESP_ERR_NOT_FOUND);
- 
-    //  ESP_ERROR_CHECK(onewire_del_device_iter(iter));
-    //  //ESP_LOGI(TAG, "Searching done, %d DS18B20 device(s) found", ds18b20_device_num);
- 
-    //  // Check if any DS18B20 devices were found
-    //  if (ds18b20_device_num == 0) {
-    //      ESP_LOGE(TAG, "No DS18B20 devices found! Exiting task...");
-    //      vTaskDelete(NULL);
-    //  }
+
     if (espnow_queue == NULL){
      espnow_queue = xQueueCreate(20, sizeof(espnow_message_t));
      if (espnow_queue == NULL) {
@@ -661,6 +636,9 @@ void sensor_task(void *pvParameters)
         message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
         message.temperature = (uint8_t)temperature;
         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+
+        ESP_LOGI(TAG, "ADC Raw Value (Channel 1): %d", adc_raw_1[0][0]);
+        ESP_LOGI(TAG, "Soil Moisture: %d%%", message.soil_moisture);
         update_moisture_readings(message.soil_moisture);
         UBaseType_t available = uxQueueSpacesAvailable(espnow_queue);
         ESP_LOGI("SensorTask", "Queue space available: %d", available);

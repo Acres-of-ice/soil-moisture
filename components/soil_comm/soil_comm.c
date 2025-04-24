@@ -68,15 +68,9 @@ uint8_t sequence_number = 0;
 
 
 
-typedef struct {
-    uint8_t mac[6];
-    int soil_moisture;
-    int temperature;
-    int battery_level;
-    char timestamp[20];
-    int8_t rssi;  // Add this field for RSSI
-} espnow_recv_data_t;
 
+
+espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
 
 
@@ -211,8 +205,8 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
         len, MAC2STR(recv_info->src_addr), rssi);
     
    // Parse the received data
-   espnow_recv_data_t recv_data;
-   memcpy(recv_data.mac, recv_info->src_addr, 6);
+   //espnow_recv_data_t recv_data;
+   //memcpy(recv_data.mac, recv_info->src_addr, 6);
    recv_data.rssi = rssi;  // Store the RSSI value
    
    // Convert data to string for parsing
@@ -817,56 +811,109 @@ void processPumpMessage(comm_t *message, ValveState newState) {
   }
 }
 
-  void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
-    int rssi) {
-if (mac_addr == NULL || data == NULL || data_len <= 0) {
-ESP_LOGE(TAG, "Invalid ESP-NOW receive callback parameters");
-return;
+void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, int rssi) {
+  if (!data || data_len <= 0) return;
+
+  //espnow_recv_data_t recv_data;
+  char msg[data_len + 1];
+  memcpy(msg, data, data_len);
+  msg[data_len] = '\0';
+
+  ESP_LOGI(TAG, "Raw received: %s", msg);
+
+      // Extract PCB name between "PCB:" and " Count:"
+      char *pcb_start = strstr(msg, "PCB:");
+      char *count_start = strstr(msg, " Count:");
+      if (pcb_start && count_start && count_start > pcb_start) {
+          int name_len = count_start - (pcb_start + 4); // 4 = strlen("PCB:")
+          if (name_len > 0 && name_len < sizeof(recv_data.pcb_name)) {
+              strncpy(recv_data.pcb_name, pcb_start + 4, name_len);
+              recv_data.pcb_name[name_len] = '\0';
+          } else {
+              strcpy(recv_data.pcb_name, "Unknown");
+          }
+      } else {
+          strcpy(recv_data.pcb_name, "Unknown");
+      }
+
+  char *s_ptr = strstr(msg, "S[");
+  char *b_ptr = strstr(msg, "B[");
+  char *t_ptr = strstr(msg, "T[");
+  char *d_ptr = strstr(msg, "D[");
+
+  if (s_ptr && b_ptr && t_ptr && d_ptr) {
+      int moisture = atoi(s_ptr + 2);
+      int battery = atoi(b_ptr + 2);
+      int temp = atoi(t_ptr + 2);
+
+      char timestamp[20] = {0};
+      strncpy(timestamp, d_ptr + 2, 19); // D[YYYY-MM-DD HH:MM:SS]
+      timestamp[19] = '\0';
+
+      recv_data.soil_moisture = moisture;
+      recv_data.battery_level = battery;
+      recv_data.temperature = temp;
+      message_received = true;
+
+      ESP_LOGI(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
+               moisture, battery, temp, timestamp);
+  } else {
+      ESP_LOGE(TAG, "Failed to parse message using memcpy method");
+  }
 }
 
-// Get the device address of the sender
-uint8_t sender_device_addr = get_device_from_mac(mac_addr);
 
-// Get the PCB name of the sender for logging
-const char *pcb_name = espnow_get_peer_name(mac_addr);
 
-// Log message with PCB name and RSSI
-ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
-sender_device_addr, rssi);
-message_received = true;
-// Log signal quality if needed
-// if ((rssi < -75) && (!IS_SITE("Sakti"))) {
-// ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
-// update_status_message("Poor signal: RSSI: %d dBm", rssi);
-// }
-
-// // Check for command messages
-// if (data_len > 0) {
-// // Ensure we have enough data for a complete message
-// if (data_len - 1 < 50) {
-// ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+//   void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
+//     int rssi) {
+// if (mac_addr == NULL || data == NULL || data_len <= 0) {
+// ESP_LOGE(TAG, "Invalid ESP-NOW receive callback parameters");
 // return;
 // }
 
-// comm_t message = {0};
-// if (!deserialize_message(data + 1, data_len - 1, &message)) {
-// ESP_LOGE(TAG, "Failed to deserialize command message");
-// return;
+// // Get the device address of the sender
+// uint8_t sender_device_addr = get_device_from_mac(mac_addr);
+
+// // Get the PCB name of the sender for logging
+// const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+// // Log message with PCB name and RSSI
+// ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
+// sender_device_addr, rssi);
+// message_received = true;
+// // Log signal quality if needed
+// // if ((rssi < -75) && (!IS_SITE("Sakti"))) {
+// // ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+// // update_status_message("Poor signal: RSSI: %d dBm", rssi);
+// // }
+
+// // // Check for command messages
+// // if (data_len > 0) {
+// // // Ensure we have enough data for a complete message
+// // if (data_len - 1 < 50) {
+// // ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+// // return;
+// // }
+
+// // comm_t message = {0};
+// // if (!deserialize_message(data + 1, data_len - 1, &message)) {
+// // ESP_LOGE(TAG, "Failed to deserialize command message");
+// // return;
+// // }
+
+// // // Update the source with the actual sender's device address
+// // message.source = sender_device_addr;
+
+// // ESP_LOGI(TAG, "Processing command 0x%02X from 0x%02X (%s), seq %d",
+// // message.command, sender_device_addr, pcb_name, message.seq_num);
+
+// // // Process the message
+// // processReceivedMessage(&message);
+// // return;
+// // }
+
+// // ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
 // }
-
-// // Update the source with the actual sender's device address
-// message.source = sender_device_addr;
-
-// ESP_LOGI(TAG, "Processing command 0x%02X from 0x%02X (%s), seq %d",
-// message.command, sender_device_addr, pcb_name, message.seq_num);
-
-// // Process the message
-// processReceivedMessage(&message);
-// return;
-// }
-
-// ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
-}
 
 // const char *get_pcb_name(uint8_t nodeAddress) {
 //   switch (nodeAddress) {
@@ -1157,9 +1204,11 @@ void vTaskESPNOW_TX(void *pvParameters) {
             char message[128];
             int msg_len = snprintf(
                 message, sizeof(message),
-                "PCB:%s to PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
-                peer_pcb_name, message_count++, sensor_data.soil_moisture,
+                "PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+                 message_count++, sensor_data.soil_moisture,
                 sensor_data.battery_level, sensor_data.temperature, timestamp);
+            ESP_LOGI("TX", "sensor_data: Moisture=%d, Battery=%d, Temp=%d",
+                  sensor_data.soil_moisture, sensor_data.battery_level, sensor_data.temperature);
   
             if (msg_len >= sizeof(message)) {
               ESP_LOGE(TAG, "Message truncated!");
@@ -1246,34 +1295,37 @@ void vTaskESPNOW_RX(void *pvParameters)
 {
     ESP_LOGI(TAG, "ESP-NOW RX task started");
     printf("\nESP-NOW RX task started\n");
-    espnow_recv_data_t recv_data;
-    
+    //espnow_recv_data_t recv_data;
+    //espnow_message_t sensor_data;
+
     while (1) {
         if (message_received) {
             // Print received data
+            
             ESP_LOGI(TAG, "Processing message from PCB: %s", last_sender_pcb_name);
 
             ESP_LOGI(TAG, "\n=== Received Sensor Data ===");
-            ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
-            ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
+            //ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
+            ESP_LOGI(TAG, "PCB Name: %s", recv_data.pcb_name);
+            ESP_LOGI(TAG, "Soil Moisture: %d%%",recv_data.soil_moisture);
             ESP_LOGI(TAG, "Temperature: %d°C", recv_data.temperature);
             ESP_LOGI(TAG, "Battery Level: %d%%", recv_data.battery_level);
             ESP_LOGI(TAG, "Timestamp: %s", recv_data.timestamp);
             ESP_LOGI(TAG, "Signal Strength: %d dBm", recv_data.rssi);
             ESP_LOGI(TAG, "==========================\n");
 
-            const char* signal_quality;
-            if (recv_data.rssi >= -50) {
-                signal_quality = "Excellent";
-            } else if (recv_data.rssi >= -60) {
-                signal_quality = "Good";
-            } else if (recv_data.rssi >= -70) {
-                signal_quality = "Fair";
-            } else {
-                signal_quality = "Weak";
-            }
-            ESP_LOGI(TAG, "Signal Quality: %s", signal_quality);
-            ESP_LOGI(TAG, "==========================\n");
+            // const char* signal_quality;
+            // if (recv_data.rssi >= -50) {
+            //     signal_quality = "Excellent";
+            // } else if (recv_data.rssi >= -60) {
+            //     signal_quality = "Good";
+            // } else if (recv_data.rssi >= -70) {
+            //     signal_quality = "Fair";
+            // } else {
+            //     signal_quality = "Weak";
+            // }
+            // ESP_LOGI(TAG, "Signal Quality: %s", signal_quality);
+            // ESP_LOGI(TAG, "==========================\n");
             if (espnow_get_peer_count() > 0) 
             {
                 // Include our PCB name in the response
