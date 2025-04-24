@@ -229,6 +229,7 @@ void updateValveState(void *pvParameters) {
     case STATE_IDLE:
       //reset_acknowledgements();
       ESP_LOGI(TAG,"IDLE STATE");
+      vTaskDelay(1000);
       if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to get SPI mutex for LoRa config");
         //update_status_message("Wait for backup");
@@ -238,9 +239,10 @@ void updateValveState(void *pvParameters) {
         if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
         {
           newState = STATE_A_VALVE_OPEN;
-        } else if ((moisture_level<20)) {
+        } else if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor B PCB") == 0){
           newState = STATE_B_VALVE_OPEN;
         } else {
+          newState = STATE_IDLE;
           xSemaphoreGive(spi_mutex);
         }
       }
@@ -255,34 +257,34 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
        }
-       newState = STATE_A_FEEDBACK;
+       newState = STATE_IRR_START_A;
        stateEntryTime = xTaskGetTickCount();
        break;
-    case STATE_A_FEEDBACK:
-      if (DRAIN_NOTE_feedback)
-      {
-        ESP_LOGI(TAG,"Fdbck received from Valve A");
-        newState = STATE_PUMP_ON_A;
-        break;
-      }
-        ESP_LOGI(TAG,"Fdbck receive failed from Valve A");
-        newState = STATE_IDLE;
-        xSemaphoreGive(spi_mutex);
-        vTaskDelay(1000);
-        break;
-    case STATE_PUMP_ON_A:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
-      {
-       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-      newState = STATE_IDLE;
-      xSemaphoreGive(spi_mutex);
-      vTaskDelay(1000);
-      break;
-      }
-      newState = STATE_IRR_START_A;
-      break;
+    // case STATE_A_FEEDBACK:
+    //   if (DRAIN_NOTE_feedback)
+    //   {
+    //     ESP_LOGI(TAG,"Fdbck received from Valve A");
+    //     newState = STATE_PUMP_ON_A;
+    //     break;
+    //   }
+    //     ESP_LOGI(TAG,"Fdbck receive failed from Valve A");
+    //     newState = STATE_IDLE;
+    //     xSemaphoreGive(spi_mutex);
+    //     vTaskDelay(1000);
+    //     break;
+    // case STATE_PUMP_ON_A:
+    //   if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
+    //   {
+    //    ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    //   newState = STATE_IDLE;
+    //   xSemaphoreGive(spi_mutex);
+    //   vTaskDelay(1000);
+    //   break;
+    //   }
+    //   newState = STATE_IRR_START_A;
+    //   break;
     case STATE_IRR_START_A:
-      while(moisture_level<80)
+      while(recv_data.soil_moisture >= 80 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
       {
         ESP_LOGI(TAG,"Doing irrigation for sector A");
         vTaskDelay(1000);
@@ -291,20 +293,20 @@ void updateValveState(void *pvParameters) {
       break;
     case STATE_IRR_DONE_A:
       ESP_LOGI(TAG,"Irrigation for sector A done");
-      newState = STATE_PUMP_OFF_A;
-      break;
-    case STATE_PUMP_OFF_A:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
-      {
-      ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-      newState = STATE_IDLE;
-      xSemaphoreGive(spi_mutex);
-      vTaskDelay(1000);
-      break;
-      }
-      ESP_LOGI(TAG,"Closing Pump");
       newState = STATE_A_VALVE_CLOSE;
       break;
+    // case STATE_PUMP_OFF_A:
+    //   if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
+    //   {
+    //   ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    //   newState = STATE_IDLE;
+    //   xSemaphoreGive(spi_mutex);
+    //   vTaskDelay(1000);
+    //   break;
+    //   }
+    //   ESP_LOGI(TAG,"Closing Pump");
+    //   newState = STATE_A_VALVE_CLOSE;
+    //   break;
     case STATE_A_VALVE_CLOSE:
       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
       {
@@ -327,34 +329,34 @@ void updateValveState(void *pvParameters) {
        vTaskDelay(1000);
        break;
       }
-      newState = STATE_B_FEEDBACK;
+      newState = STATE_IRR_START_B;
       stateEntryTime = xTaskGetTickCount();
       break;
-   case STATE_B_FEEDBACK:
-     if (DRAIN_NOTE_feedback)
-     {
-       ESP_LOGI(TAG,"Fdbck received from Valve B");
-       newState = STATE_PUMP_ON_B;
-       break;
-     }
-       ESP_LOGI(TAG,"Fdbck receive failed from Valve B");
-       newState = STATE_IDLE;
-       xSemaphoreGive(spi_mutex);
-       vTaskDelay(1000);
-       break;
-    case STATE_PUMP_ON_B:
-       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
-       {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-       newState = STATE_IDLE;
-       xSemaphoreGive(spi_mutex);
-       vTaskDelay(1000);
-       break;
-       }
-       newState = STATE_IRR_START_B;
-       break;
+  //  case STATE_B_FEEDBACK:
+  //    if (DRAIN_NOTE_feedback)
+  //    {
+  //      ESP_LOGI(TAG,"Fdbck received from Valve B");
+  //      newState = STATE_PUMP_ON_B;
+  //      break;
+  //    }
+  //      ESP_LOGI(TAG,"Fdbck receive failed from Valve B");
+  //      newState = STATE_IDLE;
+  //      xSemaphoreGive(spi_mutex);
+  //      vTaskDelay(1000);
+  //      break;
+    // case STATE_PUMP_ON_B:
+    //    if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress))
+    //    {
+    //     ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    //    newState = STATE_IDLE;
+    //    xSemaphoreGive(spi_mutex);
+    //    vTaskDelay(1000);
+    //    break;
+    //    }
+    //    newState = STATE_IRR_START_B;
+    //    break;
      case STATE_IRR_START_B:
-       while(moisture_level<80)
+       while(recv_data.soil_moisture >= 80 && strcmp(recv_data.pcb_name, "Sensor B PCB") == 0)
        {
          ESP_LOGI(TAG,"Doing irrigation for sector B");
          vTaskDelay(1000);
@@ -363,20 +365,20 @@ void updateValveState(void *pvParameters) {
        break;
      case STATE_IRR_DONE_B:
        ESP_LOGI(TAG,"Irrigation for sector B done");
-       newState = STATE_PUMP_OFF_B;
-       break;
-     case STATE_PUMP_OFF_B:
-       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
-       {
-       ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-       newState = STATE_IDLE;
-       xSemaphoreGive(spi_mutex);
-       vTaskDelay(1000);
-       break;
-       }
-       ESP_LOGI(TAG,"Closing Pump");
        newState = STATE_B_VALVE_CLOSE;
        break;
+    //  case STATE_PUMP_OFF_B:
+    //    if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) 
+    //    {
+    //    ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    //    newState = STATE_IDLE;
+    //    xSemaphoreGive(spi_mutex);
+    //    vTaskDelay(1000);
+    //    break;
+    //    }
+    //    ESP_LOGI(TAG,"Closing Pump");
+    //    newState = STATE_B_VALVE_CLOSE;
+    //    break;
      case STATE_B_VALVE_CLOSE:
        if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) 
        {
