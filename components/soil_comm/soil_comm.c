@@ -265,11 +265,11 @@ ackSemaphore = Valve_A_AckSemaphore;
   if (!Pump_Acknowledged) {
       ackSemaphore = Pump_AckSemaphore;
     } 
-}else if (valveAddress == SOIL_PCB_A) {
+}else if (valveAddress == SOIL_A) {
   if (!Soil_pcb_Acknowledged) {
       ackSemaphore = Soil_AckSemaphore;
     } 
-}else if (valveAddress == SOIL_PCB_B) {
+}else if (valveAddress == SOIL_B) {
   if (!Soil_pcb_Acknowledged) {
       ackSemaphore = Soil_AckSemaphore;
     } 
@@ -545,10 +545,10 @@ bool is_peer_authenticated(uint8_t device_addr) {
       return B_VALVE_ADDRESS;
     } else if (strcasecmp(pcb_name, "Sensor A PCB") == 0) {
       ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
-      return SOIL_PCB_A;
+      return SOIL_A;
     } else if (strcasecmp(pcb_name, "Sensor B PCB") == 0) {
       ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
-      return SOIL_PCB_B;
+      return SOIL_B;
     } else if (strcasecmp(pcb_name, "Pump PCB") == 0) {
       ESP_LOGD(TAG, "Identified as PUMP by PCB name");
       return PUMP_ADDRESS;
@@ -643,14 +643,14 @@ bool is_peer_authenticated(uint8_t device_addr) {
                 }
                 break;
                 
-            case SOIL_PCB_A:
+            case SOIL_A:
             if (!Soil_pcb_Acknowledged) {
               Soil_pcb_Acknowledged = true;
               xSemaphoreGive(Soil_AckSemaphore);
               ESP_LOGD(TAG, "Soil PCB A semaphore");
               }
                 break;
-            case SOIL_PCB_B:
+            case SOIL_B:
                 if (!Soil_pcb_Acknowledged) {
                   Soil_pcb_Acknowledged = true;
                   xSemaphoreGive(Soil_AckSemaphore);
@@ -952,10 +952,10 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
     return B_VALVE_ADDRESS;
   } else if (strcmp(pcb_name, "Sensor A PCB") == 0) {
     ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
-    return SOIL_PCB_A;
+    return SOIL_A;
   } else if (strcmp(pcb_name, "Sensor B PCB") == 0) {
     ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
-    return SOIL_PCB_B;
+    return SOIL_B;
   } else if (strcmp(pcb_name, "Pump PCB") == 0) {
     ESP_LOGD(TAG, "Identified as PUMP by PCB name");
     return PUMP_ADDRESS;

@@ -44,8 +44,8 @@ const static char *TAG = "EXAMPLE";
 
 
 
-#define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_1
-#define EXAMPLE_ADC1_CHAN2          ADC_CHANNEL_0
+#define EXAMPLE_ADC1_CHAN1          ADC_CHANNEL_0
+#define EXAMPLE_ADC1_CHAN2          ADC_CHANNEL_1
 #define EXAMPLE_ADC1_CHAN3          ADC_CHANNEL_4
 
 
@@ -606,7 +606,7 @@ void sensor_task(void *pvParameters)
          .max_rx_bytes = 10,  
      };
      ESP_ERROR_CHECK(onewire_new_bus_rmt(&bus_config, &rmt_config, &bus));
- 
+
      // Search for DS18B20 devices
      int ds18b20_device_num = 0;
      ds18b20_device_handle_t ds18b20s[EXAMPLE_ONEWIRE_MAX_DS18B20];
@@ -633,10 +633,11 @@ void sensor_task(void *pvParameters)
 
         espnow_message_t message;
 
-        message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 4095));
         message.temperature = (uint8_t)temperature;
         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
 
+        
         ESP_LOGI(TAG, "ADC Raw Value (Channel 1): %d", adc_raw_1[0][0]);
         ESP_LOGI(TAG, "Soil Moisture: %d%%", message.soil_moisture);
         update_moisture_readings(message.soil_moisture);

@@ -125,14 +125,14 @@ void app_main(void)
 
 
 #if CONFIG_SENDER_A
-    g_nodeAddress = SOIL_PCB_A;
+    g_nodeAddress = SOIL_A;
     ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
     espnow_init2();
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024*4, NULL, 5, NULL);
 #endif
 #if CONFIG_SENDER_B
-    g_nodeAddress = SOIL_PCB_B;
+    g_nodeAddress = SOIL_B;
     ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
     espnow_init2();
     xTaskCreate(&sensor_task, "read", 1024*4, NULL, 3, NULL);
