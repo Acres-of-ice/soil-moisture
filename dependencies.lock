@@ -24,12 +24,12 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.1.0
+    version: 5.4.1
 direct_dependencies:
 - espressif/ds18b20
 - espressif/onewire_bus
 - espressif/ssd1306
 - idf
-manifest_hash: 3368d5638cc37e1d629e73fb7f274e9b73856fa7c33e3aa246ecf224ba0baac2
+manifest_hash: 9dcefe6c6658eebdbfc48a0a6414823c633feea86fbed0cc5e662df25081e31e
 target: esp32
 version: 2.0.0

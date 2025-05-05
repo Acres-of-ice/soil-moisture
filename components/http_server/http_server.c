@@ -20,6 +20,7 @@
 #include "sensor.h"
 #include "sdkconfig.h"
 #include "wifi_app.h"
+#include "lcd.h"
 
 
 // Tag used for ESP serial console messages
@@ -361,7 +362,7 @@ static esp_err_t http_server_download_handler(httpd_req_t *req)
     // Try to take mutex with timeout
     if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to acquire file mutex for download");
-       // update_status_message("Download Failed");
+        update_status_message("Download Failed");
         return ESP_FAIL;
     }
   
@@ -440,7 +441,7 @@ static esp_err_t http_server_logs_handler(httpd_req_t *req)
     // Try to take mutex with timeout
     if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to acquire file mutex for download");
-       // update_status_message("Download Failed");
+        update_status_message("Download Failed");
         return ESP_FAIL;
     }
   

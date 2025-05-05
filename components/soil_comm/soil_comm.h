@@ -52,7 +52,9 @@ bool sendCommandWithRetry(uint8_t deviceAddress, uint8_t command,
 void clearMessageQueue();
 
 // Message processing functions
-// void processReceivedMessage(comm_t *message);
+ void processReceivedMessage(comm_t *message);
+ bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message);
+ void processValveMessage(comm_t *message);
 // void processConductorMessage(comm_t *message);
 // void processDrainNoteMessage(comm_t *message, ValveState newState);
 // void processSourceNoteMessage(comm_t *message, ValveState newState);

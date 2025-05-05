@@ -13,6 +13,11 @@
 #include "sensor.h"
 #include "espnow_lib.h"
 #include "valve_control.h"
+#include "lcd.h"
+
+#define RELAY_1 GPIO_NUM_16
+#define RELAY_2 GPIO_NUM_13
+#define RELAY_3 GPIO_NUM_12
 
 // Configuration
 #define ESPNOW_QUEUE_SIZE             20
@@ -37,7 +42,7 @@ extern SemaphoreHandle_t Soil_AckSemaphore;
 #define MAX_QUEUE_SIZE 8
 #define MAX_RETRIES 10
 
-
+static time_t last_conductor_message_time = 0;
 
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
@@ -317,7 +322,7 @@ get_pcb_name(valveAddress), command, retry + 1, MAX_RETRIES);
 if (!commandAcknowledged) {
 ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
 get_pcb_name(valveAddress), MAX_RETRIES);
-//update_status_message("No ack %s", get_pcb_name(valveAddress));
+update_status_message("No ack %s", get_pcb_name(valveAddress));
 }
 
 return commandAcknowledged;
@@ -739,6 +744,44 @@ bool is_peer_authenticated(uint8_t device_addr) {
                message->source);
     }
   }
+
+  // Process messages for valve control
+void processValveMessage(comm_t *message) {
+  ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
+           message->address, message->command, message->retries);
+  if (message->source != CONDUCTOR_ADDRESS) {
+    ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X",
+             message->source);
+    return;
+  }
+
+  last_conductor_message_time = time(NULL);
+  uint8_t relay = (message->command >> 4) & 0x0F;
+  uint8_t state = message->command & 0x0F;
+
+  // if (is_first_boot) {
+  //   is_first_boot = false;
+  //   ESP_LOGI(TAG, "First message from Conductor received after boot");
+  // }
+
+  if (relay == 1 || relay == 2) {
+    gpio_set_level(relay == 1 ? RELAY_1 : RELAY_2, state == 1);
+    ESP_LOGI(TAG, "Relay %d %s", relay, state == 1 ? "on" : "off");
+
+    uint8_t command = (relay == 1) ? 0xA1 : 0xA2;
+    for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+      ESPNOW_queueMessage(CONDUCTOR_ADDRESS, command, message->address,
+                          message->retries);
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
+  } else {
+    ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X", message->command);
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(100));
+}
+
   // Process messages from VALVE A
 void processValveAMessage(comm_t *message, ValveState newState) {
   if (message->command == 0xFE) { // Feedback command
@@ -820,6 +863,10 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, 
   msg[data_len] = '\0';
 
   ESP_LOGI(TAG, "Raw received: %s", msg);
+  if ((rssi < -75)) {
+    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+    update_status_message("Poor signal: RSSI: %d dBm", rssi);
+  }
 
       // Extract PCB name between "PCB:" and " Count:"
       char *pcb_start = strstr(msg, "PCB:");
@@ -857,9 +904,74 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, 
 
       ESP_LOGI(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
                moisture, battery, temp, timestamp);
+    // Check for command messages
+  if (data_len > 0) {
+    // Ensure we have enough data for a complete message
+    if (data_len - 1 < sizeof(comm_t)) {
+      ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+      return;
+    }
+
+    comm_t message = {0};
+    if (!deserialize_message(data + 1, data_len - 1, &message)) {
+      ESP_LOGE(TAG, "Failed to deserialize command message");
+      return;
+    }
+
+
+    // Process the message
+    processReceivedMessage(&message);
   } else {
       ESP_LOGE(TAG, "Failed to parse message using memcpy method");
   }
+}
+}
+void processReceivedMessage(comm_t *message) {
+  ESP_LOGD(
+      TAG,
+      "Processing received message: Address: 0x%02X, Command: 0x%02X, "
+      "Sequence: %u, Source: %u, Retries: %u, Data: %.20s%s",
+      message->address, message->command, message->seq_num, message->source,
+      message->retries, (message->command == 0xA3) ? message->data : "N/A",
+      (message->command == 0xA3 && strlen(message->data) > 20) ? "..." : "");
+
+  switch (message->address) {
+  case CONDUCTOR_ADDRESS:
+    processConductorMessage(message);
+    break;
+
+  case A_VALVE_ADDRESS:
+  case B_VALVE_ADDRESS:
+  processValveMessage(message);
+    break;
+
+
+  default:
+    ESP_LOGW(TAG, "Received message from unknown address: 0x%02X",
+             message->address);
+    break;
+  }
+}
+
+bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
+  if (size != sizeof(comm_t)) {
+    ESP_LOGW(TAG, "Not right size %d byte packet received instead of %d byte",
+             size, sizeof(comm_t));
+  }
+
+  message->address = buffer[0];
+  message->command = buffer[1];
+  message->source = buffer[2];
+  message->retries = buffer[3];
+  message->seq_num = buffer[4];
+
+  if (message->command == 0xA3 || message->command == 0xE0) {
+    memcpy(message->data, &buffer[5], HEX_SIZE * 2);
+  } else {
+    message->data[0] = '\0'; // Empty string for non-hex data messages
+  }
+
+  return true;
 }
 
 

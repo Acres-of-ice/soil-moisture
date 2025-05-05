@@ -22,6 +22,19 @@
 #include "espnow_lib.h"
 #include "wifi_app.h"
 #include "valve_control.h"
+#include "lcd.h"
+#include "i2cdev.h"
+
+#define RELAY_1 GPIO_NUM_16
+#define RELAY_2 GPIO_NUM_13
+#define RELAY_3 GPIO_NUM_12
+
+bool lcd_device_ready = false;
+#define LCD_TASK_STACK_SIZE (1024 * 4)
+#define LCD_TASK_PRIORITY 6
+#define LCD_TASK_CORE_ID 0
+
+i2c_master_bus_handle_t i2c0bus = NULL;
 
 //i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
@@ -59,6 +72,7 @@ char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 
 SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
 SemaphoreHandle_t stateMutex = NULL;
+SemaphoreHandle_t i2c_mutex = NULL;
 
 
 espnow_config_t config = {
@@ -79,12 +93,28 @@ espnow_config_t config = {
   // .max_auth_attempts;     // Maximum authentication attempts per peer
 };
 
+void init_gpio(void) {
+  esp_rom_gpio_pad_select_gpio(RELAY_1);
+  esp_rom_gpio_pad_select_gpio(RELAY_2);
+  esp_rom_gpio_pad_select_gpio(RELAY_3);
+
+  gpio_set_direction(RELAY_1, GPIO_MODE_OUTPUT);
+  gpio_set_direction(RELAY_2, GPIO_MODE_OUTPUT);
+  gpio_set_direction(RELAY_3, GPIO_MODE_OUTPUT);
+
+  // Set initial state of relays (all off)
+  gpio_set_level(RELAY_1, 0);
+  gpio_set_level(RELAY_2, 0);
+  gpio_set_level(RELAY_3, 0);
+}
+
 void init_semaphores(void) {
 
   Valve_A_AckSemaphore = xSemaphoreCreateBinary();
   Valve_B_AckSemaphore = xSemaphoreCreateBinary();
   Pump_AckSemaphore = xSemaphoreCreateBinary();
   Soil_AckSemaphore = xSemaphoreCreateBinary();
+  i2c_mutex = xSemaphoreCreateMutex();
 }
 
 void app_main(void)
@@ -99,6 +129,7 @@ void app_main(void)
     // wait_for_sntp_sync();
     // wifi_stop();
     // Initialize NVS
+    init_gpio();
     spi_mutex = xSemaphoreCreateMutex();
     if (spi_mutex == NULL) {
       ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -141,12 +172,16 @@ void app_main(void)
 
 #if CONFIG_RECEIVER
     ESP_LOGI(TAG,"inside receive");
+    
     g_nodeAddress = CONDUCTOR_ADDRESS;
     ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
     espnow_init2();
     vTaskDelay(pdMS_TO_TICKS(2000));
     stateMutex = xSemaphoreCreateMutex();
+    i2c_master_init_(&i2c0bus);
+    vTaskDelay(100);
     init_semaphores();
+    lcd_init();
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
 
     xTaskCreatePinnedToCore(
@@ -156,6 +191,11 @@ void app_main(void)
     xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
         LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
         LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+    if (lcd_device_ready) {
+        xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW", LCD_TASK_STACK_SIZE,
+                                  NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
+          vTaskDelay(pdMS_TO_TICKS(100));
+        }
     xTaskCreatePinnedToCore(updateValveState, "updateValveState",
           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
           VALVE_TASK_PRIORITY, &valveTaskHandle,
