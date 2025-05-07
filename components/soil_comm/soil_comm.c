@@ -14,7 +14,7 @@
 #include "espnow_lib.h"
 #include "valve_control.h"
 #include "rtc_operations.h"
-//#include "lcd.h"
+#include "lcd.h"
 
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
@@ -360,7 +360,7 @@ get_pcb_name(valveAddress), command, retry + 1, MAX_RETRIES);
 if (!commandAcknowledged) {
 ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
 get_pcb_name(valveAddress), MAX_RETRIES);
-//update_status_message("No ack %s", get_pcb_name(valveAddress));
+update_status_message("No ack %s", get_pcb_name(valveAddress));
 }
 
 return commandAcknowledged;
@@ -991,6 +991,8 @@ void processSprayMessage(comm_t *message) {
 
   vTaskDelay(pdMS_TO_TICKS(100));
 }
+
+
 
 // bool isWithinDrainTimeRange(void) {
 //   #ifdef CONFIG_ENABLE_DRAIN_TIME_CONFIG

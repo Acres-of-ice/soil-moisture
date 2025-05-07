@@ -21,6 +21,7 @@
 #include "sdkconfig.h"
 #include "wifi_app.h"
 //#include "lcd.h"
+#include "data.h"
 
 
 // Tag used for ESP serial console messages
@@ -37,12 +38,12 @@ extern QueueHandle_t wifi_app_queue_handle;
 static int g_fw_update_status = OTA_UPDATE_PENDING;
  #define CONFIG_SITE_NAME "TEST"
 
- const char *DATA_FILE_HEADER =
-    "moisture, Temp, Battery, Time";
+ //const char *DATA_FILE_HEADER =
+ //   "moisture, Temp, Battery, Time";
                      
 
- size_t totalBytes = 0;
-size_t usedBytes = 0;
+ //size_t totalBytes = 0;
+//size_t usedBytes = 0;
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
 //data_statistics_t data_stats = {0};
@@ -528,71 +529,71 @@ static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req)
 }
 
 // Initialize SPIFFS
-esp_err_t init_spiffs() {
-    esp_err_t ret = ESP_OK;
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = "/spiffs",
-        .partition_label = NULL,
-        .max_files = 10,
-        .format_if_mount_failed = true
-    };
+// esp_err_t init_spiffs() {
+//     esp_err_t ret = ESP_OK;
+//     esp_vfs_spiffs_conf_t conf = {
+//         .base_path = "/spiffs",
+//         .partition_label = NULL,
+//         .max_files = 10,
+//         .format_if_mount_failed = true
+//     };
     
-     ret = esp_vfs_spiffs_register(&conf);
+//      ret = esp_vfs_spiffs_register(&conf);
 
-    // Check if the file exists and its size
-    FILE *dataFile = fopen(data_path, "r");
-    if (!dataFile) {
-      ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
+//     // Check if the file exists and its size
+//     FILE *dataFile = fopen(data_path, "r");
+//     if (!dataFile) {
+//       ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
   
-      dataFile = fopen(data_path, "w");
-      vTaskDelay(10);
-      if (dataFile) {
-        fputs(DATA_FILE_HEADER, dataFile);
-        fclose(dataFile);
-      } else {
-        ESP_LOGI("SYSTEM",
-                 "Error opening sensor_data.csv for initialization. Errno: %d",
-                 errno);
-        char err_buf[100];
-        strerror_r(errno, err_buf, sizeof(err_buf));
-        ESP_LOGE(TAG, "Error details: %s", err_buf);
-      }
-    } else {
-      ESP_LOGI("SYSTEM", "Sensor data file already exists");
-      fclose(dataFile);
-    }
+//       dataFile = fopen(data_path, "w");
+//       vTaskDelay(10);
+//       if (dataFile) {
+//         fputs(DATA_FILE_HEADER, dataFile);
+//         fclose(dataFile);
+//       } else {
+//         ESP_LOGI("SYSTEM",
+//                  "Error opening sensor_data.csv for initialization. Errno: %d",
+//                  errno);
+//         char err_buf[100];
+//         strerror_r(errno, err_buf, sizeof(err_buf));
+//         ESP_LOGE(TAG, "Error details: %s", err_buf);
+//       }
+//     } else {
+//       ESP_LOGI("SYSTEM", "Sensor data file already exists");
+//       fclose(dataFile);
+//     }
   
-    // Check if the file exists and its size
-    FILE *logFile = fopen(log_path, "r");
-    if (!logFile) {
-      ESP_LOGI("SYSTEM", "Initialising empty log file");
+//     // Check if the file exists and its size
+//     FILE *logFile = fopen(log_path, "r");
+//     if (!logFile) {
+//       ESP_LOGI("SYSTEM", "Initialising empty log file");
   
-      logFile = fopen(log_path, "w");
-      vTaskDelay(10);
-      if (logFile) {
-        const char *header = "Time,Level,Tag,Message\n";
-        fputs(header, logFile);
-        fclose(logFile);
-      } else {
-        ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
-                 errno);
-        char err_buf[100];
-        strerror_r(errno, err_buf, sizeof(err_buf));
-        ESP_LOGE(TAG, "Error details: %s", err_buf);
-      }
-    } else {
-      ESP_LOGI("SYSTEM", "Log file already exists");
-      fclose(logFile);
-    }
+//       logFile = fopen(log_path, "w");
+//       vTaskDelay(10);
+//       if (logFile) {
+//         const char *header = "Time,Level,Tag,Message\n";
+//         fputs(header, logFile);
+//         fclose(logFile);
+//       } else {
+//         ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
+//                  errno);
+//         char err_buf[100];
+//         strerror_r(errno, err_buf, sizeof(err_buf));
+//         ESP_LOGE(TAG, "Error details: %s", err_buf);
+//       }
+//     } else {
+//       ESP_LOGI("SYSTEM", "Log file already exists");
+//       fclose(logFile);
+//     }
   
-    ESP_LOGW("SPIFFS", "Spiffs Partition size: total: %d, used: %d", totalBytes,
-             usedBytes);
-    return ESP_OK;
-  }
+//     ESP_LOGW("SPIFFS", "Spiffs Partition size: total: %d, used: %d", totalBytes,
+//              usedBytes);
+//     return ESP_OK;
+//   }
 static esp_err_t http_server_generic_handler(httpd_req_t *req)
 {   
 
-    esp_err_t ret = init_spiffs();
+    //esp_err_t ret = init_spiffs();
  
     // First check if server is s till active
     if (!http_server_handle || !http_server_active) {
@@ -689,6 +690,7 @@ static esp_err_t http_server_generic_handler(httpd_req_t *req)
 
     size_t chunksize;
     size_t bytes_sent = 0;
+    esp_err_t ret = ESP_OK;
     
     
     do {
