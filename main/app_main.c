@@ -24,6 +24,7 @@
 #include "valve_control.h"
 //#include "lcd.h"
 //#include "i2cdev.h"
+#include "rtc_operations.h"
 
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
@@ -185,6 +186,32 @@ void init_semaphores(void) {
   i2c_mutex = xSemaphoreCreateMutex();
 }
 
+void button_task(void *arg) {
+  while (1) {
+      if (gpio_get_level(START_btn) == 0) { 
+          button_state = BUTTON_START_PRESSED;
+          ESP_LOGI(TAG, "START button pressed. Turning ON OUT_START for 1 second.");
+          gpio_set_level(OUT_START, 1);
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          gpio_set_level(OUT_START, 0);
+          ESP_LOGI(TAG, "OUT_START turned OFF.");
+      } else if (gpio_get_level(STOP_btn) == 0) { 
+          button_state = BUTTON_STOP_PRESSED;
+          ESP_LOGI(TAG, "STOP button pressed. Turning ON OUT_STOP for 1 second.");
+          gpio_set_level(OUT_STOP, 1);
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          gpio_set_level(OUT_STOP, 0);
+          ESP_LOGI(TAG, "OUT_STOP turned OFF.");
+      } else {
+          if (button_state != BUTTON_IDLE) {
+              ESP_LOGI(TAG, "No button pressed. Returning to IDLE state.");
+          }
+          button_state = BUTTON_IDLE;
+      }
+      vTaskDelay(pdMS_TO_TICKS(100)); 
+  }
+}
+
 void app_main(void)
 {
     printf("\ninside main\n");
@@ -232,9 +259,12 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     stateMutex = xSemaphoreCreateMutex();
     message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
-   // i2c_master_init_(&i2c0bus);
+    //i2c_master_init_(&i2c0bus);
     vTaskDelay(100);
     init_semaphores();
+    #ifdef CONFIG_ENABLE_RTC
+    ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
+     #endif
     //lcd_init();
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
 
@@ -294,6 +324,7 @@ init_gpio_pump();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+  xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif
 

@@ -13,6 +13,7 @@
 #include "sensor.h"
 #include "espnow_lib.h"
 #include "valve_control.h"
+#include "rtc_operations.h"
 //#include "lcd.h"
 
 #define RELAY_1 GPIO_NUM_16
@@ -990,6 +991,21 @@ void processSprayMessage(comm_t *message) {
 
   vTaskDelay(pdMS_TO_TICKS(100));
 }
+
+// bool isWithinDrainTimeRange(void) {
+//   #ifdef CONFIG_ENABLE_DRAIN_TIME_CONFIG
+//   char *timeStr = fetchTime();
+//   int year, month, day, hour, minute;
+//   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
+//   return ((hour > CONFIG_DRAIN_START_HOUR ||
+//            (hour == CONFIG_DRAIN_START_HOUR &&
+//             minute >= CONFIG_DRAIN_START_MINUTE)) &&
+//           (hour < CONFIG_DRAIN_END_HOUR || (hour == CONFIG_DRAIN_END_HOUR &&
+//                                             minute < CONFIG_DRAIN_END_MINUTE)));
+// #else
+//   return false; // If drain time config is not enabled, always return false
+// #endif
+//   }
 
   
   // Process messages from VALVE A
