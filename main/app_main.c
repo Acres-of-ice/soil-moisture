@@ -22,19 +22,30 @@
 #include "espnow_lib.h"
 #include "wifi_app.h"
 #include "valve_control.h"
-#include "lcd.h"
-#include "i2cdev.h"
+//#include "lcd.h"
+//#include "i2cdev.h"
 
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
 #define RELAY_3 GPIO_NUM_12
+
+#define RELAY_POSITIVE 26
+#define RELAY_NEGATIVE 27
+#define OE_PIN 12
+
+#define PULSE_DURATION_MS 50
+
+#define START_btn 4
+#define STOP_btn 5
+#define OUT_START 2
+#define OUT_STOP 3
 
 bool lcd_device_ready = false;
 #define LCD_TASK_STACK_SIZE (1024 * 4)
 #define LCD_TASK_PRIORITY 6
 #define LCD_TASK_CORE_ID 0
 
-i2c_master_bus_handle_t i2c0bus = NULL;
+//i2c_master_bus_handle_t i2c0bus = NULL;
 
 //i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
@@ -74,6 +85,9 @@ SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
 SemaphoreHandle_t stateMutex = NULL;
 SemaphoreHandle_t i2c_mutex = NULL;
 
+QueueHandle_t message_queue = NULL;
+#define MAX_QUEUE_SIZE 8
+
 
 espnow_config_t config = {
   .pcb_name = pcb_name,        // Set the PCB name
@@ -92,6 +106,33 @@ espnow_config_t config = {
   // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
   // .max_auth_attempts;     // Maximum authentication attempts per peer
 };
+typedef enum {
+  BUTTON_IDLE,
+  BUTTON_START_PRESSED,
+  BUTTON_STOP_PRESSED
+} button_state_t;
+
+button_state_t button_state = BUTTON_IDLE;
+
+void init_gpio_pump(void) {
+  gpio_set_direction(START_btn, GPIO_MODE_INPUT);
+  gpio_set_pull_mode(START_btn, GPIO_PULLUP_ONLY);
+  gpio_set_direction(STOP_btn, GPIO_MODE_INPUT);
+  gpio_set_pull_mode(STOP_btn, GPIO_PULLUP_ONLY);
+  gpio_config_t io_conf = {
+    .pin_bit_mask = (1ULL << OUT_START) | (1ULL << OUT_STOP),
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_down_en = 0,
+    .pull_up_en = 0,
+    .intr_type = GPIO_INTR_DISABLE
+};
+gpio_config(&io_conf);
+
+gpio_set_level(OUT_START, 0);
+gpio_set_level(OUT_STOP, 0);
+
+  ESP_LOGI(TAG, "GPIOs initialized");
+}
 
 void init_gpio(void) {
   esp_rom_gpio_pad_select_gpio(RELAY_1);
@@ -102,10 +143,37 @@ void init_gpio(void) {
   gpio_set_direction(RELAY_2, GPIO_MODE_OUTPUT);
   gpio_set_direction(RELAY_3, GPIO_MODE_OUTPUT);
 
-  // Set initial state of relays (all off)
-  gpio_set_level(RELAY_1, 0);
-  gpio_set_level(RELAY_2, 0);
-  gpio_set_level(RELAY_3, 0);
+  // // Set initial state of relays (all off)
+  // gpio_set_level(PUMP_1, 0);
+  // gpio_set_level(PUMP_2, 0);
+
+
+  // esp_rom_gpio_pad_select_gpio(PUMP_1);
+  // esp_rom_gpio_pad_select_gpio(PUMP_2);
+
+
+  // gpio_set_direction(PUMP_1, GPIO_MODE_OUTPUT);
+  // gpio_set_direction(PUMP_2, GPIO_MODE_OUTPUT);
+
+
+  // // Set initial state of relays (all off)
+  // gpio_set_level(PUMP_1, 0);
+  // gpio_set_level(PUMP_2, 0);
+
+
+  gpio_config_t io_conf = {
+    .pin_bit_mask = (1ULL << RELAY_POSITIVE) | (1ULL << RELAY_NEGATIVE) | (1ULL << OE_PIN),
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE
+};
+gpio_config(&io_conf);
+
+// Set all LOW initially
+gpio_set_level(RELAY_POSITIVE, 0);
+gpio_set_level(RELAY_NEGATIVE, 0);
+gpio_set_level(OE_PIN, 0);
 }
 
 void init_semaphores(void) {
@@ -120,16 +188,9 @@ void init_semaphores(void) {
 void app_main(void)
 {
     printf("\ninside main\n");
-    //vext_on(); // ✅ Turn on OLED power
-    //vTaskDelay(pdMS_TO_TICKS(100));  // Short delay
-    /*lora initialisation*/
-    // wifi_init_sta();
-    // vTaskDelay(5); 
-    // initialize_sntp(); 
-    // wait_for_sntp_sync();
-    // wifi_stop();
-    // Initialize NVS
-    init_gpio();
+
+    //init_gpio_pump();
+
     spi_mutex = xSemaphoreCreateMutex();
     if (spi_mutex == NULL) {
       ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -141,19 +202,11 @@ void app_main(void)
     ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    //wifi_app_ap_config();
-    //wifi_init();
-    //i2c_init();
-    //i2c_master_init_(&i2c0bus);
-//     espnow_init2();
-//     vTaskDelay(pdMS_TO_TICKS(2000));
-//     stateMutex = xSemaphoreCreateMutex();
-//     xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-//       VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-//       VALVE_TASK_PRIORITY, &valveTaskHandle,
-//       VALVE_TASK_CORE_ID);
-// vTaskDelay(pdMS_TO_TICKS(200000));
 
+    if (init_hex_buffer() != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to initialize hex buffer");
+      vTaskDelete(NULL);
+    }
 
 #if CONFIG_SENDER_A
     g_nodeAddress = SOIL_A;
@@ -178,10 +231,11 @@ void app_main(void)
     espnow_init2();
     vTaskDelay(pdMS_TO_TICKS(2000));
     stateMutex = xSemaphoreCreateMutex();
-    i2c_master_init_(&i2c0bus);
+    message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
+   // i2c_master_init_(&i2c0bus);
     vTaskDelay(100);
     init_semaphores();
-    lcd_init();
+    //lcd_init();
     xTaskCreate(vTaskESPNOW_RX, "receive", 1024*4, NULL, 3, NULL);
 
     xTaskCreatePinnedToCore(
@@ -191,11 +245,11 @@ void app_main(void)
     xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
         LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
         LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
-    if (lcd_device_ready) {
-        xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW", LCD_TASK_STACK_SIZE,
-                                  NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
-          vTaskDelay(pdMS_TO_TICKS(100));
-        }
+    // if (lcd_device_ready) {
+    //     xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW", LCD_TASK_STACK_SIZE,
+    //                               NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
+    //       vTaskDelay(pdMS_TO_TICKS(100));
+    //     }
     xTaskCreatePinnedToCore(updateValveState, "updateValveState",
           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
           VALVE_TASK_PRIORITY, &valveTaskHandle,
@@ -210,7 +264,7 @@ void app_main(void)
 #if CONFIG_VALVE_A
   ESP_LOGI(TAG,"inside valve a");
   g_nodeAddress = A_VALVE_ADDRESS;
-  
+  init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
@@ -221,7 +275,7 @@ void app_main(void)
 
 #if CONFIG_VALVE_B
   g_nodeAddress = B_VALVE_ADDRESS;
-  
+  init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
@@ -231,10 +285,12 @@ void app_main(void)
 #endif
 
 #if CONFIG_PUMP
+printf("\ninside pump\n");
+init_gpio_pump();
   g_nodeAddress = PUMP_ADDRESS;
   
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-  espnow_init2();
+   espnow_init2();
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);

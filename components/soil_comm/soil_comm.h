@@ -53,13 +53,17 @@ void clearMessageQueue();
 
 // Message processing functions
  void processReceivedMessage(comm_t *message);
+ void serialize_message(const comm_t *message, uint8_t *buffer);
  bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message);
  void processValveMessage(comm_t *message);
+ void processSprayMessage(comm_t *message);
+ void processPumpMessage(comm_t *message);
 // void processConductorMessage(comm_t *message);
 // void processDrainNoteMessage(comm_t *message, ValveState newState);
 // void processSourceNoteMessage(comm_t *message, ValveState newState);
 // void processValveMessage(comm_t *message);
 // void processGSMMessage(comm_t *message);
+esp_err_t init_hex_buffer(void);
 
 // Task and queue functions
 void vTaskESPNOW_TX(void *pvParameters);
@@ -90,7 +94,8 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
   void processConductorMessage(comm_t *message);
   void processValveAMessage(comm_t *message, ValveState newState);
   void processValveBMessage(comm_t *message, ValveState newState);
-  void processPumpMessage(comm_t *message, ValveState newState);
+  void processPumpAMessage(comm_t *message, ValveState newState);
+  void clearMessageQueue();
 static void wifi_init_for_espnow(void);
 const char *get_pcb_name(uint8_t nodeAddress);
 uint8_t get_device_from_pcb_name(const char *pcb_name);

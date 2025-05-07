@@ -13,11 +13,24 @@
 #include "sensor.h"
 #include "espnow_lib.h"
 #include "valve_control.h"
-#include "lcd.h"
+//#include "lcd.h"
 
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
 #define RELAY_3 GPIO_NUM_12
+
+#define RELAY_POSITIVE 26
+#define RELAY_NEGATIVE 27
+#define OE_PIN 12
+#define PULSE_DURATION_MS 50
+
+#define PUMP_1 2
+#define PUMP_2 3
+
+#define OUT_START 2
+#define OUT_STOP 3
+
+
 
 // Configuration
 #define ESPNOW_QUEUE_SIZE             20
@@ -67,7 +80,7 @@ extern int last_rssi;
 uint8_t device_id[6];
 uint8_t tx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
-QueueHandle_t message_queue = NULL;
+extern QueueHandle_t message_queue;
 uint8_t sequence_number = 0;
 
 
@@ -119,10 +132,23 @@ typedef struct {
 
 HexCircularBuffer hex_buffer = {0};
 
+esp_err_t init_hex_buffer(void) {
+  hex_buffer.head = 0;
+  hex_buffer.tail = 0;
+  hex_buffer.count = 0;
+  hex_buffer.mutex = xSemaphoreCreateMutex();
+  if (hex_buffer.mutex == NULL) {
+    ESP_LOGE(TAG, "Failed to create mutex for hex circular buffer");
+    return ESP_FAIL;
+  }
+  return ESP_OK;
+}
+
 char *get_hex_from_buffer(void) {
   char *hex = NULL;
-
+  ESP_LOGI(TAG,"inside get hex from buffer");
   if (xSemaphoreTake(hex_buffer.mutex, portMAX_DELAY) == pdTRUE) {
+    ESP_LOGI(TAG,"inside get hex semaphore take");
     if (hex_buffer.count > 0) {
       hex = malloc(MAX_HEX_SIZE);
       if (hex != NULL) {
@@ -144,6 +170,7 @@ bool ESPNOW_isQueueEmpty() {
 
 void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
   uint8_t retries) {
+    ESP_LOGI(TAG,"iniside queuemessage");
 comm_t message = {
 .address = address,
 .command = command,
@@ -153,46 +180,53 @@ comm_t message = {
 .data = {0} // Initialize data to empty string
 };
 
+#if CONFIG_RECEIVER
 // Special handling for hex data commands
-if (command == 0xA3) {
-char *hex_data = get_hex_from_buffer();
-if (hex_data != NULL) {
-strncpy(message.data, hex_data, sizeof(message.data) - 1);
-message.data[sizeof(message.data) - 1] = '\0';
-free(hex_data);
+//if (command == 0xA3) {
+  ESP_LOGI(TAG,"iniside receiver send");
+// char *hex_data = get_hex_from_buffer();
+// if (hex_data != NULL) {
+// strncpy(message.data, hex_data, sizeof(message.data) - 1);
+// message.data[sizeof(message.data) - 1] = '\0';
+// free(hex_data);
 
 // Queue the message 5 times for command 0xA3, incrementing retries each
 // time
-for (int i = 0; i < 5; i++) {
+//for (int i = 0; i < 5; i++) {
 // Update retries for each queued message
-message.retries = retries + i;
+message.retries = retries;
+ESP_LOGI(TAG, "Message initialized -> address: 0x%02X, command: 0x%02X, source: 0x%02X, retries: %d, seq_num: %d, data: \"%s\"",
+  message.address, message.command, message.source, message.retries, message.seq_num, message.data);
+
 
 if (xQueueSend(message_queue, &message, 0) != pdPASS) {
-ESP_LOGE(TAG, "Failed to queue message (attempt %d, retries %d)",
-i + 1, message.retries);
-} else {
-ESP_LOGV(TAG,
+ESP_LOGE(TAG, "Failed to queue message ( retries %d)",
+ message.retries);
+} 
+//ESP_LOGI(TAG,"iniside receiver send3");
+else {
+  ESP_LOGI(TAG, "Message queued: data = %s", message.data);
+ESP_LOGI(TAG,
 "Queued command 0x%02X to address 0x%02X (attempt %d, "
 "retries %d)",
-command, address, i + 1, message.retries);
+command, address,  1, message.retries);
 }
-}
+//}
 return; // Exit the function after queuing 5 times
-} else {
-ESP_LOGE(TAG, "Failed to get hex data from buffer");
-return;
-}
-}
-
+// } else {
+// ESP_LOGE(TAG, "Failed to get hex data from buffer");
+// return;
+// }
+//}
+#endif
 
 // For all other commands, queue once
 if (xQueueSend(message_queue, &message, 0) != pdPASS) {
 ESP_LOGE(TAG, "Failed to queue message");
 } else {
-ESP_LOGV(TAG, "Queued command 0x%02X to address 0x%02X", command, address);
+ESP_LOGI(TAG, "Queued command 0x%02X to address 0x%02X", command, address);
 }
 }
-
 // ESP-NOW receive callback
 static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
     if (recv_info == NULL || data == NULL || len <= 0) {
@@ -254,7 +288,7 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 
 bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   uint8_t source) {
-  //clearMessageQueue();
+  clearMessageQueue();
 
 // Determine which semaphore we're waiting on (keep your existing logic)
 SemaphoreHandle_t ackSemaphore = NULL;
@@ -292,6 +326,9 @@ for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
 //track_packet(valveAddress, command, sequence_number);
 
 // Send the message
+ESP_LOGI(TAG, "Queueing message: valveAddress=0x%02X, command=0x%02X, source=0x%02X, retry=%d",
+  valveAddress, command, source, retry);
+
 ESPNOW_queueMessage(valveAddress, command, source, retry);
 
 // Wait for the message to be sent from queue
@@ -322,10 +359,36 @@ get_pcb_name(valveAddress), command, retry + 1, MAX_RETRIES);
 if (!commandAcknowledged) {
 ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
 get_pcb_name(valveAddress), MAX_RETRIES);
-update_status_message("No ack %s", get_pcb_name(valveAddress));
+//update_status_message("No ack %s", get_pcb_name(valveAddress));
 }
 
 return commandAcknowledged;
+}
+
+// Function to clear message queue
+void clearMessageQueue() {
+  comm_t dummy;
+  int count = 0;
+  const int MAX_ITERATIONS = 50; // Adjust based on your queue size
+
+  while (xQueueReceive(message_queue, &dummy, 0) == pdTRUE &&
+         count < MAX_ITERATIONS) {
+    if (dummy.address == GSM_ADDRESS) {
+      xQueueSendToFront(message_queue, &dummy, 0);
+    }
+    count++;
+
+    // Add occasional yield to prevent watchdog trigger
+    if (count % 10 == 0) { // Yield every 10 iterations
+      vTaskDelay(pdMS_TO_TICKS(5));
+    }
+  }
+
+  if (count >= MAX_ITERATIONS) {
+    ESP_LOGW(TAG, "Message queue clear reached maximum iterations");
+  } else {
+    ESP_LOGD(TAG, "Message queue cleared, processed %d messages", count);
+  }
 }
 
 // void wifi_init(void) 
@@ -738,7 +801,7 @@ bool is_peer_authenticated(uint8_t device_addr) {
     }  else if (message->source == B_VALVE_ADDRESS) {
       processValveBMessage(message, newState);
     }  else if (message->source == PUMP_ADDRESS) {
-      processPumpMessage(message, newState);
+      processPumpAMessage(message, newState);
     }  else {
       ESP_LOGW(TAG, "Unexpected source for Conductor message: 0x%02X",
                message->source);
@@ -746,7 +809,157 @@ bool is_peer_authenticated(uint8_t device_addr) {
   }
 
   // Process messages for valve control
+//   void processValveMessage(comm_t *message) {
+//     ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
+//              message->address, message->command, message->retries);
+  
+//     if (message->source != CONDUCTOR_ADDRESS) {
+//       ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X", message->source);
+//       return;
+//     }
+  
+//     last_conductor_message_time = time(NULL);
+//     uint8_t relay = (message->command >> 4) & 0x0F;
+//     uint8_t state = message->command & 0x0F;
+  
+//     if (relay == 1 || relay == 2) {
+//       // Set polarity
+//       gpio_set_level(RELAY_POSITIVE, relay == 1 ? 1 : 0);
+//       gpio_set_level(RELAY_NEGATIVE, relay == 2 ? 1 : 0);
+//       ESP_LOGI(TAG, "Relay %d activated (%s)", relay, relay == 1 ? "POSITIVE" : "NEGATIVE");
+  
+//       // Trigger OE pulse
+//       gpio_set_level(OE_PIN, 1);
+//       vTaskDelay(pdMS_TO_TICKS(PULSE_DURATION_MS));
+//       gpio_set_level(OE_PIN, 0);
+//       ESP_LOGI(TAG, "OE pin pulsed for %d ms", PULSE_DURATION_MS);
+  
+//       // Acknowledge back
+//       uint8_t command = (relay == 1) ? 0xA1 : 0xA2;
+//       for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+//         ESPNOW_queueMessage(CONDUCTOR_ADDRESS, command, message->address, message->retries);
+//         vTaskDelay(pdMS_TO_TICKS(20));
+//       }
+  
+//       ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
+//     } else {
+//       ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X", message->command);
+//     }
+  
+//     vTaskDelay(pdMS_TO_TICKS(100));
+//   }
+
+void processPumpMessage(comm_t *message) {
+  ESP_LOGD(TAG, "Pump received command: 0x%02X from 0x%02X after %d retries",
+           message->command, message->source, message->retries);
+
+  if (message->source != CONDUCTOR_ADDRESS) {
+      ESP_LOGW(TAG, "Unexpected source for Pump message: 0x%02X", message->source);
+      return;
+  }
+
+  uint8_t relay = (message->command >> 4) & 0x0F;
+  uint8_t state = message->command & 0x0F;
+
+  if (relay != 1) {
+      ESP_LOGE(TAG, "Invalid relay for pump: %d", relay);
+      return;
+  }
+
+  if (state == 1) {
+    ESP_LOGI(TAG, "Turning ON pump (OUT_START ON)");
+    gpio_set_level(OUT_STOP, 0);   // Ensure STOP is off
+    gpio_set_level(OUT_START, 1);  // Turn ON
+} else if (state == 0) {
+    ESP_LOGI(TAG, "Turning OFF pump (OUT_START OFF, pulse OUT_STOP)");
+    gpio_set_level(OUT_START, 0);  // Turn OFF
+    gpio_set_level(OUT_STOP, 1);   // Optional: brief STOP signal
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level(OUT_STOP, 0);
+} else {
+    ESP_LOGE(TAG, "Unknown state for pump: %d", state);
+    return;
+}
+
+  // Send ACK back
+  uint8_t ack_cmd = 0xB1; // You can change this if needed
+  for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+      ESPNOW_queueMessage(CONDUCTOR_ADDRESS, ack_cmd, message->address, message->retries);
+      vTaskDelay(pdMS_TO_TICKS(20));
+  }
+
+  ESP_LOGI(TAG, "Pump ACK sent for seq %d", message->seq_num);
+  vTaskDelay(pdMS_TO_TICKS(100));
+}
+
 void processValveMessage(comm_t *message) {
+  ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
+           message->address, message->command, message->retries);
+
+  if (message->source != CONDUCTOR_ADDRESS) {
+      ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X", message->source);
+      return;
+  }
+
+  last_conductor_message_time = time(NULL);
+
+  // Interpret relay and state from the command
+  uint8_t relay = (message->command >> 4) & 0x0F;
+  uint8_t state = message->command & 0x0F;
+
+  // Only relay 1 and 2 supported
+  if (relay == 1) {  // Only supporting POSITIVE (1)
+    if (state == 1) {
+        // VALVE ON: POSITIVE polarity + OE pulse (long)
+        ESP_LOGI(TAG, "Turning ON valve");
+
+        gpio_set_level(RELAY_POSITIVE, 1);
+        gpio_set_level(RELAY_NEGATIVE, 0);
+
+        gpio_set_level(OE_PIN, 1);
+        vTaskDelay(pdMS_TO_TICKS(100));  // ON pulse duration
+        gpio_set_level(OE_PIN, 0);
+
+        ESP_LOGI(TAG, "Valve ON complete");
+    } else if (state == 0) {
+        // VALVE OFF: NEGATIVE polarity + OE pulse (short)
+        ESP_LOGI(TAG, "Turning OFF valve");
+
+        gpio_set_level(RELAY_POSITIVE, 0);
+        gpio_set_level(RELAY_NEGATIVE, 1);
+
+        gpio_set_level(OE_PIN, 1);
+        vTaskDelay(pdMS_TO_TICKS(15));  // OFF pulse duration
+        gpio_set_level(OE_PIN, 0);
+
+        ESP_LOGI(TAG, "Valve OFF complete");
+    } else {
+        ESP_LOGE(TAG, "Unknown state: %d", state);
+    }
+
+    // Cleanup: turn off both relays after pulse
+    vTaskDelay(pdMS_TO_TICKS(20));  // small delay before reset
+    gpio_set_level(RELAY_POSITIVE, 0);
+    gpio_set_level(RELAY_NEGATIVE, 0);
+    gpio_set_level(OE_PIN, 0);
+      // Acknowledge back to conductor
+      uint8_t ack_cmd = (relay == 1) ? 0xA1 : 0xA2;
+      for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+          ESPNOW_queueMessage(CONDUCTOR_ADDRESS, ack_cmd, message->address, message->retries);
+          vTaskDelay(pdMS_TO_TICKS(20));
+      }
+
+      ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
+  } else {
+      ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X", message->command);
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+
+// Process messages for valve control
+void processSprayMessage(comm_t *message) {
   ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
            message->address, message->command, message->retries);
   if (message->source != CONDUCTOR_ADDRESS) {
@@ -759,10 +972,6 @@ void processValveMessage(comm_t *message) {
   uint8_t relay = (message->command >> 4) & 0x0F;
   uint8_t state = message->command & 0x0F;
 
-  // if (is_first_boot) {
-  //   is_first_boot = false;
-  //   ESP_LOGI(TAG, "First message from Conductor received after boot");
-  // }
 
   if (relay == 1 || relay == 2) {
     gpio_set_level(relay == 1 ? RELAY_1 : RELAY_2, state == 1);
@@ -782,24 +991,25 @@ void processValveMessage(comm_t *message) {
   vTaskDelay(pdMS_TO_TICKS(100));
 }
 
+  
   // Process messages from VALVE A
 void processValveAMessage(comm_t *message, ValveState newState) {
   if (message->command == 0xFE) { // Feedback command
     if (!DRAIN_NOTE_feedback &&
         ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
           DRAIN_NOTE_feedback = true;
-      //update_status_message("Valve A Fdbk ack");
+      ////update_status_message("Valve A Fdbk ack");
     }
   } 
   else if (message->command == 0xA1) { // Valve A ON acknowledgment
     Valve_A_Acknowledged = true;
     xSemaphoreGive(Valve_A_AckSemaphore);
-    //update_status_message("Valve A ON");
+    ////update_status_message("Valve A ON");
   } 
   else if (message->command == 0xA2) { // Valve A OFF acknowledgment
     Valve_A_Acknowledged = false;
     xSemaphoreGive(Valve_A_AckSemaphore);
-    //update_status_message("Valve A OFF");
+    ////update_status_message("Valve A OFF");
   } 
   else {
     ESP_LOGD(TAG, "Ignored command from VALVE A: 0x%02X", message->command);
@@ -812,18 +1022,18 @@ void processValveBMessage(comm_t *message, ValveState newState) {
     if (!DRAIN_NOTE_feedback &&
         ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
           DRAIN_NOTE_feedback = true;
-      //update_status_message("Valve B Fdbk ack");
+      ////update_status_message("Valve B Fdbk ack");
     }
   } 
   else if (message->command == 0xB1) { // Valve B ON acknowledgment
     Valve_B_Acknowledged = true;
     xSemaphoreGive(Valve_B_AckSemaphore);
-    //update_status_message("Valve B ON");
+    ////update_status_message("Valve B ON");
   } 
   else if (message->command == 0xB2) { // Valve B OFF acknowledgment
     Valve_B_Acknowledged = false;
     xSemaphoreGive(Valve_B_AckSemaphore);
-    //update_status_message("Valve B OFF");
+    ////update_status_message("Valve B OFF");
   } 
   else {
     ESP_LOGD(TAG, "Ignored command from VALVE B: 0x%02X", message->command);
@@ -831,44 +1041,56 @@ void processValveBMessage(comm_t *message, ValveState newState) {
 }
 
 // Process messages from PUMP
-void processPumpMessage(comm_t *message, ValveState newState) {
+void processPumpAMessage(comm_t *message, ValveState newState) {
   if (message->command == 0xFE) { // Feedback command
     if (!DRAIN_NOTE_feedback &&
         ((strstr(valveStateToString(newState), "Fdbk") != NULL))){
           DRAIN_NOTE_feedback = true;
-      //update_status_message("Pump Fdbk ack");
+      ////update_status_message("Pump Fdbk ack");
     }
   } 
   else if (message->command == 0xC1) { // Pump ON acknowledgment
     Pump_Acknowledged = true;
     xSemaphoreGive(Pump_AckSemaphore);
-    //update_status_message("Pump ON");
+    ////update_status_message("Pump ON");
   } 
   else if (message->command == 0xC2) { // Pump OFF acknowledgment
     Pump_Acknowledged = false;
     xSemaphoreGive(Pump_AckSemaphore);
-    //update_status_message("Pump OFF");
+    ////update_status_message("Pump OFF");
   } 
   else {
     ESP_LOGD(TAG, "Ignored command from PUMP: 0x%02X", message->command);
   }
 }
 
-void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, int rssi) {
-  if (!data || data_len <= 0) return;
+void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
+  int rssi) {
+if (mac_addr == NULL || data == NULL || data_len <= 0) {
+ESP_LOGE(TAG, "Invalid ESP-NOW receive callback parameters");
+return;
+}
 
-  //espnow_recv_data_t recv_data;
+// Get the device address of the sender
+uint8_t sender_device_addr = get_device_from_mac(mac_addr);
+
+// Get the PCB name of the sender for logging
+const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+// Log message with PCB name and RSSI
+ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
+sender_device_addr, rssi);
+
+// Log signal quality if needed
+// if ((rssi < -75) && (!IS_SITE("Sakti"))) {
+// ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+// update_status_message("Poor signal: RSSI: %d dBm", rssi);
+// }
+//       // Extract PCB name between "PCB:" and " Count:"
+#if CONFIG_RECEIVER
   char msg[data_len + 1];
   memcpy(msg, data, data_len);
   msg[data_len] = '\0';
-
-  ESP_LOGI(TAG, "Raw received: %s", msg);
-  if ((rssi < -75)) {
-    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
-    update_status_message("Poor signal: RSSI: %d dBm", rssi);
-  }
-
-      // Extract PCB name between "PCB:" and " Count:"
       char *pcb_start = strstr(msg, "PCB:");
       char *count_start = strstr(msg, " Count:");
       if (pcb_start && count_start && count_start > pcb_start) {
@@ -904,30 +1126,131 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, 
 
       ESP_LOGI(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
                moisture, battery, temp, timestamp);
-    // Check for command messages
-  if (data_len > 0) {
-    // Ensure we have enough data for a complete message
-    if (data_len - 1 < sizeof(comm_t)) {
-      ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
       return;
-    }
+      }          
+#endif
+// Check for command messages
+if(sender_device_addr == CONDUCTOR_ADDRESS)
+{
+if (data_len > 0) {
 
-    comm_t message = {0};
-    if (!deserialize_message(data + 1, data_len - 1, &message)) {
-      ESP_LOGE(TAG, "Failed to deserialize command message");
-      return;
-    }
-
-
-    // Process the message
-    processReceivedMessage(&message);
-  } else {
-      ESP_LOGE(TAG, "Failed to parse message using memcpy method");
-  }
+//   ESP_LOGI(TAG, "Raw data (%d bytes):", data_len);
+for (int i = 0; i < 5; i++) {
+    ESP_LOGI(TAG, "Byte[%d]: 0x%02X", i, data[i]);
 }
+// Ensure we have enough data for a complete message
+if (data_len - 1 < sizeof(comm_t)) {
+ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+return;
 }
+
+comm_t message = {0};
+if (!deserialize_message(data , data_len - 1, &message)) {
+ESP_LOGE(TAG, "Failed to deserialize command message");
+return;
+}
+
+// Update the source with the actual sender's device address
+message.source = sender_device_addr;
+
+ESP_LOGI(TAG, "Processing command 0x%02X from 0x%02X (%s),to 0x%02X seq %d",
+message.command, sender_device_addr, pcb_name,message.address, message.seq_num);
+
+// Process the message
+processReceivedMessage(&message);
+}
+return;
+}
+
+ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
+}
+
+
+// void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len, int rssi) {
+//   if (!data || data_len <= 0) return;
+
+//   //espnow_recv_data_t recv_data;
+//   char msg[data_len + 1];
+//   memcpy(msg, data, data_len);
+//   msg[data_len] = '\0';
+
+//     // Get the device address of the sender
+//     uint8_t sender_device_addr = get_device_from_mac(mac_addr);
+
+//     // Get the PCB name of the sender for logging
+//     const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+//   ESP_LOGI(TAG, "Raw received: %s", msg);
+//   if ((rssi < -75)) {
+//     ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+//     //update_status_message("Poor signal: RSSI: %d dBm", rssi);
+//   }
+
+//       // Extract PCB name between "PCB:" and " Count:"
+//   //     char *pcb_start = strstr(msg, "PCB:");
+//   //     char *count_start = strstr(msg, " Count:");
+//   //     if (pcb_start && count_start && count_start > pcb_start) {
+//   //         int name_len = count_start - (pcb_start + 4); // 4 = strlen("PCB:")
+//   //         if (name_len > 0 && name_len < sizeof(recv_data.pcb_name)) {
+//   //             strncpy(recv_data.pcb_name, pcb_start + 4, name_len);
+//   //             recv_data.pcb_name[name_len] = '\0';
+//   //         } else {
+//   //             strcpy(recv_data.pcb_name, "Unknown");
+//   //         }
+//   //     } else {
+//   //         strcpy(recv_data.pcb_name, "Unknown");
+//   //     }
+
+//   // char *s_ptr = strstr(msg, "S[");
+//   // char *b_ptr = strstr(msg, "B[");
+//   // char *t_ptr = strstr(msg, "T[");
+//   // char *d_ptr = strstr(msg, "D[");
+
+//   // if (s_ptr && b_ptr && t_ptr && d_ptr) {
+//   //     int moisture = atoi(s_ptr + 2);
+//   //     int battery = atoi(b_ptr + 2);
+//   //     int temp = atoi(t_ptr + 2);
+
+//   //     char timestamp[20] = {0};
+//   //     strncpy(timestamp, d_ptr + 2, 19); // D[YYYY-MM-DD HH:MM:SS]
+//   //     timestamp[19] = '\0';
+
+//   //     recv_data.soil_moisture = moisture;
+//   //     recv_data.battery_level = battery;
+//   //     recv_data.temperature = temp;
+//   //     message_received = true;
+
+//   //     ESP_LOGI(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
+//   //              moisture, battery, temp, timestamp);
+//     // Check for command messages
+//   if (data_len > 0) {
+//     // Ensure we have enough data for a complete message
+//     // if (data_len - 1 < sizeof(comm_t)) {
+//     //   ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
+//     //   return;
+//     // }
+
+//     comm_t message = {0};
+//     if (!deserialize_message(data + 1, data_len - 1, &message)) {
+//       ESP_LOGE(TAG, "Failed to deserialize command message");
+//       return;
+//     }
+//     // Update the source with the actual sender's device address
+//     message.source = sender_device_addr;
+
+//     ESP_LOGI(TAG, "Processing command 0x%02X from 0x%02X (%s), seq %d",
+//              message.command, sender_device_addr, pcb_name, message.seq_num);
+
+//     // Process the message
+//     processReceivedMessage(&message);
+//   } else {
+//       ESP_LOGE(TAG, "Failed to parse message using memcpy method");
+//   }
+// //}
+// }
 void processReceivedMessage(comm_t *message) {
-  ESP_LOGD(
+  ESP_LOGI(TAG,"inside processreceived message");
+  ESP_LOGI(
       TAG,
       "Processing received message: Address: 0x%02X, Command: 0x%02X, "
       "Sequence: %u, Source: %u, Retries: %u, Data: %.20s%s",
@@ -941,8 +1264,15 @@ void processReceivedMessage(comm_t *message) {
     break;
 
   case A_VALVE_ADDRESS:
+  ESP_LOGI(TAG,"inside process valve A message");
+   processSprayMessage(message);
+   break;
   case B_VALVE_ADDRESS:
+  ESP_LOGI(TAG,"inside process valve B message");
   processValveMessage(message);
+    break;
+    case PUMP_ADDRESS:
+  processPumpMessage(message);
     break;
 
 
@@ -950,6 +1280,23 @@ void processReceivedMessage(comm_t *message) {
     ESP_LOGW(TAG, "Received message from unknown address: 0x%02X",
              message->address);
     break;
+  }
+}
+void serialize_message(const comm_t *message, uint8_t *buffer) {
+  buffer[0] = message->address;
+  buffer[1] = message->command;
+  buffer[2] = message->source;
+  buffer[3] = message->retries;
+  buffer[4] = message->seq_num;
+
+  // Handle both hex data and error messages
+  if (message->command == 0xA3) {
+    memcpy(&buffer[5], message->data, HEX_SIZE * 2); // Copy exactly 62 bytes
+  } else if (message->command == 0xE0) {
+    size_t error_len = strlen(message->data);
+    // Ensure we don't overflow the buffer, use same size as hex for consistency
+    memcpy(&buffer[5], message->data,
+           error_len < (HEX_SIZE * 2) ? error_len : (HEX_SIZE * 2));
   }
 }
 
@@ -964,6 +1311,11 @@ bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
   message->source = buffer[2];
   message->retries = buffer[3];
   message->seq_num = buffer[4];
+
+  ESP_LOGI(TAG,
+    "Parsed message - Address: 0x%02X, Command: 0x%02X, Source: 0x%02X, Retries: %d, Seq: %d",
+    message->address, message->command, message->source, message->retries, message->seq_num);
+
 
   if (message->command == 0xA3 || message->command == 0xE0) {
     memcpy(message->data, &buffer[5], HEX_SIZE * 2);
@@ -996,7 +1348,7 @@ bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
 // // Log signal quality if needed
 // // if ((rssi < -75) && (!IS_SITE("Sakti"))) {
 // // ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
-// // update_status_message("Poor signal: RSSI: %d dBm", rssi);
+// // //update_status_message("Poor signal: RSSI: %d dBm", rssi);
 // // }
 
 // // // Check for command messages
@@ -1457,6 +1809,7 @@ void vTaskESPNOW_RX(void *pvParameters)
 #endif
 
 void vTaskESPNOW(void *pvParameters) {
+  ESP_LOGI(TAG,"inside vtask espnow");
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   comm_t message = {0};
 
@@ -1523,8 +1876,11 @@ void vTaskESPNOW(void *pvParameters) {
       }
 
       // Serialize the message directly into the buffer
-     // serialize_message(&message, buffer);
-
+      serialize_message(&message, buffer);
+      // ESP_LOGI(TAG, "Serialized buffer (%d bytes):", buffer_size);
+      // for (int i = 0; i < buffer_size; i++) {
+      //     ESP_LOGI(TAG, "Byte[%d] = 0x%02X", i, buffer[i]);
+      // }
       // Send using the library's function
       ESP_LOGD(
           TAG, "Sending command 0x%02X to " MACSTR " (device 0x%02X), seq %d",

@@ -10,7 +10,7 @@
 #include "sensor.h"
 #include "wifi_app.h"
 #include "valve_control.h"
-#include "lcd.h"
+//#include "lcd.h"
 
 static const char *TAG = "ValveControl";
 extern SemaphoreHandle_t spi_mutex; // Mutex for SPI bus access
@@ -235,12 +235,12 @@ void updateValveState(void *pvParameters) {
       //recv_data.soil_moisture = 10;
       if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to get SPI mutex for LoRa config");
-        update_status_message("Wait for backup");
+        //update_status_message("Wait for backup");
         vTaskDelay(pdMS_TO_TICKS(10)); // Add small delay before retry
         continue;
       } else {
         //if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
-        if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
+        if (recv_data.soil_moisture < 45 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
         {
           newState = STATE_A_VALVE_OPEN;
         } else if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor B PCB") == 0){
@@ -289,7 +289,7 @@ void updateValveState(void *pvParameters) {
       break;
     case STATE_IRR_START_A:
       //while(recv_data.soil_moisture < 80 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
-      while(recv_data.soil_moisture < 80 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
+      while(recv_data.soil_moisture < 70 && strcmp(recv_data.pcb_name, "Sensor A PCB") == 0)
       {
         ESP_LOGI(TAG,"Doing irrigation for sector A");
         vTaskDelay(1000);
@@ -404,7 +404,7 @@ void updateValveState(void *pvParameters) {
     // Update the state if it has changed
     if (newState != getCurrentState()) {
       setCurrentState(newState);
-      update_status_message(valveStateToString(newState));
+      //update_status_message(valveStateToString(newState));
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
   }

@@ -19,7 +19,7 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_mac.h"
-#include "lcd.h"
+//#include "lcd.h"
 
 // Tag used for ESP serial console messages
 static const char TAG[] = "WIFI";
@@ -251,7 +251,7 @@ static void wifi_app_event_handler(void *netif, esp_event_base_t event_base,
 
       // Update LCD with IP address
       // Added: Display IP on LCD
-      update_status_message("%s", ip_str);
+      //update_status_message("%s", ip_str);
       xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
 
       vTaskDelay(pdMS_TO_TICKS(500));
@@ -331,7 +331,7 @@ void wifi_app_ap_config(void) {
       esp_netif_set_dns_info(esp_netif_ap, ESP_NETIF_DNS_MAIN, &dns_info));
 
   // Update LCD with IP address
-  update_status_message("192.168.4.1");
+  //update_status_message("192.168.4.1");
   ESP_LOGI(TAG, "http://192.168.4.1");
   // Initialize mDNS after WiFi starts
   init_mdns_service();
