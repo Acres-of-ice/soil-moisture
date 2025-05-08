@@ -16,18 +16,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "button_control.h"
+#include "data.h"
+#include "esp_spiffs.h"
 #include "espnow_lib.h"
+#include "gsm.h"
+#include "i2cdev.h"
+#include "lcd.h"
+#include "rtc_operations.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "valve_control.h"
 #include "wifi_app.h"
-#include "lcd.h"
-#include "i2cdev.h"
-#include "rtc_operations.h"
-#include "esp_spiffs.h"
-#include "data.h"
-#include "gsm.h"
-#include "button_control.h"
 
 #define SIM_GPIO GPIO_NUM_13
 
@@ -45,6 +45,8 @@
 #define STOP_btn 5
 #define OUT_START 2
 #define OUT_STOP 3
+
+int on_off_counter = 1;
 
 bool lcd_device_ready = false;
 #define LCD_TASK_STACK_SIZE (1024 * 4)
@@ -183,12 +185,10 @@ void init_gpio(void) {
   gpio_set_level(OE_PIN, 0);
 }
 
-esp_vfs_spiffs_conf_t conf = {
-  .base_path = "/spiffs",
-  .partition_label = "spiffs_storage",
-  .max_files = 5,
-  .format_if_mount_failed = true
-};
+esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
+                              .partition_label = "spiffs_storage",
+                              .max_files = 5,
+                              .format_if_mount_failed = true};
 
 // void filesystem_init(void)
 // {
@@ -204,7 +204,8 @@ esp_vfs_spiffs_conf_t conf = {
 //         } else if (ret == ESP_ERR_NOT_FOUND) {
 //             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
 //         } else {
-//             ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+//             ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)",
+//             esp_err_to_name(ret));
 //         }
 //         return;
 //     }
@@ -223,7 +224,8 @@ esp_vfs_spiffs_conf_t conf = {
 //     size_t total = 0, used = 0;
 //     ret = esp_spiffs_info(conf.partition_label, &total, &used);
 //     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
+//         ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s).
+//         Formatting...", esp_err_to_name(ret));
 //         esp_spiffs_format(conf.partition_label);
 //         return;
 //     } else {
@@ -321,19 +323,18 @@ void app_main(void) {
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
-   lcd_init();
+  lcd_init();
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
-  update_status_message("  %s",  
-    get_pcb_name(g_nodeAddress));
-  
-  xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
-      &g_nodeAddress, BUTTON_TASK_PRIORITY,
-      &buttonTaskHandle, BUTTON_TASK_CORE_ID);
-vTaskDelay(pdMS_TO_TICKS(100));
+  update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
-  #if CONFIG_GSM
-    esp_err_t gsm_init_result = gsm_init();
+  xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
+                          &g_nodeAddress, BUTTON_TASK_PRIORITY,
+                          &buttonTaskHandle, BUTTON_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(100));
+
+#if CONFIG_GSM
+  esp_err_t gsm_init_result = gsm_init();
   if (gsm_init_result != ESP_OK) {
     ESP_LOGE(TAG, "Failed to initialize GSM module");
     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
@@ -353,7 +354,7 @@ vTaskDelay(pdMS_TO_TICKS(100));
     vTaskSuspend(smsTaskHandle);
   }
 
-  #endif
+#endif
 
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 

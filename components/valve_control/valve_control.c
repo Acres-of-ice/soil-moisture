@@ -36,7 +36,7 @@ static sensor_readings_t current_readings;
 extern espnow_recv_data_t recv_data;
 extern char last_sender_pcb_name[20];
 
-int on_off_counter = 1;
+extern int on_off_counter;
 
 bool errorConditionMet = false;
 
@@ -186,23 +186,6 @@ const char *get_pcb_name(uint8_t nodeAddress) {
   }
 }
 
-static bool isStateTimedOut(ValveState state) {
-  // Don't timeout in IDLE or calibration state
-  if ((state == STATE_IDLE) || (state == STATE_ERROR)) {
-    return false;
-  }
-
-  TickType_t currentTime = xTaskGetTickCount();
-  TickType_t elapsedTime = currentTime - stateStartTime;
-
-  if (elapsedTime >= pdMS_TO_TICKS(STATE_TIMEOUT_MS)) {
-    ESP_LOGW(TAG, "State %s timed out after %d minutes",
-             valveStateToString(state), STATE_TIMEOUT_MS / (60 * 1000));
-    return true;
-  }
-  return false;
-}
-
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   ESP_LOGI(TAG, "inside LOGI");
@@ -213,18 +196,11 @@ void updateValveState(void *pvParameters) {
 
     // Add timeout check
     ValveState newState = getCurrentState(); // Start with current state
-    if (isStateTimedOut(newState)) {
-      ESP_LOGE(TAG, "Timeout State machine - resetting to IDLE");
-      setCurrentState(STATE_IDLE);
-      // reset_acknowledgements();
-      vTaskDelay(pdMS_TO_TICKS(1000)); // Short delay before continuing
-      continue;
-    }
 
     switch (newState) {
     case STATE_IDLE:
       // reset_acknowledgements();
-      ESP_LOGI(TAG, "IDLE STATE");
+      ESP_LOGI(TAG, "IDLE");
       vTaskDelay(1000);
       // recv_data.soil_moisture = 10;
       // if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor
@@ -240,14 +216,14 @@ void updateValveState(void *pvParameters) {
       }
       break;
     case STATE_A_VALVE_OPEN:
-      ESP_LOGI(TAG, "VALVE OPEN STATE");
+      ESP_LOGI(TAG, "A VALVE OPEN");
       if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
         newState = STATE_IDLE;
         vTaskDelay(1000);
         break;
       }
-      on_off_counter = 1;
+      on_off_counter++;
       newState = STATE_PUMP_ON_A;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -276,13 +252,13 @@ void updateValveState(void *pvParameters) {
       // "Sensor A PCB") == 0)
       while (recv_data.soil_moisture < 70 &&
              strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
-        ESP_LOGI(TAG, "Doing irrigation for sector A");
+        ESP_LOGI(TAG, "IRR A");
         vTaskDelay(1000);
       }
       newState = STATE_IRR_DONE_A;
       break;
     case STATE_IRR_DONE_A:
-      ESP_LOGI(TAG, "Irrigation for sector A done");
+      ESP_LOGI(TAG, "IRR A done");
       newState = STATE_PUMP_OFF_A;
       break;
     case STATE_PUMP_OFF_A:
