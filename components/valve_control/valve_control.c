@@ -205,10 +205,10 @@ void updateValveState(void *pvParameters) {
       // recv_data.soil_moisture = 10;
       // if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor
       // A PCB") == 0)
-      if (isWithinDrainTimeRange() && recv_data.soil_moisture < 45 &&
+      if ( recv_data.soil_moisture < 50 &&
           strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
         newState = STATE_A_VALVE_OPEN;
-      } else if (isWithinDrainTimeRange() && recv_data.soil_moisture < 20 &&
+      } else if ( recv_data.soil_moisture < 50 &&
                  strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
         newState = STATE_B_VALVE_OPEN;
       } else {
@@ -255,14 +255,11 @@ void updateValveState(void *pvParameters) {
         ESP_LOGI(TAG, "IRR A");
         vTaskDelay(1000);
       }
-      newState = STATE_IRR_DONE_A;
-      break;
-    case STATE_IRR_DONE_A:
-      ESP_LOGI(TAG, "IRR A done");
       newState = STATE_PUMP_OFF_A;
       break;
+
     case STATE_PUMP_OFF_A:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
+      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
         newState = STATE_IDLE;
         vTaskDelay(1000);
@@ -278,8 +275,13 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      newState = STATE_IDLE;
+      newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
+      break;
+      case STATE_IRR_DONE_A:
+      ESP_LOGI(TAG, "IRR A done");
+      on_off_counter ++;
+      newState = STATE_IDLE;
       break;
     case STATE_B_VALVE_OPEN:
       if (!sendCommandWithRetry(B_VALVE_ADDRESS, 0x11, nodeAddress)) {
@@ -313,19 +315,16 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_START_B;
       break;
     case STATE_IRR_START_B:
-      while (recv_data.soil_moisture < 80 &&
+      while (recv_data.soil_moisture < 70 &&
              strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
         ESP_LOGI(TAG, "Doing irrigation for sector B");
         vTaskDelay(1000);
       }
-      newState = STATE_IRR_DONE_B;
-      break;
-    case STATE_IRR_DONE_B:
-      ESP_LOGI(TAG, "Irrigation for sector B done");
       newState = STATE_PUMP_OFF_B;
       break;
+
     case STATE_PUMP_OFF_B:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
+      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
         newState = STATE_IDLE;
         vTaskDelay(1000);
@@ -341,9 +340,14 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      newState = STATE_IDLE;
+      newState = STATE_IRR_DONE_B;
       vTaskDelay(1000);
       break;
+    case STATE_IRR_DONE_B:
+      ESP_LOGI(TAG, "Irrigation for sector B done");
+      on_off_counter ++;
+      newState = STATE_IDLE;
+    break;
     default:
       ESP_LOGW(TAG, "Unexpected state: %s", valveStateToString(newState));
       break;

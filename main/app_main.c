@@ -333,7 +333,7 @@ void app_main(void) {
                           &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
 
-#if CONFIG_GSM
+#ifdef CONFIG_GSM
   esp_err_t gsm_init_result = gsm_init();
   if (gsm_init_result != ESP_OK) {
     ESP_LOGE(TAG, "Failed to initialize GSM module");
