@@ -2,7 +2,7 @@ dependencies:
   ds18b20:
     dependencies: []
     source:
-      path: /home/bsurya/Projects/soil-moisture/components/ds18b20
+      path: C:\ESP32_projects\webapp\soil-moisture\components\ds18b20
       type: local
     version: 0.1.2
   espressif/onewire_bus:
@@ -28,7 +28,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.4.0
+    version: 5.4.1
 direct_dependencies:
 - espressif/ds18b20
 - espressif/onewire_bus

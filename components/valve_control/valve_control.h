@@ -63,6 +63,7 @@ bool IRR_B();
 bool canExitErrorState();
 const char *valveStateToString(ValveState state);
 const char *get_pcb_name(uint8_t nodeAddress);
+bool isWithinDrainTimeRange(void);
 //void vModeSwitchTimerCallback(TimerHandle_t xTimer);
 //void processConductorMessage(comm_t *message);
 //void processReceivedMessage(comm_t *message);
