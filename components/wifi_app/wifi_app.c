@@ -57,7 +57,7 @@ static bool reconnect_timer_active = false;
 static wifi_ap_record_t ap_records[MAX_NETWORKS];
 
 bool sta_enabled = false;  // WiFi status flag
-bool wifi_enabled = false; // WiFi status flag
+extern bool wifi_enabled; // WiFi status flag
 
 esp_err_t init_mdns_service(void) {
   esp_err_t err;

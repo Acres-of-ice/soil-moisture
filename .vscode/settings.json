@@ -3,10 +3,10 @@
         "OPENOCD_SCRIPTS": "c:\\Users\\Nidhin\\.espressif\\tools\\openocd-esp32\\v0.12.0-esp32-20230419/openocd-esp32/share/openocd/scripts",
         "IDF_CCACHE_ENABLE": "1",
         "ESP_ROM_ELF_DIR": "c:\\Users\\Nidhin\\.espressif\\tools\\esp-rom-elfs\\20230320/",
-        "IDF_TARGET": "esp32"
+        "IDF_TARGET": "esp32s3"
     },
     "idf.openOcdConfigs": [
-        "board/esp32-wrover-kit-3.3v.cfg"
+        "board/esp32s3-builtin.cfg"
     ],
     "files.associations": {
         "soil_comm.h": "c"

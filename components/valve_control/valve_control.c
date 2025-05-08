@@ -32,13 +32,15 @@ static ValveState currentState = STATE_IDLE;
 static TickType_t stateEntryTime = 0;
 
 static TickType_t errorEntryTime = 0; // Track when we entered error state
-bool errorConditionMet = false;
+//bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
 extern espnow_recv_data_t recv_data;
 extern char last_sender_pcb_name[20];
 
 int on_off_counter = 1;
+
+bool errorConditionMet = false;
 
 static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
                                        [TEMP_TOO_HIGH] = "TEMP:HIGH",
@@ -262,6 +264,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
        }
+       on_off_counter =1;
        newState = STATE_PUMP_ON_A;
        stateEntryTime = xTaskGetTickCount();
        break;
@@ -335,6 +338,7 @@ void updateValveState(void *pvParameters) {
        vTaskDelay(1000);
        break;
       }
+      on_off_counter++;
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;

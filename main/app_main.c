@@ -27,6 +27,7 @@
 #include "esp_spiffs.h"
 #include "data.h"
 #include "gsm.h"
+#include "button_control.h"
 
 #define SIM_GPIO GPIO_NUM_13
 
@@ -49,6 +50,11 @@ bool lcd_device_ready = false;
 #define LCD_TASK_STACK_SIZE (1024 * 4)
 #define LCD_TASK_PRIORITY 6
 #define LCD_TASK_CORE_ID 0
+
+TaskHandle_t buttonTaskHandle = NULL;
+#define BUTTON_TASK_STACK_SIZE (1024 * 4)
+#define BUTTON_TASK_PRIORITY 10
+#define BUTTON_TASK_CORE_ID 0
 
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
@@ -234,7 +240,7 @@ void init_semaphores(void) {
   i2c_mutex = xSemaphoreCreateMutex();
 }
 
-void button_task(void *arg) {
+void pump_button_task(void *arg) {
   while (1) {
     if (gpio_get_level(START_btn) == 0) {
       button_state = BUTTON_START_PRESSED;
@@ -320,6 +326,11 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s",  
     get_pcb_name(g_nodeAddress));
+  
+  xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
+      &g_nodeAddress, BUTTON_TASK_PRIORITY,
+      &buttonTaskHandle, BUTTON_TASK_CORE_ID);
+vTaskDelay(pdMS_TO_TICKS(100));
 
   #if CONFIG_GSM
     esp_err_t gsm_init_result = gsm_init();
@@ -343,7 +354,7 @@ void app_main(void) {
   }
 
   #endif
-  
+
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
   xTaskCreatePinnedToCore(
@@ -404,7 +415,7 @@ void app_main(void) {
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
-  xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
+  xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif
 }
