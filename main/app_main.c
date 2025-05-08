@@ -26,7 +26,9 @@
 #include "rtc_operations.h"
 #include "esp_spiffs.h"
 #include "data.h"
+#include "gsm.h"
 
+#define SIM_GPIO GPIO_NUM_13
 
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
@@ -85,6 +87,10 @@ char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
 SemaphoreHandle_t stateMutex = NULL;
 SemaphoreHandle_t i2c_mutex = NULL;
+
+TaskHandle_t smsTaskHandle = NULL;
+TaskHandle_t smsReceiveTaskHandle = NULL;
+TaskHandle_t smsManagerTaskHandle = NULL;
 
 QueueHandle_t message_queue = NULL;
 #define MAX_QUEUE_SIZE 8
@@ -314,6 +320,30 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s",  
     get_pcb_name(g_nodeAddress));
+
+  #if CONFIG_GSM
+    esp_err_t gsm_init_result = gsm_init();
+  if (gsm_init_result != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize GSM module");
+    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    gpio_set_level(SIM_GPIO, 1);
+  } else {
+    ESP_LOGI(TAG, "GSM module initialized successfully");
+    xTaskCreatePinnedToCore(sms_manager_task, "SMS Manager",
+                            SMS_MANAGER_STACK_SIZE, &smsManagerTaskHandle,
+                            SMS_MANAGER_PRIORITY, NULL, SMS_MANAGER_CORE_ID);
+    xTaskCreatePinnedToCore(sms_receive_task, "SMS_receive",
+                            RECEIVE_SMS_TASK_STACK_SIZE, &smsReceiveTaskHandle,
+                            RECEIVE_SMS_TASK_PRIORITY, NULL,
+                            RECEIVE_SMS_TASK_CORE_ID);
+    xTaskCreatePinnedToCore(sms_task, "SMS", SMS_TASK_STACK_SIZE, NULL,
+                            SMS_TASK_PRIORITY, &smsTaskHandle,
+                            SMS_TASK_CORE_ID);
+    vTaskSuspend(smsTaskHandle);
+  }
+
+  #endif
+  
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
   xTaskCreatePinnedToCore(

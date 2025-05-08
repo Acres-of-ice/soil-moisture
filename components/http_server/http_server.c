@@ -44,8 +44,7 @@ static int g_fw_update_status = OTA_UPDATE_PENDING;
 
  //size_t totalBytes = 0;
 //size_t usedBytes = 0;
-char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
-char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
+
 //data_statistics_t data_stats = {0};
 
 // HTTP server monitor task handle

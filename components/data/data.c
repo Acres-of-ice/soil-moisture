@@ -49,8 +49,8 @@ const char *DATA_FILE_HEADER =
     "moisture, Temp, Battery, Time";
 
 // Paths
-extern char *log_path;
-extern char *data_path;
+char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
+char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
 // data_statistics_t data_stats = {0};
 
 // // Initialize moving average structure
