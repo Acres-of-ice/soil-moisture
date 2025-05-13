@@ -186,6 +186,73 @@ const char *get_pcb_name(uint8_t nodeAddress) {
   }
 }
 
+static bool isStateTimedOut(ValveState state) {
+  // Don't timeout in IDLE or calibration state
+  if ((state == STATE_IDLE) || (state == STATE_ERROR)) {
+    return false;
+  }
+
+  TickType_t currentTime = xTaskGetTickCount();
+  TickType_t elapsedTime = currentTime - stateStartTime;
+
+  if (elapsedTime >= pdMS_TO_TICKS(STATE_TIMEOUT_MS)) {
+    ESP_LOGW(TAG, "State %s timed out after %d minutes",
+             valveStateToString(state), STATE_TIMEOUT_MS / (60 * 1000));
+    return true;
+  }
+  return false;
+}
+
+void simulate_irrigation_workflow(void *arg) {
+    uint8_t g_nodeaddress = *((uint8_t *)arg);
+    ESP_LOGI("SIMULATION", "Simulation started for node address: 0x%02X", g_nodeaddress);
+
+    while (true) {
+        // --------------------------------------------------
+        // Step 1: Sector A - Valve ON, Pump ON (1m 30s)
+        // --------------------------------------------------
+        recv_data.soil_moisture = 30;
+        strcpy(recv_data.pcb_name, "Sensor A PCB");
+        Valve_A_Acknowledged = false;
+        Pump_Acknowledged = false;
+
+        // ESP_LOGI("SIMULATION", "Sector A irrigation started...");
+        // sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, g_nodeaddress);  // Open Valve A
+        // vTaskDelay(pdMS_TO_TICKS(500));  // Short delay to simulate relay timing
+        // sendCommandWithRetry(PUMP_ADDRESS, 0x11, g_nodeaddress);     // Start Pump
+         vTaskDelay(pdMS_TO_TICKS(90 * 1000));  // 1 minute 30 seconds
+
+        // ESP_LOGI("SIMULATION", "Sector A irrigation done. Closing valve and pump.");
+        // sendCommandWithRetry(A_VALVE_ADDRESS, 0x10, g_nodeaddress);  // Close Valve A
+        // vTaskDelay(pdMS_TO_TICKS(500));
+        // sendCommandWithRetry(PUMP_ADDRESS, 0x10, g_nodeaddress);     // Stop Pump
+        // vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // --------------------------------------------------
+        // Step 2: Sector B - Valve ON, Pump ON (1m 30s)
+        // --------------------------------------------------
+        recv_data.soil_moisture = 30;
+        strcpy(recv_data.pcb_name, "Sensor B PCB");
+        Valve_B_Acknowledged = false;
+        Pump_Acknowledged = false;
+
+        // ESP_LOGI("SIMULATION", "Sector B irrigation started...");
+        // sendCommandWithRetry(B_VALVE_ADDRESS, 0x11, g_nodeaddress);  // Open Valve B
+        // vTaskDelay(pdMS_TO_TICKS(500));
+        // sendCommandWithRetry(PUMP_ADDRESS, 0x11, g_nodeaddress);     // Start Pump
+         vTaskDelay(pdMS_TO_TICKS(90 * 1000));  // 1 minute 30 seconds
+
+        // ESP_LOGI("SIMULATION", "Sector B irrigation done. Closing valve and pump.");
+        // sendCommandWithRetry(B_VALVE_ADDRESS, 0x10, g_nodeaddress);  // Close Valve B
+        // vTaskDelay(pdMS_TO_TICKS(500));
+        // sendCommandWithRetry(PUMP_ADDRESS, 0x10, g_nodeaddress);     // Stop Pump
+        // vTaskDelay(pdMS_TO_TICKS(3000));
+
+        ESP_LOGI("SIMULATION", "Cycle complete. Restarting...\n");
+    }
+}
+
+
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   ESP_LOGI(TAG, "inside LOGI");
@@ -199,16 +266,16 @@ void updateValveState(void *pvParameters) {
 
     switch (newState) {
     case STATE_IDLE:
-      // reset_acknowledgements();
+      reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
       vTaskDelay(1000);
       // recv_data.soil_moisture = 10;
       // if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor
       // A PCB") == 0)
-      if ( recv_data.soil_moisture < 50 &&
+      if ( recv_data.soil_moisture < 40 &&
           strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
         newState = STATE_A_VALVE_OPEN;
-      } else if ( recv_data.soil_moisture < 50 &&
+      } else if ( recv_data.soil_moisture < 40 &&
                  strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
         newState = STATE_B_VALVE_OPEN;
       } else {
@@ -252,9 +319,11 @@ void updateValveState(void *pvParameters) {
       // "Sensor A PCB") == 0)
       while (recv_data.soil_moisture < 70 &&
              strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
+              ESP_LOGI(TAG, "IRR A: Moisture = %d", recv_data.soil_moisture);
         ESP_LOGI(TAG, "IRR A");
-        vTaskDelay(1000);
+        vTaskDelay(2000);
       }
+      reset_acknowledgements();
       newState = STATE_PUMP_OFF_A;
       break;
 
@@ -320,6 +389,7 @@ void updateValveState(void *pvParameters) {
         ESP_LOGI(TAG, "Doing irrigation for sector B");
         vTaskDelay(1000);
       }
+      reset_acknowledgements();
       newState = STATE_PUMP_OFF_B;
       break;
 

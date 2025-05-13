@@ -327,7 +327,7 @@ const char *espnow_get_peer_name(const uint8_t *mac_addr) {
   for (int i = 0; i < s_discovered_peer_count; i++) {
     if (memcmp(s_peer_info[i].mac, mac_addr, ESP_NOW_ETH_ALEN) == 0) {
       if (s_peer_info[i].has_pcb_name && s_peer_info[i].pcb_name[0] != '\0') {
-        ESP_LOGI(TAG, "Found PCB name '%s' for MAC " MACSTR,
+        ESP_LOGD(TAG, "Found PCB name '%s' for MAC " MACSTR,
                  s_peer_info[i].pcb_name, MAC2STR(mac_addr));
         return s_peer_info[i].pcb_name;
       }
@@ -993,6 +993,46 @@ bool espnow_is_peer_initiator(const uint8_t *mac_addr) {
     }
   }
   return false;
+}
+esp_err_t espnow_store_peer_pcb_name(const uint8_t *mac_addr,
+  const char *pcb_name) {
+if (mac_addr == NULL || pcb_name == NULL) {
+return ESP_ERR_INVALID_ARG;
+}
+
+store_peer_pcb_name(mac_addr, pcb_name);
+return ESP_OK;
+}
+
+esp_err_t espnow_add_authenticated_peer(const uint8_t *mac_addr) {
+  if (mac_addr == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  // Skip if it's our own MAC
+  if (is_own_mac(mac_addr)) {
+    ESP_LOGD(TAG, "AUTH: Not authenticating own MAC");
+    return ESP_OK;
+  }
+
+  // Check if already authenticated
+  if (espnow_is_authenticated(mac_addr)) {
+    ESP_LOGV(TAG, "AUTH: Peer " MACSTR " was already authenticated",
+             MAC2STR(mac_addr));
+    return ESP_OK;
+  }
+
+  // Add to authenticated list if space available
+  if (s_auth_peer_count < ESPNOW_MAX_PEERS) {
+    memcpy(s_auth_peers[s_auth_peer_count], mac_addr, ESP_NOW_ETH_ALEN);
+    s_auth_peer_count++;
+    ESP_LOGI(TAG, "AUTH: Peer directly added to authenticated list: " MACSTR,
+             MAC2STR(mac_addr));
+    return ESP_OK;
+  } else {
+    ESP_LOGW(TAG, "AUTH: No space for new authenticated peer");
+    return ESP_ERR_NO_MEM;
+  }
 }
 
 esp_err_t espnow_broadcast_auth(void) {

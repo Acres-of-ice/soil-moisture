@@ -54,6 +54,7 @@ typedef enum {
   #define PUMP_ADDRESS 0x07
 
 void update_moisture_readings(int a);
+static bool isStateTimedOut(ValveState state);
 void updateValveState(void *pvParameters);
 ValveState getCurrentState();
 void setCurrentState(ValveState newState);
@@ -62,6 +63,7 @@ bool IRR_A();
 bool IRR_B();
 bool canExitErrorState();
 const char *valveStateToString(ValveState state);
+void simulate_irrigation_workflow(void *arg);
 const char *get_pcb_name(uint8_t nodeAddress);
 bool isWithinDrainTimeRange(void);
 //void vModeSwitchTimerCallback(TimerHandle_t xTimer);
