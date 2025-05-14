@@ -34,6 +34,10 @@
 #include "valve_control.h"
 
 
+
+#define DRY_ADC_VALUE    2480//2320//Sensor 1  2480 //sensor2
+#define MOIST_ADC_VALUE  1500//1150//Sensor 1  1500 //Sensor2
+
 #include "ra01s.h"
 
 const static char *TAG = "EXAMPLE";
@@ -616,7 +620,7 @@ void sensor_task(void *pvParameters)
  
 
     if (espnow_queue == NULL){
-     espnow_queue = xQueueCreate(20, sizeof(espnow_message_t));
+     espnow_queue = xQueueCreate(30, sizeof(espnow_message_t));
      if (espnow_queue == NULL) {
       ESP_LOGE(TAG, "Failed to create  queue");
      }
@@ -625,15 +629,23 @@ void sensor_task(void *pvParameters)
     while (1) 
     {
         //for (int i = 0; i < ds18b20_device_num; i++) {
-        float temperature = 0.0;
+        int raw_moisture = adc_raw_1[0][0];
+        int raw_battery  = adc_raw_3[0][0];
 
+        float temperature = 0.0;
+        
+        int calibrated_moisture = (DRY_ADC_VALUE - raw_moisture) * 100 / (DRY_ADC_VALUE - MOIST_ADC_VALUE);
+        
+        // Clamp between 0 and 100 to avoid out-of-bounds values
+        if (calibrated_moisture < 0) calibrated_moisture = 0;
+        if (calibrated_moisture > 100) calibrated_moisture = 100;
 
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
 
         espnow_message_t message;
 
-        message.soil_moisture = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 4095));
+        message.soil_moisture = (uint8_t)calibrated_moisture;
         message.temperature = (uint8_t)temperature;
         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
 
@@ -649,7 +661,7 @@ void sensor_task(void *pvParameters)
                 ESP_LOGE("SensorTask", "Failed to send data to queue");
             }
         }
-        local_readings.humidity = (uint8_t)(100 - ((adc_raw_1[0][0] * 100) / 3300));
+        local_readings.humidity = (uint8_t)calibrated_moisture;
         local_readings.temperature = (uint8_t)temperature;
         local_readings.battery = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
             // Now take mutex only for the quick copy operation
@@ -662,7 +674,7 @@ void sensor_task(void *pvParameters)
         memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
         xSemaphoreGive(readings_mutex);
       }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 

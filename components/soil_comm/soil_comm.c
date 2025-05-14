@@ -32,6 +32,10 @@
 #define OUT_STOP 3
 
 
+#define NVS_MAPPING_NAMESPACE "espnow_map"
+#define NVS_MAPPING_COUNT_KEY "map_count"
+#define NVS_MAPPING_PREFIX "map_"
+
 
 // Configuration
 #define ESPNOW_QUEUE_SIZE             20
@@ -52,6 +56,7 @@ extern SemaphoreHandle_t Valve_A_AckSemaphore;
 extern SemaphoreHandle_t Valve_B_AckSemaphore;
 extern SemaphoreHandle_t Pump_AckSemaphore;
 extern SemaphoreHandle_t Soil_AckSemaphore;
+extern TaskHandle_t valveTaskHandle;
 
 #define MAX_QUEUE_SIZE 8
 #define MAX_RETRIES 10
@@ -290,19 +295,25 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   uint8_t source) {
   clearMessageQueue();
-
+  //ESP_LOGI(TAG,"inside sendcommandwithretry");
 // Determine which semaphore we're waiting on (keep your existing logic)
 SemaphoreHandle_t ackSemaphore = NULL;
 if (valveAddress == A_VALVE_ADDRESS) {
+  //ESP_LOGI(TAG,"inside A Valve address");
 if (!Valve_A_Acknowledged) {
+//ESP_LOGI(TAG,"acksemaphore = valve A ack");
 ackSemaphore = Valve_A_AckSemaphore;
 } 
 } else if (valveAddress == B_VALVE_ADDRESS) {
+  //ESP_LOGI(TAG,"inside B Valve address");
   if (!Valve_B_Acknowledged) {
+    //ESP_LOGI(TAG,"acksemaphore = valve B ack");
       ackSemaphore = Valve_B_AckSemaphore;
     } 
 }else if (valveAddress == PUMP_ADDRESS) {
+  //ESP_LOGI(TAG,"inside Pump address");
   if (!Pump_Acknowledged) {
+   // ESP_LOGI(TAG,"acksemaphore = Pump ack");
       ackSemaphore = Pump_AckSemaphore;
     } 
 }else if (valveAddress == SOIL_A) {
@@ -588,7 +599,7 @@ bool is_peer_authenticated(uint8_t device_addr) {
   
   uint8_t get_device_from_mac(const uint8_t *mac_addr) 
   {
-    ESP_LOGI(TAG,"inside get device from mac");
+   // ESP_LOGI(TAG,"inside get device from mac");
     // Handle special case for broadcast address
     if (memcmp(mac_addr, ESPNOW_BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0) 
     {
@@ -871,6 +882,8 @@ void processPumpMessage(comm_t *message) {
     ESP_LOGI(TAG, "Turning ON pump (OUT_START ON)");
     gpio_set_level(OUT_STOP, 0);   // Ensure STOP is off
     gpio_set_level(OUT_START, 1);  // Turn ON
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level(OUT_START, 0);
 } else if (state == 0) {
     ESP_LOGI(TAG, "Turning OFF pump (OUT_START OFF, pulse OUT_STOP)");
     gpio_set_level(OUT_START, 0);  // Turn OFF
@@ -918,7 +931,7 @@ void processValveMessage(comm_t *message) {
         gpio_set_level(RELAY_NEGATIVE, 0);
 
         gpio_set_level(OE_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));  // ON pulse duration
+        vTaskDelay(pdMS_TO_TICKS(15));  // ON pulse duration
         gpio_set_level(OE_PIN, 0);
 
         ESP_LOGI(TAG, "Valve ON complete");
@@ -1008,7 +1021,17 @@ void processSprayMessage(comm_t *message) {
 //   return false; // If drain time config is not enabled, always return false
 // #endif
 //   }
+void reset_acknowledgements() {
+  Valve_A_Acknowledged = false;
+  Valve_B_Acknowledged = false;
+  Pump_Acknowledged = false;
 
+  // Explicitly set all semaphores to 0 (unavailable)
+  xSemaphoreTake(Valve_A_AckSemaphore, 0);
+  xSemaphoreTake(Valve_B_AckSemaphore, 0);
+  xSemaphoreTake(Pump_AckSemaphore, 0);
+  
+}
   
   // Process messages from VALVE A
 void processValveAMessage(comm_t *message, ValveState newState) {
@@ -1096,7 +1119,7 @@ uint8_t sender_device_addr = get_device_from_mac(mac_addr);
 const char *pcb_name = espnow_get_peer_name(mac_addr);
 
 // Log message with PCB name and RSSI
-ESP_LOGI(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
+ESP_LOGD(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
 sender_device_addr, rssi);
 
 // Log signal quality if needed
@@ -1142,7 +1165,7 @@ sender_device_addr, rssi);
       recv_data.temperature = temp;
       message_received = true;
 
-      ESP_LOGI(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
+      ESP_LOGD(TAG, "Parsed (memcpy method): M=%d%%, B=%d%%, T=%d°C | Time: %s",
                moisture, battery, temp, timestamp);
       return;
       }          
@@ -1267,8 +1290,8 @@ ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
 // //}
 // }
 void processReceivedMessage(comm_t *message) {
-  ESP_LOGI(TAG,"inside processreceived message");
-  ESP_LOGI(
+  ESP_LOGD(TAG,"inside processreceived message");
+  ESP_LOGD(
       TAG,
       "Processing received message: Address: 0x%02X, Command: 0x%02X, "
       "Sequence: %u, Source: %u, Retries: %u, Data: %.20s%s",
@@ -1589,8 +1612,8 @@ esp_err_t espnow_init2(void)
   
     vTaskDelay(pdMS_TO_TICKS(500));
   
-    // ESP_LOGI(TAG, "Self MAC Address: " MACSTR ", PCB Name: %s", MAC2STR(self_mac),
-    //          get_pcb_name(g_nodeAddress));
+    ESP_LOGI(TAG, "Self MAC Address: " MACSTR ", PCB Name: %s", MAC2STR(self_mac),
+             get_pcb_name(g_nodeAddress));
   
     // Create message queue
     if (message_queue == NULL) {
@@ -1602,41 +1625,603 @@ esp_err_t espnow_init2(void)
       }
     }
   
-    // Start with a delay before discovery
-    ESP_LOGI(TAG, "Wait 5 seconds before starting discovery...");
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    // // Start with a delay before discovery
+    // ESP_LOGI(TAG, "Wait 5 seconds before starting discovery...");
+    // vTaskDelay(pdMS_TO_TICKS(5000));
   
-    // Start discovery with multiple authentication broadcasts
-    ESP_LOGI(TAG, "Starting peer discovery...");
-    espnow_start_discovery(20000); // 20 second discovery timeout
+    // // Start discovery with multiple authentication broadcasts
+    // ESP_LOGI(TAG, "Starting peer discovery...");
+    // espnow_start_discovery(20000); // 20 second discovery timeout
   
-    // Broadcast authentication multiple times during discovery
-    for (int i = 0; i < 5; i++) {
-      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
-      espnow_broadcast_auth();
-      vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 seconds between broadcasts
-    }
+    // // Broadcast authentication multiple times during discovery
+    // for (int i = 0; i < 5; i++) {
+    //   ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
+    //   espnow_broadcast_auth();
+    //   vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 seconds between broadcasts
+    // }
   
-    // Wait for discovery to complete
-    ESP_LOGI(TAG, "Waiting for discovery to complete...");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+    // // Wait for discovery to complete
+    // ESP_LOGI(TAG, "Waiting for discovery to complete...");
+    // vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
   
-    // Now update device mappings based on discovered peers
-    update_device_mappings_from_discovered_peers();
+    // // Now update device mappings based on discovered peers
+    // update_device_mappings_from_discovered_peers();
   
-    // Broadcast authentication again after updating mappings
-    ESP_LOGI(TAG, "Broadcasting final authentication round...");
-    for (int i = 0; i < 3; i++) {
-      espnow_broadcast_auth();
-      vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    // // Broadcast authentication again after updating mappings
+    // ESP_LOGI(TAG, "Broadcasting final authentication round...");
+    // for (int i = 0; i < 3; i++) {
+    //   espnow_broadcast_auth();
+    //   vTaskDelay(pdMS_TO_TICKS(1000));
+    // }
   
-    // Final verification of device mappings
-    //verify_device_mappings();
+    // // Final verification of device mappings
+    // //verify_device_mappings();
   
     ESP_LOGD(TAG, "ESP-NOW initialized successfully");
     return ESP_OK;
   }
+
+
+  /**
+ * Register loaded MAC mappings with ESP-NOW and store PCB names
+ */
+esp_err_t register_loaded_mappings_with_espnow(void) {
+  // Make sure ESP-NOW is properly initialized before proceeding
+  vTaskDelay(pdMS_TO_TICKS(500));
+
+  ESP_LOGI(TAG, "Registering %d loaded peers with ESP-NOW",
+           num_device_mappings);
+
+  for (int i = 0; i < num_device_mappings; i++) {
+    uint8_t device_addr = device_mappings[i].device_addr;
+    uint8_t *mac_addr = device_mappings[i].mac_addr;
+
+    // Skip invalid MACs
+    if (mac_addr[0] == 0 && mac_addr[1] == 0 && mac_addr[2] == 0 &&
+        mac_addr[3] == 0 && mac_addr[4] == 0 && mac_addr[5] == 0) {
+      continue;
+    }
+
+    // Add as ESP-NOW peer
+    if (esp_now_is_peer_exist(mac_addr) == false) {
+      esp_now_peer_info_t peer = {
+          .channel = CONFIG_ESPNOW_CHANNEL,
+          .ifidx = WIFI_IF_AP,
+          .encrypt = false,
+      };
+      memcpy(peer.peer_addr, mac_addr, ESP_NOW_ETH_ALEN);
+      esp_now_add_peer(&peer);
+    }
+
+    // Store a proper PCB name for this device to make it discoverable
+    // This is the critical part that was missing
+    const char *pcb_name = get_pcb_name(device_addr);
+    if (pcb_name != NULL) {
+      // Use the new API function instead of trying to access s_peer_info
+      // directly
+      espnow_store_peer_pcb_name(mac_addr, pcb_name);
+      ESP_LOGI(TAG, "Stored PCB name '%s' for MAC " MACSTR, pcb_name,
+               MAC2STR(mac_addr));
+      // Directly add to authenticated list instead of trying to authenticate
+      espnow_add_authenticated_peer(mac_addr);
+    }
+
+    // Now try to authenticate
+    vTaskDelay(pdMS_TO_TICKS(50)); // Small delay between operations
+    espnow_authenticate_peer(mac_addr);
+  }
+
+  return ESP_OK;
+}
+
+
+
+  /**
+ * Function to handle ESP-NOW device discovery with NVS support
+ */
+void espnow_discovery_task(void *pvParameters) {
+  ESP_LOGI(TAG, "Starting ESP-NOW device discovery task");
+
+  // Suspend valve control task during discovery/mapping
+  if (valveTaskHandle != NULL) {
+    ESP_LOGI(TAG, "Suspending valve control task during discovery/mapping");
+    vTaskSuspend(valveTaskHandle);
+  } else {
+    ESP_LOGW(TAG, "Valve task handle is NULL, cannot suspend");
+  }
+
+  bool run_discovery = true;
+  bool devices_initialized = false;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  // Check if we should try to load mappings from NVS
+  ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
+
+#ifdef CONFIG_ESPNOW_FORCE_DISCOVERY
+  ESP_LOGI(TAG, "Force discovery enabled - will run discovery regardless of "
+                "stored mappings");
+  run_discovery = true;
+#else
+  // Try to load mappings from NVS
+  if (nvs_has_valid_mappings()) {
+    ESP_LOGI(TAG, "Found valid device mappings in NVS, loading...");
+    esp_err_t err = load_device_mappings_from_nvs();
+
+    if (err == ESP_OK) {
+
+      register_loaded_mappings_with_espnow();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      // Verify loaded mappings
+      if (verify_device_mappings()) {
+        ESP_LOGI(TAG,
+                 "Successfully loaded and verified device mappings from NVS");
+        run_discovery = false; // Skip discovery
+        devices_initialized = true;
+        update_status_message("Using stored mappings");
+      } else {
+        ESP_LOGW(
+            TAG,
+            "Loaded mappings failed verification, falling back to discovery");
+        run_discovery = true;
+      }
+    } else {
+      ESP_LOGW(TAG, "Failed to load device mappings from NVS: %s",
+               esp_err_to_name(err));
+      run_discovery = true;
+    }
+  } else {
+    ESP_LOGI(TAG, "No valid device mappings found in NVS, will run discovery");
+    run_discovery = true;
+  }
+#endif // CONFIG_ESPNOW_FORCE_DISCOVERY
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+
+  if (run_discovery) {
+    // Start with a delay before discovery
+    ESP_LOGD(TAG, "Wait 3 seconds before starting discovery...");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    // Start discovery with authentication broadcasts
+    ESP_LOGI(TAG, "Starting peer discovery...");
+    espnow_start_discovery(20000); // 20 second discovery timeout
+
+    // Broadcast authentication multiple times during discovery
+    for (int i = 0; i < 5; i++) {
+      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
+      espnow_broadcast_auth();
+      vTaskDelay(pdMS_TO_TICKS(
+          CONFIG_ESPNOW_SEND_DELAY)); // Wait 2 seconds between broadcasts
+    }
+
+    // Wait for discovery to complete
+    ESP_LOGD(TAG, "Waiting for discovery to complete...");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+
+    // Update device mappings based on discovered peers
+    update_device_mappings_from_discovered_peers();
+
+    // Check if all required devices are found
+    bool all_devices_found = verify_device_mappings();
+
+    // Continue indefinitely until all devices are found
+    int attempt = 1;
+
+    while (!all_devices_found) {
+      ESP_LOGW(TAG, "Not all required devices found. Attempt %d to rediscover",
+               attempt);
+
+      // Show status message on LCD
+      update_status_message("Finding devices %d", attempt);
+
+      // Try again with longer discovery period
+      espnow_start_discovery(30000); // 30 second discovery timeout
+
+      // More authentication broadcasts
+      for (int i = 0; i < 5; i++) {
+        ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...",
+                 i + 1);
+        espnow_broadcast_auth();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+      }
+
+      // Brief delay before retry
+      vTaskDelay(pdMS_TO_TICKS(10000));
+
+      // Update device mappings based on discovered peers
+      update_device_mappings_from_discovered_peers();
+
+      // Try verification again
+      all_devices_found = verify_device_mappings();
+      attempt++;
+
+      // Every 5 attempts, log a more detailed message
+      if (attempt % 5 == 0) {
+        ESP_LOGW(TAG, "Still searching for devices after %d attempts", attempt);
+        // Refresh the status message periodically
+        update_status_message("Still searching %d", attempt);
+      }
+    }
+
+    ESP_LOGI(TAG, "All required devices found successfully after %d attempts",
+             attempt);
+    update_status_message("All devices found");
+    devices_initialized = true;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+    // Save the final device mappings to NVS for future use
+    ESP_LOGD(TAG, "Saving device mappings to NVS for future use");
+    esp_err_t err = save_device_mappings_to_nvs();
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to save device mappings to NVS: %s",
+               esp_err_to_name(err));
+    } else {
+      ESP_LOGI(TAG, "Device mappings successfully saved to NVS");
+    }
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  }
+
+  // Resume valve control task now that discovery is complete
+  if (valveTaskHandle != NULL && devices_initialized) {
+    ESP_LOGI(TAG, "Resuming valve control task after discovery/mapping");
+    vTaskResume(valveTaskHandle);
+  } else if (!devices_initialized) {
+    ESP_LOGE(TAG, "Device initialization failed, valve task not resumed");
+  } else {
+    ESP_LOGW(TAG, "Valve task handle is NULL, cannot resume");
+  }
+
+  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
+
+  // Task completed, delete itself
+  vTaskDelete(NULL);
+}
+
+
+/**
+ * @brief Save the current device-to-MAC mappings to NVS
+ *
+ * This function stores all device mappings in NVS for future use
+ * to avoid needing discovery on every boot.
+ *
+ * @return esp_err_t ESP_OK on success, or error code
+ */
+esp_err_t save_device_mappings_to_nvs(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+
+  // Open NVS namespace
+  err = nvs_open(NVS_MAPPING_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error opening NVS namespace: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  // Store number of mappings
+  err = nvs_set_u8(nvs_handle, NVS_MAPPING_COUNT_KEY, num_device_mappings);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error storing mapping count: %s", esp_err_to_name(err));
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  // Store each mapping
+  for (int i = 0; i < num_device_mappings; i++) {
+    char key[16]; // Buffer for key name
+
+    // Create key for device address
+    snprintf(key, sizeof(key), "%s%d_addr", NVS_MAPPING_PREFIX, i);
+    err = nvs_set_u8(nvs_handle, key, device_mappings[i].device_addr);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error storing device address %d: %s", i,
+               esp_err_to_name(err));
+      nvs_close(nvs_handle);
+      return err;
+    }
+
+    // Create key for MAC address (stored as blob)
+    snprintf(key, sizeof(key), "%s%d_mac", NVS_MAPPING_PREFIX, i);
+    err = nvs_set_blob(nvs_handle, key, device_mappings[i].mac_addr,
+                       ESP_NOW_ETH_ALEN);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error storing MAC address %d: %s", i,
+               esp_err_to_name(err));
+      nvs_close(nvs_handle);
+      return err;
+    }
+  }
+
+  // Commit changes
+  err = nvs_commit(nvs_handle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error committing NVS: %s", esp_err_to_name(err));
+  } else {
+    ESP_LOGI(TAG, "Successfully saved %d device-MAC mappings to NVS",
+             num_device_mappings);
+  }
+
+  // Close NVS
+  nvs_close(nvs_handle);
+  return err;
+}
+
+
+
+/**
+ * @brief Load device-to-MAC mappings from NVS
+ *
+ * This function loads previously stored device mappings from NVS
+ *
+ * @return esp_err_t ESP_OK on success, or error code
+ */
+esp_err_t load_device_mappings_from_nvs(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+
+  // Open NVS namespace
+  err = nvs_open(NVS_MAPPING_NAMESPACE, NVS_READONLY, &nvs_handle);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error opening NVS namespace: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  // Get number of mappings
+  uint8_t count = 0;
+  err = nvs_get_u8(nvs_handle, NVS_MAPPING_COUNT_KEY, &count);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Error retrieving mapping count: %s", esp_err_to_name(err));
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  // Safety check for mapping count
+  if (count > MAX_DEVICE_MAPPINGS) {
+    ESP_LOGW(TAG, "Stored mapping count (%d) exceeds maximum (%d), capping",
+             count, MAX_DEVICE_MAPPINGS);
+    count = MAX_DEVICE_MAPPINGS;
+  }
+
+  // Reset current mappings
+  num_device_mappings = 0;
+  memset(device_mappings, 0, sizeof(device_mappings));
+
+  // Load each mapping
+  for (int i = 0; i < count; i++) {
+    char key[16]; // Buffer for key name
+
+    // Get device address
+    snprintf(key, sizeof(key), "%s%d_addr", NVS_MAPPING_PREFIX, i);
+    err = nvs_get_u8(nvs_handle, key,
+                     &device_mappings[num_device_mappings].device_addr);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error retrieving device address %d: %s", i,
+               esp_err_to_name(err));
+      continue; // Skip this mapping but try others
+    }
+
+    // Get MAC address
+    snprintf(key, sizeof(key), "%s%d_mac", NVS_MAPPING_PREFIX, i);
+    size_t required_size = ESP_NOW_ETH_ALEN;
+    err = nvs_get_blob(nvs_handle, key,
+                       device_mappings[num_device_mappings].mac_addr,
+                       &required_size);
+    if (err != ESP_OK || required_size != ESP_NOW_ETH_ALEN) {
+      ESP_LOGE(TAG, "Error retrieving MAC address %d: %s (size: %d)", i,
+               esp_err_to_name(err), required_size);
+      continue; // Skip this mapping but try others
+    }
+
+    // Successfully loaded this mapping
+    uint8_t device_addr = device_mappings[num_device_mappings].device_addr;
+    uint8_t *mac_addr = device_mappings[num_device_mappings].mac_addr;
+
+    ESP_LOGI(TAG, "Loaded mapping %d: Device 0x%02X (%s) -> MAC " MACSTR,
+             num_device_mappings, device_addr, get_pcb_name(device_addr),
+             MAC2STR(mac_addr));
+
+    // Make sure this device is added as an ESP-NOW peer
+    if (esp_now_is_peer_exist(mac_addr) == false) {
+      esp_now_peer_info_t peer = {
+          .channel = 0, // Use current channel
+          .ifidx = WIFI_IF_AP,
+          .encrypt = false,
+      };
+      memcpy(peer.peer_addr, mac_addr, ESP_NOW_ETH_ALEN);
+      esp_now_add_peer(&peer);
+    }
+
+    // Authenticate the peer if needed
+    espnow_authenticate_peer(mac_addr);
+
+    num_device_mappings++;
+  }
+
+  // Close NVS
+  nvs_close(nvs_handle);
+
+  ESP_LOGI(TAG, "Successfully loaded %d device-MAC mappings from NVS",
+           num_device_mappings);
+  return ESP_OK;
+}
+
+
+// Enhanced version that checks for proper PCB names
+bool verify_device_mappings(void) {
+  ESP_LOGI(TAG, "Verifying all device mappings:");
+
+  // Get own MAC address
+  uint8_t own_mac[ESP_NOW_ETH_ALEN] = {0};
+  esp_err_t ret = espnow_get_own_mac(own_mac);
+  if (ret != ESP_OK) {
+    ESP_LOGW(TAG, "Failed to get own MAC address: %s", esp_err_to_name(ret));
+    esp_wifi_get_mac(WIFI_IF_AP, own_mac); // Fallback method
+  }
+
+  // Get our own PCB name using the library function
+  const char *self_pcb_name =
+      espnow_get_peer_name(NULL); // NULL returns own PCB name
+
+  // Check for critical devices first
+  #if CONFIG_RECEIVER
+  const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS, A_VALVE_ADDRESS,
+    B_VALVE_ADDRESS, PUMP_ADDRESS,SOIL_A,SOIL_B};
+  //    const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS,SOIL_B};
+  #endif
+
+  #if CONFIG_SENDER_A || CONFIG_SENDER_B || CONFIG_VALVE_A || CONFIG_VALVE_B || CONFIG_PUMP
+  const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS};
+  #endif
+  const int num_critical_devices = sizeof(critical_devices);
+  int found_devices = 0;
+  bool all_names_valid = true;
+
+  for (int i = 0; i < num_critical_devices; i++) {
+    uint8_t device_addr = critical_devices[i];
+    bool found = false;
+    uint8_t mac_addr[ESP_NOW_ETH_ALEN] = {0};
+
+    // Get the PCB name for this device address
+    const char *expected_pcb_name = get_pcb_name(device_addr);
+
+    // Find MAC for this device
+    for (int j = 0; j < num_device_mappings; j++) {
+      if (device_mappings[j].device_addr == device_addr) {
+        found = true;
+        memcpy(mac_addr, device_mappings[j].mac_addr, ESP_NOW_ETH_ALEN);
+        break;
+      }
+    }
+
+    // Check if this device matches our own PCB name (self device)
+    bool is_self_device = (self_pcb_name != NULL && expected_pcb_name != NULL &&
+                           strcasecmp(self_pcb_name, expected_pcb_name) == 0);
+
+    // Also check if the MAC address matches our own MAC
+    bool is_self_mac = (memcmp(mac_addr, own_mac, ESP_NOW_ETH_ALEN) == 0);
+
+    // If not found and this is our self device based on PCB name
+    if (!found && is_self_device) {
+      ESP_LOGI(TAG, "Device 0x%02X (%s): Self device, adding own MAC mapping",
+               device_addr, expected_pcb_name);
+
+      // Register our own MAC to this device address
+      register_device_mac_mapping(device_addr, own_mac);
+      found = true;
+      is_self_mac = true; // Now we're using our own MAC
+
+      // For logging purposes
+      memcpy(mac_addr, own_mac, ESP_NOW_ETH_ALEN);
+    }
+
+    if (found) {
+      found_devices++;
+      const char *pcb_name = espnow_get_peer_name(mac_addr);
+
+      // We can't authenticate with ourselves, so if this is our MAC,
+      // just report it as authenticated
+      bool is_authenticated =
+          is_self_mac ? true : espnow_is_authenticated(mac_addr);
+
+      ESP_LOGI(TAG, "Device 0x%02X (%s):", device_addr, expected_pcb_name);
+      ESP_LOGI(TAG, "  MAC: " MACSTR, MAC2STR(mac_addr));
+      ESP_LOGI(TAG, "  PCB Name: %s", pcb_name ? pcb_name : "Unknown");
+      ESP_LOGI(TAG, "  Authenticated: %s%s", is_authenticated ? "Yes" : "No",
+               is_self_mac ? " (Self device)" : "");
+
+      // Check if the PCB name is valid (not "Unknown-...")
+      bool valid_name = (pcb_name != NULL && pcb_name[0] != '\0' &&
+                         strncmp(pcb_name, "Unknown-", 8) != 0);
+
+      if (!valid_name && !is_self_mac) {
+        all_names_valid = false;
+        ESP_LOGW(TAG,
+                 "  Invalid PCB name for device 0x%02X - needs rediscovery",
+                 device_addr);
+
+        // Try to authenticate to get PCB name
+        espnow_authenticate_peer(mac_addr);
+      }
+
+      // If not authenticated or PCB name doesn't match, try to fix
+      // BUT only if it's not our own MAC address
+      if (!is_self_mac && (!is_authenticated || !valid_name)) {
+        ESP_LOGW(TAG,
+                 "  Issue detected - attempting to fix authentication/name");
+        espnow_authenticate_peer(mac_addr);
+
+        // Check if authentication fixed the issue
+        vTaskDelay(
+            pdMS_TO_TICKS(100)); // Brief delay for authentication to complete
+        bool now_authenticated = espnow_is_authenticated(mac_addr);
+        if (now_authenticated != is_authenticated) {
+          ESP_LOGI(TAG, "  Authentication %s for device 0x%02X",
+                   now_authenticated ? "succeeded" : "still pending",
+                   device_addr);
+        }
+      }
+    } else if (!is_self_device) {
+      // Only show warning if it's not our self device
+      ESP_LOGW(TAG, "Device 0x%02X (%s): NO MAPPING FOUND", device_addr,
+               expected_pcb_name);
+    }
+  }
+
+  // Check if all critical devices were found
+  bool all_found = (found_devices == num_critical_devices);
+
+  if (all_found) {
+    if (all_names_valid) {
+      ESP_LOGI(TAG,
+               "All critical devices found and verified successfully with "
+               "valid PCB names (%d/%d)",
+               found_devices, num_critical_devices);
+    } else {
+      ESP_LOGW(
+          TAG,
+          "All critical devices found (%d/%d) but some have invalid PCB names",
+          found_devices, num_critical_devices);
+    }
+  } else {
+    ESP_LOGW(TAG, "Not all critical devices were found (%d/%d)", found_devices,
+             num_critical_devices);
+  }
+
+  // Return success only if all devices are found AND have valid names
+  return (all_found && all_names_valid);
+}
+
+
+/**
+ * @brief Check if NVS has valid device-to-MAC mappings
+ *
+ * @return bool true if valid mappings exist, false otherwise
+ */
+bool nvs_has_valid_mappings(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+  bool result = false;
+
+  // Open NVS namespace
+  err = nvs_open(NVS_MAPPING_NAMESPACE, NVS_READONLY, &nvs_handle);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "NVS namespace not found: %s", esp_err_to_name(err));
+    return false;
+  }
+
+  // Check if the count key exists and has a value > 0
+  uint8_t count = 0;
+  err = nvs_get_u8(nvs_handle, NVS_MAPPING_COUNT_KEY, &count);
+  if (err == ESP_OK && count > 0) {
+    result = true;
+    ESP_LOGI(TAG, "Found %d device mappings in NVS", count);
+  } else {
+    ESP_LOGI(TAG, "No valid device mappings in NVS: %s",
+             err != ESP_OK ? esp_err_to_name(err) : "count is 0");
+  }
+
+  // Close NVS
+  nvs_close(nvs_handle);
+  return result;
+}
 
 
 
@@ -1647,35 +2232,30 @@ void vTaskESPNOW_TX(void *pvParameters) {
     bool at_least_one_peer_authenticated = false;
   
     // Give time for peer discovery
-    ESP_LOGI(TAG, "Starting peer discovery...");
-    espnow_start_discovery(5000);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    // ESP_LOGI(TAG, "Starting peer discovery...");
+    // espnow_start_discovery(5000);
+    // vTaskDelay(pdMS_TO_TICKS(5000));
   
     // Get our own PCB name for message inclusion
     const char *own_pcb_name = espnow_get_peer_name(NULL);
     espnow_message_t sensor_data;
-  
+    uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+    const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
+
+    uint8_t conductor_mac[ESP_NOW_ETH_ALEN];
+
+    get_mac_for_device(CONDUCTOR_ADDRESS, conductor_mac);
+    //const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
     while (1) {
       // Get authenticated peer count
       int auth_peer_count = espnow_get_peer_count();
       ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
   
-      if (auth_peer_count > 0) {
-        // If we just discovered our first peer, switch to 1-second interval
-        if (!at_least_one_peer_authenticated) {
-          ESP_LOGI(TAG, "At least one peer authenticated. Switching to 1-second "
-                        "send interval");
-          at_least_one_peer_authenticated = true;
-          send_interval = pdMS_TO_TICKS(1000); // 1 second interval
-        }
-  
-        // Get the first authenticated peer and send to it
-        uint8_t peer_mac[ESP_NOW_ETH_ALEN];
-        if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
-          const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
-  
+          if (espnow_get_peer_mac(0, peer_mac) == ESP_OK) 
+          
           // Check if there's sensor data available
-          if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+          if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) 
+          {
             // Get current timestamp
             char timestamp[20];
             time_t now = time(NULL);
@@ -1696,76 +2276,20 @@ void vTaskESPNOW_TX(void *pvParameters) {
               ESP_LOGE(TAG, "Message truncated!");
               msg_len = sizeof(message) - 1;
             }
-  
-            ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_pcb_name);
-            esp_err_t send_result = espnow_send(peer_mac, message, msg_len + 1);
+            
+              
+
+              esp_err_t send_result = espnow_send(peer_mac, message, msg_len + 1);
             if (send_result != ESP_OK) {
               ESP_LOGE(TAG, "Failed to send message: %s",
                        esp_err_to_name(send_result));
             }
-          } else {
-            // Send regular message without sensor data if queue is empty
-            char message[64];
-            snprintf(message, sizeof(message),
-                     "Hello from PCB:%s to PCB:%s! Count: %d", own_pcb_name,
-                     peer_pcb_name, message_count++);
-  
-            ESP_LOGI(TAG, "Sending to PCB %s: %s", peer_pcb_name, message);
-            esp_err_t send_result =
-                espnow_send(peer_mac, message, strlen(message) + 1);
-            if (send_result != ESP_OK) {
-              ESP_LOGE(TAG, "Failed to send message: %s",
-                       esp_err_to_name(send_result));
-            }
-          }
-        } else {
-          ESP_LOGE(TAG, "Failed to get MAC address for peer index 0");
-          // If getting the MAC address fails, restart discovery
-          espnow_start_discovery(5000);
-        }
-  
-        // Demonstration of changing our PCB name dynamically if needed
-        if (message_count % 30 == 0) {
-          char new_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
-          snprintf(new_pcb_name, sizeof(new_pcb_name), "SENSOR-%d",
-                   message_count / 30);
-          ESP_LOGI(TAG, "Changing PCB name to: %s", new_pcb_name);
-          espnow_set_pcb_name(new_pcb_name);
-          // Update our local reference
-          own_pcb_name = espnow_get_peer_name(NULL);
-        }
-      } else {
-        // Reset to 10-second interval if no peers are authenticated
-        if (at_least_one_peer_authenticated) {
-          ESP_LOGI(TAG, "No authenticated peers. Switching back to 10-second "
-                        "send interval");
-          at_least_one_peer_authenticated = false;
-          send_interval = pdMS_TO_TICKS(10000); // 10 seconds
-        }
-  
-        // No peers discovered yet, send broadcast
-        ESP_LOGI(TAG, "No peers yet, sending broadcast from PCB: %s",
-                 own_pcb_name);
-  
-        // Use the existing espnow_broadcast_auth function
-        espnow_broadcast_auth();
-  
-        // Also send a regular message for backward compatibility
-        char message[64];
-        snprintf(message, sizeof(message),
-                 "Broadcast from PCB:%s, looking for peers", own_pcb_name);
-        espnow_send(ESPNOW_BROADCAST_MAC, message, strlen(message) + 1);
-  
-        // Restart discovery periodically if no peers found
-        if (message_count % 5 == 0) {
-          ESP_LOGI(TAG, "Restarting peer discovery...");
-          espnow_start_discovery(5000);
-        }
-      }
-  
-      // Wait before sending next message
-      vTaskDelay(send_interval);
+            ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_mac);
+            //}
+          } 
+      //vTaskDelay(send_interval);
       message_count++;
+      vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
@@ -1784,17 +2308,17 @@ void vTaskESPNOW_RX(void *pvParameters)
         if (message_received) {
             // Print received data
             
-            ESP_LOGI(TAG, "Processing message from PCB: %s", last_sender_pcb_name);
+            ESP_LOGD("Debug", "Processing message from PCB: %s", last_sender_pcb_name);
 
-            ESP_LOGI(TAG, "\n=== Received Sensor Data ===");
+            ESP_LOGD("Debug", "\n=== Received Sensor Data ===");
             //ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
-            ESP_LOGI(TAG, "PCB Name: %s", recv_data.pcb_name);
-            ESP_LOGI(TAG, "Soil Moisture: %d%%",recv_data.soil_moisture);
-            ESP_LOGI(TAG, "Temperature: %d°C", recv_data.temperature);
-            ESP_LOGI(TAG, "Battery Level: %d%%", recv_data.battery_level);
-            ESP_LOGI(TAG, "Timestamp: %s", recv_data.timestamp);
-            ESP_LOGI(TAG, "Signal Strength: %d dBm", recv_data.rssi);
-            ESP_LOGI(TAG, "==========================\n");
+            ESP_LOGI("Debug", "PCB Name: %s", recv_data.pcb_name);
+            ESP_LOGI("Debug", "Soil Moisture: %d%%",recv_data.soil_moisture);
+            ESP_LOGD(TAG, "Temperature: %d°C", recv_data.temperature);
+            ESP_LOGD(TAG, "Battery Level: %d%%", recv_data.battery_level);
+            ESP_LOGD(TAG, "Timestamp: %s", recv_data.timestamp);
+            ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
+            ESP_LOGD(TAG, "==========================\n");
 
             // const char* signal_quality;
             // if (recv_data.rssi >= -50) {
@@ -1816,12 +2340,12 @@ void vTaskESPNOW_RX(void *pvParameters)
                 espnow_get_peer_name(NULL), (int)esp_get_free_heap_size());
                 espnow_send(last_sender_mac, response, strlen(response) + 1);
       
-             ESP_LOGI(TAG, "Sent status response to %s", last_sender_pcb_name);
+             ESP_LOGD(TAG, "Sent status response to %s", last_sender_pcb_name);
             }
 
             message_received = false;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 #endif
@@ -1918,5 +2442,70 @@ void vTaskESPNOW(void *pvParameters) {
       free(buffer);
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
+  }
+}
+
+
+void simulation_task(void *pvParameters) {
+  const char *TAG = "SimTask";
+  int scenario = 0;
+
+  while (1) {
+      switch (scenario) {
+          case 0:
+              ESP_LOGI(TAG, "Sim: Triggering Valve A irrigation");
+              int i =0;
+              while(i<=10)
+              {
+              recv_data.soil_moisture = 30;
+              strcpy(recv_data.pcb_name, "Sensor A PCB");
+              i++;
+              vTaskDelay(pdMS_TO_TICKS(1000));
+              }
+              break;
+
+          case 1:
+              ESP_LOGI(TAG, "Sim: Moisture A above threshold, should end irrigation");
+              recv_data.soil_moisture = 75;
+              strcpy(recv_data.pcb_name, "Sensor A PCB");
+              break;
+
+          case 2:
+              ESP_LOGI(TAG, "Sim: Triggering Valve B irrigation");
+              recv_data.soil_moisture = 30;
+              strcpy(recv_data.pcb_name, "Sensor B PCB");
+              break;
+
+          case 3:
+              ESP_LOGI(TAG, "Sim: Moisture B above threshold, should end irrigation");
+              recv_data.soil_moisture = 65;
+              break;
+
+        //   case 4:
+        //       ESP_LOGI(TAG, "Sim: Simulating low temperature (should block)");
+        //       recv_data.soil_moisture = 30;
+        //       strcpy(recv_data.pcb_name, "Sensor A PCB");
+        //  //   current_readings.temperature = 5.0; // Too low
+        //       break;
+
+        //   case 5:
+        //       ESP_LOGI(TAG, "Sim: Recovering temp");
+        //       current_readings.temperature = 25.0;
+        //       break;
+
+          case 4:
+              ESP_LOGI(TAG, "Sim: Simulating repeated failure to get ack");
+              Valve_A_Acknowledged = false;
+              Pump_Acknowledged = false;
+              // simulate timeout handling or retries here
+              break;
+
+          default:
+              scenario = -1; // reset
+              break;
+      }
+
+      scenario++;
+      vTaskDelay(pdMS_TO_TICKS(100000)); // wait before next simulation
   }
 }

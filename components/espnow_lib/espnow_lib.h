@@ -183,6 +183,11 @@ int espnow_get_peer_count(void);
  */
 esp_err_t espnow_get_peer_mac(int index, uint8_t *mac_addr);
 
+esp_err_t espnow_store_peer_pcb_name(const uint8_t *mac_addr,
+  const char *pcb_name);
+
+esp_err_t espnow_add_authenticated_peer(const uint8_t *mac_addr);
+
 /**
  * @brief Start peer discovery process
  *

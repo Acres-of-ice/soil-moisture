@@ -7,7 +7,7 @@
 
 
 // Constants
-#define GSM_UART_NUM UART_NUM_2
+#define GSM_UART_NUM 2
 #define GSM_TXD_PIN 33
 #define GSM_RXD_PIN 32
 #define GSM_INT_PIN 34

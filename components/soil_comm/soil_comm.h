@@ -65,12 +65,18 @@ void clearMessageQueue();
 // void processGSMMessage(comm_t *message);
 esp_err_t init_hex_buffer(void);
 
+esp_err_t register_loaded_mappings_with_espnow(void);
+void espnow_discovery_task(void *pvParameters);
+bool nvs_has_valid_mappings(void);
+bool verify_device_mappings(void);
+esp_err_t load_device_mappings_from_nvs(void);
+esp_err_t save_device_mappings_to_nvs(void);
 // Task and queue functions
 void vTaskESPNOW_TX(void *pvParameters);
 void vTaskESPNOW_RX(void *pvParameters);
 void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
                          uint8_t retries);
-//void reset_acknowledgements();
+void reset_acknowledgements();
 bool ESPNOW_isQueueEmpty();
 #define COMM_isQueueEmpty ESPNOW_isQueueEmpty
 // bool receivedConductorMessageRecently();
@@ -103,5 +109,6 @@ void update_device_mappings_from_discovered_peers(void);
 esp_err_t espnow_init2(void);
 //void wifi_init(void);
 void vTaskESPNOW(void *pvParameters);
+void simulation_task(void *pvParameters);
 
 #endif // ESPNOW_COM_H

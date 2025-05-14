@@ -11,7 +11,7 @@
     "files.associations": {
         "soil_comm.h": "c"
     },
-    "idf.portWin": "COM7",
+    "idf.portWin": "COM6",
     "idf.flashType": "UART",
     "idf.espIdfPathWin": "C:\\Users\\Nidhin\\esp\\v5.4.1\\esp-idf",
     "idf.toolsPathWin": "c:\\Users\\Nidhin\\.espressif",

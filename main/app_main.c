@@ -84,6 +84,12 @@ TaskHandle_t valveTaskHandle = NULL;
 #define LORA_APP_TASK_PRIORITY 12 // Highest priority
 #define LORA_APP_TASK_CORE_ID 0
 
+TaskHandle_t discoveryTaskHandle = NULL;
+#define COMM_TASK_STACK_SIZE (1024 * 6)
+#define COMM_TASK_PRIORITY 12 // Highest priority
+#define COMM_TASK_CORE_ID 0
+
+
 static const char *TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -244,14 +250,14 @@ void init_semaphores(void) {
 
 void pump_button_task(void *arg) {
   while (1) {
-    if (gpio_get_level(START_btn) == 0) {
+    if (gpio_get_level(START_btn) == 1) {
       button_state = BUTTON_START_PRESSED;
       ESP_LOGI(TAG, "START button pressed. Turning ON OUT_START for 1 second.");
       gpio_set_level(OUT_START, 1);
       vTaskDelay(pdMS_TO_TICKS(1000));
       gpio_set_level(OUT_START, 0);
       ESP_LOGI(TAG, "OUT_START turned OFF.");
-    } else if (gpio_get_level(STOP_btn) == 0) {
+    } else if (gpio_get_level(STOP_btn) == 1) {
       button_state = BUTTON_STOP_PRESSED;
       ESP_LOGI(TAG, "STOP button pressed. Turning ON OUT_STOP for 1 second.");
       gpio_set_level(OUT_STOP, 1);
@@ -268,11 +274,10 @@ void pump_button_task(void *arg) {
   }
 }
 
-void app_main(void) {
-  printf("\ninside main\n");
+void app_main(void) 
+{
 
-  // init_gpio_pump();
-
+  esp_log_level_set("Debug", ESP_LOG_DEBUG);
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
     ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -294,6 +299,15 @@ void app_main(void) {
   g_nodeAddress = SOIL_A;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
+vTaskDelay(pdMS_TO_TICKS(5000));
   xTaskCreate(&sensor_task, "read", 1024 * 4, NULL, 3, NULL);
   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
@@ -301,12 +315,22 @@ void app_main(void) {
   g_nodeAddress = SOIL_B;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
-  xTaskCreate(&sensor_task, "read", 1024 * 4, NULL, 3, NULL);
-  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
+
+vTaskDelay(pdMS_TO_TICKS(5000));
+   xTaskCreate(&sensor_task, "read", 1024 * 4, NULL, 3, NULL);
+   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
 
 #if CONFIG_RECEIVER
-  ESP_LOGI(TAG, "inside receive");
+  ESP_LOGI(TAG, "inside receiver");
 
   g_nodeAddress = CONDUCTOR_ADDRESS;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
@@ -327,6 +351,16 @@ void app_main(void) {
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
+
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
+vTaskDelay(pdMS_TO_TICKS(20000));;
 
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
@@ -355,6 +389,9 @@ void app_main(void) {
   }
 
 #endif
+
+  //xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
+  //xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, &g_nodeAddress, 5, NULL);
 
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
@@ -389,6 +426,15 @@ void app_main(void) {
   init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
+
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
@@ -400,6 +446,15 @@ void app_main(void) {
   init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
+
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
@@ -413,10 +468,19 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
+
+  xTaskCreatePinnedToCore(
+    espnow_discovery_task, "ESP-NOW Discovery",
+    COMM_TASK_STACK_SIZE,     // Stack size
+    NULL,                     // Parameters
+    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+    &discoveryTaskHandle,
+    COMM_TASK_CORE_ID // Core ID
+);
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
-  xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
+  //xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif
 }
