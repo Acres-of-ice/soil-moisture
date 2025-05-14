@@ -7,15 +7,15 @@
 #include <stdint.h>
 
 typedef struct {
-  float temperature;
-  float humidity;
-  float battery;
+  int Moisture_a;
+  int Moisture_b;
 } sensor_readings_t;
 
 typedef struct {
   uint8_t soil_moisture; // buf[0]
   uint8_t temperature;   // buf[2]
   uint8_t battery_level; // buf[3]
+  char pcb_name[32];
 } espnow_message_t;
 #define ESPNOW_MAX_PAYLOAD_SIZE 250 // Leave some room for headers
 // Message structure

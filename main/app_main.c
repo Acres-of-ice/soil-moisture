@@ -75,6 +75,10 @@ TaskHandle_t dataLoggingTaskHandle = NULL;
 #define DATA_LOG_TASK_PRIORITY 7
 #define DATA_LOG_TASK_CORE_ID 1
 
+#define SMS_TASK_STACK_SIZE (1024 * 8)
+#define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
+#define SMS_TASK_CORE_ID 0
+
 TaskHandle_t valveTaskHandle = NULL;
 #define VALVE_TASK_STACK_SIZE (1024 * 6)
 #define VALVE_TASK_PRIORITY 11
@@ -278,6 +282,7 @@ void app_main(void)
 {
 
   esp_log_level_set("Debug", ESP_LOG_DEBUG);
+  //esp_log_level_set("command", ESP_LOG_DEBUG);
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
     ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -298,6 +303,7 @@ void app_main(void)
 #if CONFIG_SENDER_A
   g_nodeAddress = SOIL_A;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+    static const char *pcb_a = "Soil_A";
   espnow_init2();
   xTaskCreatePinnedToCore(
     espnow_discovery_task, "ESP-NOW Discovery",
@@ -308,13 +314,15 @@ void app_main(void)
     COMM_TASK_CORE_ID // Core ID
 );
 vTaskDelay(pdMS_TO_TICKS(5000));
-  xTaskCreate(&sensor_task, "read", 1024 * 4, NULL, 3, NULL);
+  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_a, 3, NULL);
   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
 #if CONFIG_SENDER_B
   g_nodeAddress = SOIL_B;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  static const char *pcb_b = "Soil_B";
   espnow_init2();
+
   xTaskCreatePinnedToCore(
     espnow_discovery_task, "ESP-NOW Discovery",
     COMM_TASK_STACK_SIZE,     // Stack size
@@ -325,7 +333,7 @@ vTaskDelay(pdMS_TO_TICKS(5000));
 );
 
 vTaskDelay(pdMS_TO_TICKS(5000));
-   xTaskCreate(&sensor_task, "read", 1024 * 4, NULL, 3, NULL);
+   xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_b, 3, NULL);
    xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
 
@@ -351,6 +359,12 @@ vTaskDelay(pdMS_TO_TICKS(5000));
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
+
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+                          VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+                          VALVE_TASK_PRIORITY, &valveTaskHandle,
+                          VALVE_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(2000));
 
   xTaskCreatePinnedToCore(
     espnow_discovery_task, "ESP-NOW Discovery",
@@ -391,9 +405,9 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
 #endif
 
   //xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
-  //xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, &g_nodeAddress, 5, NULL);
+  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL, 5, NULL);
 
-  xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
+  //xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
   xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
@@ -409,11 +423,7 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
   //                               LCD_TASK_CORE_ID);
   //       vTaskDelay(pdMS_TO_TICKS(100));
   //     }
-  xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-                          VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-                          VALVE_TASK_PRIORITY, &valveTaskHandle,
-                          VALVE_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(2000));
+
   xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
