@@ -22,8 +22,11 @@
 #include "wifi_app.h"
 //#include "lcd.h"
 #include "data.h"
+#include "rtc_operations.h"
 
 
+
+extern int on_off_counter;
 // Tag used for ESP serial console messages
 static const char TAG[] = "SERVER";
 
@@ -518,8 +521,8 @@ static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req)
 
     static char resp[128];  // Increased buffer size
     snprintf(resp, sizeof(resp), 
-             "{\"temp\": %.1f,  \"humidity\": %.1f, \"battery\": %.1f, }", 
-             http_readings.temperature,  http_readings.humidity, http_readings.battery);
+             "{\"time\": %s,  \"counter\": %d,  \"Moisture A\": %d, \"Moisture B\": %d }", 
+            fetchTime(),on_off_counter, http_readings.Moisture_a,  http_readings.Moisture_b);
     
     ESP_LOGD(TAG, "Sending sensor readings: %s", resp);
     

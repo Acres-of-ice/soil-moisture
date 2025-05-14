@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "valve_control.h"
+#include "rtc_operations.h"
 
 
 
@@ -40,7 +41,7 @@
 
 #include "ra01s.h"
 
-const static char *TAG = "EXAMPLE";
+const static char *TAG = "WebApp";
 
 
 #define WIFI_SSID "myssid"
@@ -134,16 +135,14 @@ extern char *log_path;
 extern char *data_path;
 // Structure for plain float values
 
+extern int on_off_counter;
+sensor_readings_t readings = {.Moisture_a = 99.0f,
+    .Moisture_b = 99.0f};
 
-sensor_readings_t readings = {.temperature = 99.0f,
-    .humidity = 99.0f,
-    .battery = 99.0f};
+sensor_readings_t simulated_readings = {.Moisture_a = 15.0f,
+              .Moisture_b = 25.0f};
 
-sensor_readings_t simulated_readings = {.temperature = 15.0f,
-              .humidity = 25.0f,
-              .battery = 0.0f};
-
-
+ sensor_readings_t data_readings;
 // void i2c_init()
 // {
 //     i2c_config_t i2c_conf = {
@@ -569,114 +568,164 @@ void task_rx(void *pvParameters)
 
 #endif
 
-void sensor_task(void *pvParameters)
-{
-    static sensor_readings_t local_readings = {0};
-                 /*INITIALISING ADC FOR MOISTURE SENSOR*/
-        adc_oneshot_unit_handle_t adc1_handle;
-        adc_oneshot_unit_init_cfg_t init_config1 = {
-            .unit_id = ADC_UNIT_1,
-        };
-        ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
+// void sensor_task(void *pvParameters)
+// {
+//     static sensor_readings_t local_readings = {0};
+//                  /*INITIALISING ADC FOR MOISTURE SENSOR*/
+//         adc_oneshot_unit_handle_t adc1_handle;
+//         adc_oneshot_unit_init_cfg_t init_config1 = {
+//             .unit_id = ADC_UNIT_1,
+//         };
+//         ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
     
        
-        adc_oneshot_chan_cfg_t config = {
-            .bitwidth = ADC_BITWIDTH_DEFAULT,
-            .atten = EXAMPLE_ADC_ATTEN,
-        };
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN2, &config));
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN3, &config));
+//         adc_oneshot_chan_cfg_t config = {
+//             .bitwidth = ADC_BITWIDTH_DEFAULT,
+//             .atten = EXAMPLE_ADC_ATTEN,
+//         };
+//         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
+//         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN2, &config));
+//         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN3, &config));
 
             
-        //-------------ADC1 Calibration Init---------------//
-        adc_cali_handle_t adc1_cali_handle = NULL;
+//         //-------------ADC1 Calibration Init---------------//
+//         adc_cali_handle_t adc1_cali_handle = NULL;
 
-        adc_oneshot_unit_handle_t adc2_handle;
-        adc_oneshot_unit_init_cfg_t init_config2 = {
-            .unit_id = ADC_UNIT_2,
-            .ulp_mode = ADC_ULP_MODE_DISABLE,
-        };
-        ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config2, &adc2_handle));
-        adc_cali_handle_t adc2_cali_handle = NULL;
+//         adc_oneshot_unit_handle_t adc2_handle;
+//         adc_oneshot_unit_init_cfg_t init_config2 = {
+//             .unit_id = ADC_UNIT_2,
+//             .ulp_mode = ADC_ULP_MODE_DISABLE,
+//         };
+//         ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config2, &adc2_handle));
+//         adc_cali_handle_t adc2_cali_handle = NULL;
         
     
-         /*INITIALISING ONE WIRE AND SEARCHING FOR DS18B20 FOR TEMPERATURE SENSOR*/
-     onewire_bus_handle_t bus = NULL;
-     onewire_bus_config_t bus_config = {
-         .bus_gpio_num = EXAMPLE_ONEWIRE_BUS_GPIO,
-     };
-     onewire_bus_rmt_config_t rmt_config = {
-         .max_rx_bytes = 10,  
-     };
-     ESP_ERROR_CHECK(onewire_new_bus_rmt(&bus_config, &rmt_config, &bus));
+//          /*INITIALISING ONE WIRE AND SEARCHING FOR DS18B20 FOR TEMPERATURE SENSOR*/
+//      onewire_bus_handle_t bus = NULL;
+//      onewire_bus_config_t bus_config = {
+//          .bus_gpio_num = EXAMPLE_ONEWIRE_BUS_GPIO,
+//      };
+//      onewire_bus_rmt_config_t rmt_config = {
+//          .max_rx_bytes = 10,  
+//      };
+//      ESP_ERROR_CHECK(onewire_new_bus_rmt(&bus_config, &rmt_config, &bus));
 
-     // Search for DS18B20 devices
-     int ds18b20_device_num = 0;
-     ds18b20_device_handle_t ds18b20s[EXAMPLE_ONEWIRE_MAX_DS18B20];
-     onewire_device_iter_handle_t iter = NULL;
-     onewire_device_t next_onewire_device;
-     esp_err_t search_result = ESP_OK;
+//      // Search for DS18B20 devices
+//      int ds18b20_device_num = 0;
+//      ds18b20_device_handle_t ds18b20s[EXAMPLE_ONEWIRE_MAX_DS18B20];
+//      onewire_device_iter_handle_t iter = NULL;
+//      onewire_device_t next_onewire_device;
+//      esp_err_t search_result = ESP_OK;
  
 
-    if (espnow_queue == NULL){
-     espnow_queue = xQueueCreate(30, sizeof(espnow_message_t));
-     if (espnow_queue == NULL) {
-      ESP_LOGE(TAG, "Failed to create  queue");
-     }
-     }
+//     if (espnow_queue == NULL){
+//      espnow_queue = xQueueCreate(30, sizeof(espnow_message_t));
+//      if (espnow_queue == NULL) {
+//       ESP_LOGE(TAG, "Failed to create  queue");
+//      }
+//      }
 
-    while (1) 
-    {
-        //for (int i = 0; i < ds18b20_device_num; i++) {
-        int raw_moisture = adc_raw_1[0][0];
-        int raw_battery  = adc_raw_3[0][0];
+//     while (1) 
+//     {
+//         //for (int i = 0; i < ds18b20_device_num; i++) {
+//         int raw_moisture = adc_raw_1[0][0];
+//         int raw_battery  = adc_raw_3[0][0];
 
-        float temperature = 0.0;
+//         float temperature = 0.0;
         
+//         int calibrated_moisture = (DRY_ADC_VALUE - raw_moisture) * 100 / (DRY_ADC_VALUE - MOIST_ADC_VALUE);
+        
+//         // Clamp between 0 and 100 to avoid out-of-bounds values
+//         if (calibrated_moisture < 0) calibrated_moisture = 0;
+//         if (calibrated_moisture > 100) calibrated_moisture = 100;
+
+//         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
+//         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
+
+//         espnow_message_t message;
+
+//         message.soil_moisture = (uint8_t)calibrated_moisture;
+//         message.temperature = (uint8_t)temperature;
+//         message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+
+        
+//         ESP_LOGI(TAG, "ADC Raw Value (Channel 1): %d", adc_raw_1[0][0]);
+//         ESP_LOGI(TAG, "Soil Moisture: %d%%", message.soil_moisture);
+//         update_moisture_readings(message.soil_moisture);
+//         UBaseType_t available = uxQueueSpacesAvailable(espnow_queue);
+//         ESP_LOGI("SensorTask", "Queue space available: %d", available);
+        
+//         if (espnow_queue != NULL) {
+//             if (xQueueSend(espnow_queue, &message, pdMS_TO_TICKS(100)) != pdTRUE) {
+//                 ESP_LOGE("SensorTask", "Failed to send data to queue");
+//             }
+//         }
+//         local_readings.humidity = (uint8_t)calibrated_moisture;
+//         local_readings.temperature = (uint8_t)temperature;
+//         local_readings.battery = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+//             // Now take mutex only for the quick copy operation
+//         if (readings_mutex == NULL) 
+//         {
+//           readings_mutex = xSemaphoreCreateMutex();
+//         }
+//     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+//         // Quick memcpy to update the shared readings
+//         memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+//         xSemaphoreGive(readings_mutex);
+//       }
+//         vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+// }
+
+void sensor_task(void *pvParameters) {
+    const char *pcb_name = (const char *)pvParameters;
+
+    // Init ADC for moisture sensor (assume EXAMPLE_ADC1_CHAN1 used)
+    adc_oneshot_unit_handle_t adc1_handle;
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
+
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = EXAMPLE_ADC_ATTEN,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, EXAMPLE_ADC1_CHAN1, &config));
+
+    // Ensure queue exists
+    if (espnow_queue == NULL) {
+        espnow_queue = xQueueCreate(30, sizeof(espnow_message_t));
+        if (espnow_queue == NULL) {
+            ESP_LOGE("SensorTask", "Failed to create espnow_queue");
+        }
+    }
+
+    while (1) {
+        int raw_moisture = 0;
+        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &raw_moisture));
+
+        // Calibrate moisture
         int calibrated_moisture = (DRY_ADC_VALUE - raw_moisture) * 100 / (DRY_ADC_VALUE - MOIST_ADC_VALUE);
-        
-        // Clamp between 0 and 100 to avoid out-of-bounds values
         if (calibrated_moisture < 0) calibrated_moisture = 0;
         if (calibrated_moisture > 100) calibrated_moisture = 100;
 
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN1, &adc_raw_1[0][0]));
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN3, &adc_raw_3[0][0]));
-
+        // Prepare and send message
         espnow_message_t message;
-
         message.soil_moisture = (uint8_t)calibrated_moisture;
-        message.temperature = (uint8_t)temperature;
-        message.battery_level = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
+        strncpy(message.pcb_name, pcb_name, sizeof(message.pcb_name) - 1);
+        message.pcb_name[sizeof(message.pcb_name) - 1] = '\0';
 
-        
-        ESP_LOGI(TAG, "ADC Raw Value (Channel 1): %d", adc_raw_1[0][0]);
-        ESP_LOGI(TAG, "Soil Moisture: %d%%", message.soil_moisture);
-        update_moisture_readings(message.soil_moisture);
-        UBaseType_t available = uxQueueSpacesAvailable(espnow_queue);
-        ESP_LOGI("SensorTask", "Queue space available: %d", available);
-        
-        if (espnow_queue != NULL) {
-            if (xQueueSend(espnow_queue, &message, pdMS_TO_TICKS(100)) != pdTRUE) {
-                ESP_LOGE("SensorTask", "Failed to send data to queue");
-            }
+        if (xQueueSend(espnow_queue, &message, pdMS_TO_TICKS(100)) != pdTRUE) {
+            ESP_LOGE("SensorTask", "Failed to send moisture data");
+        } else {
+            ESP_LOGI("SensorTask", "Moisture: %d%% (%s)", message.soil_moisture, pcb_name);
         }
-        local_readings.humidity = (uint8_t)calibrated_moisture;
-        local_readings.temperature = (uint8_t)temperature;
-        local_readings.battery = (uint8_t)((adc_raw_3[0][0] * 100) / 4095);
-            // Now take mutex only for the quick copy operation
-        if (readings_mutex == NULL) 
-        {
-          readings_mutex = xSemaphoreCreateMutex();
-        }
-    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-        // Quick memcpy to update the shared readings
-        memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
-        xSemaphoreGive(readings_mutex);
-      }
-        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        vTaskDelay(pdMS_TO_TICKS(3000));  // Delay before next reading
     }
 }
+
 
 void lora_init()
 {
@@ -729,9 +778,9 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
     //     output_readings->battery = simulated_readings.battery;
     //   } else {
         // Copy all readings
-        output_readings->temperature = readings.temperature;
-        output_readings->humidity = readings.humidity;
-        output_readings->battery = readings.battery;
+        output_readings->Moisture_a = readings.Moisture_a;
+        output_readings->Moisture_b = readings.Moisture_b;
+        
      // }
       // Added: Log all sensor values at debug level
     //   ESP_LOGD(TAG,
@@ -753,7 +802,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
   {
     
     char data_entry[256];
-    static sensor_readings_t data_readings;
+    
   
     while (1) {
       if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
@@ -763,9 +812,9 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       get_sensor_readings(&data_readings);
       
       snprintf(data_entry, sizeof(data_entry),
-               "%.2f,%.2f,%.2f\n",
-                data_readings.temperature, data_readings.humidity,
-                data_readings.battery);
+               "%s,%d,%d,%d\n",
+                fetchTime(), on_off_counter,data_readings.Moisture_a,
+                data_readings.Moisture_b);
     
       // Added error handling for file append operation
       if (!appendFile(data_path, data_entry)) {
@@ -871,12 +920,12 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       ESP_LOGE(TAG, "Failed to acquire file mutex");
       return false;
     }
-    ESP_LOGI(TAG,"inside data logging 2");
+    //ESP_LOGI(TAG,"inside data logging 2");
     // Check SPIFFS space
     if (is_path_in_spiffs(path)) {
       size_t message_size = strlen(message);
       size_t total, used, free_space;
-      ESP_LOGI(TAG,"inside data logging 3");
+      //ESP_LOGI(TAG,"inside data logging 3");
       get_spiffs_usage(&total, &used);
       free_space = total - used;
   

@@ -351,7 +351,8 @@ void setup_conductor_buttons(void) {
 //   }
 }
 
-void button_task(void *pvParameters) {
+void button_task(void *pvParameters) 
+{
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   button_event_t ev;
   QueueHandle_t button_events = initialize_button_queue(nodeAddress);

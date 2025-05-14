@@ -46,7 +46,7 @@ extern SemaphoreHandle_t file_mutex;
 
 BackupInfo backup_info[2] = {{"data.csv", 0, 0}, {"log.csv", 0, 0}};
 const char *DATA_FILE_HEADER =
-    "moisture, Temp, Battery, Time";
+    "Time,Counter,Moisture A, Moisture B";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
@@ -815,6 +815,68 @@ esp_err_t truncate_file_start(const char *path, size_t new_size) {
 // bool is_path_in_spiffs(const char *path) {
 //   return strncmp(path, SPIFFS_MOUNT_POINT, strlen(SPIFFS_MOUNT_POINT)) == 0;
 // }
+
+// bool appendFile(const char *path, const char *message) {
+//   ESP_LOGV(TAG, "Appending to file: %s", path);
+//   bool success = false;
+
+//   // Take mutex with timeout
+//   if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+//     ESP_LOGE(TAG, "Failed to acquire file mutex");
+//     return false;
+//   }
+
+//   // Check SPIFFS space
+//   if (is_path_in_spiffs(path)) {
+//     size_t message_size = strlen(message);
+//     size_t total, used, free_space;
+//     get_spiffs_usage(&total, &used);
+//     free_space = total - used;
+
+//     if (free_space < message_size ||
+//         (used + message_size > total * SPIFFS_SAFE_USAGE)) {
+//       ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest entries");
+//       double space_to_free = (total * 0.1) + message_size;
+//       esp_err_t data_remove_result =
+//           remove_oldest_entries(data_path, space_to_free / 2);
+//       esp_err_t log_remove_result =
+//           remove_oldest_entries(log_path, space_to_free / 2);
+
+//       if (data_remove_result != ESP_OK && log_remove_result != ESP_OK) {
+//         ESP_LOGE(
+//             TAG,
+//             "Failed to remove oldest entries from both data and log files");
+//         xSemaphoreGive(file_mutex);
+//         return false;
+//       }
+//     }
+//   }
+
+//   FILE *file = fopen(path, "a");
+//   if (!file) {
+//     ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
+//     xSemaphoreGive(file_mutex);
+//     return false;
+//   }
+
+//   // Write to file
+//   if (fputs(message, file) == EOF) {
+//     ESP_LOGE(TAG, "Failed to append to file: %s", path);
+//   } else {
+//     fflush(file);
+//     success = true;
+//   }
+
+//   if (fclose(file) != 0) {
+//     ESP_LOGE(TAG, "Failed to close file properly: %s", path);
+//     success = false;
+//   }
+
+//   // Release mutex
+//   xSemaphoreGive(file_mutex);
+//   return success;
+// }
+
 
 // bool appendFile(const char *path, const char *message) {
 //   ESP_LOGV(TAG, "Appending to file: %s", path);

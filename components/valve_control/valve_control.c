@@ -36,6 +36,9 @@ static sensor_readings_t current_readings;
 extern espnow_recv_data_t recv_data;
 extern char last_sender_pcb_name[20];
 
+extern int moisture_a;
+extern int moisture_b;
+
 extern int on_off_counter;
 
 bool errorConditionMet = false;
@@ -105,10 +108,6 @@ const char *valveStateToString(ValveState state) {
     return "Valve A open";
   case STATE_B_VALVE_OPEN:
     return "Valve B open";
-  case STATE_A_FEEDBACK:
-    return "SA Fdbck";
-  case STATE_B_FEEDBACK:
-    return "SB Fdbck";
   case STATE_A_VALVE_CLOSE:
     return "Valve A close";
   case STATE_B_VALVE_CLOSE:
@@ -204,58 +203,66 @@ static bool isStateTimedOut(ValveState state) {
 }
 
 void simulate_irrigation_workflow(void *arg) {
-    uint8_t g_nodeaddress = *((uint8_t *)arg);
-    ESP_LOGI("SIMULATION", "Simulation started for node address: 0x%02X", g_nodeaddress);
-
+    int state = 0;
+    //sensor_readings_t moisture_readings = {0};
+    ESP_LOGI("Simulate","inside simulate");
     while (true) {
-        // --------------------------------------------------
-        // Step 1: Sector A - Valve ON, Pump ON (1m 30s)
-        // --------------------------------------------------
-        recv_data.soil_moisture = 30;
-        strcpy(recv_data.pcb_name, "Sensor A PCB");
-        Valve_A_Acknowledged = false;
-        Pump_Acknowledged = false;
+        switch (state) {
+            case 0:  // Case 1: Sensor A dry (moisture < 40)
+                moisture_a = 30;
+                moisture_b = 60; // Assume Sensor B is neutral
+                // strcpy(recv_data.pcb_name, "Sensor A PCB");
+                // recv_data.soil_moisture = moisture_readings.Moisture_a;
 
-        // ESP_LOGI("SIMULATION", "Sector A irrigation started...");
-        // sendCommandWithRetry(A_VALVE_ADDRESS, 0x11, g_nodeaddress);  // Open Valve A
-        // vTaskDelay(pdMS_TO_TICKS(500));  // Short delay to simulate relay timing
-        // sendCommandWithRetry(PUMP_ADDRESS, 0x11, g_nodeaddress);     // Start Pump
-         vTaskDelay(pdMS_TO_TICKS(90 * 1000));  // 1 minute 30 seconds
+                ESP_LOGI("SIMULATION", "Case 1: Sensor A dry (Moisture_a = %d)", moisture_a);
+                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                state++;
+                break;
 
-        // ESP_LOGI("SIMULATION", "Sector A irrigation done. Closing valve and pump.");
-        // sendCommandWithRetry(A_VALVE_ADDRESS, 0x10, g_nodeaddress);  // Close Valve A
-        // vTaskDelay(pdMS_TO_TICKS(500));
-        // sendCommandWithRetry(PUMP_ADDRESS, 0x10, g_nodeaddress);     // Stop Pump
-        // vTaskDelay(pdMS_TO_TICKS(2000));
+            case 1:  // Case 2: Sensor A wet (moisture > 70)
+                moisture_a = 75;
+                moisture_b = 60;
+                //strcpy(recv_data.pcb_name, "Sensor A PCB");
+                //recv_data.soil_moisture = moisture_readings.Moisture_a;
 
-        // --------------------------------------------------
-        // Step 2: Sector B - Valve ON, Pump ON (1m 30s)
-        // --------------------------------------------------
-        recv_data.soil_moisture = 30;
-        strcpy(recv_data.pcb_name, "Sensor B PCB");
-        Valve_B_Acknowledged = false;
-        Pump_Acknowledged = false;
+                ESP_LOGI("SIMULATION", "Case 2: Sensor A wet (Moisture_a = %d)", moisture_a);
+                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                state++;
+                break;
 
-        // ESP_LOGI("SIMULATION", "Sector B irrigation started...");
-        // sendCommandWithRetry(B_VALVE_ADDRESS, 0x11, g_nodeaddress);  // Open Valve B
-        // vTaskDelay(pdMS_TO_TICKS(500));
-        // sendCommandWithRetry(PUMP_ADDRESS, 0x11, g_nodeaddress);     // Start Pump
-         vTaskDelay(pdMS_TO_TICKS(90 * 1000));  // 1 minute 30 seconds
+            case 2:  // Case 3: Sensor B dry (moisture < 40)
+                moisture_a = 75;
+                moisture_b = 35;
+                // strcpy(recv_data.pcb_name, "Sensor B PCB");
+                // recv_data.soil_moisture = moisture_readings.Moisture_b;
 
-        // ESP_LOGI("SIMULATION", "Sector B irrigation done. Closing valve and pump.");
-        // sendCommandWithRetry(B_VALVE_ADDRESS, 0x10, g_nodeaddress);  // Close Valve B
-        // vTaskDelay(pdMS_TO_TICKS(500));
-        // sendCommandWithRetry(PUMP_ADDRESS, 0x10, g_nodeaddress);     // Stop Pump
-        // vTaskDelay(pdMS_TO_TICKS(3000));
+                ESP_LOGI("SIMULATION", "Case 3: Sensor B dry (Moisture_b = %d)", moisture_b);
+                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                state++;
+                break;
 
-        ESP_LOGI("SIMULATION", "Cycle complete. Restarting...\n");
+            case 3:  // Case 4: Sensor B wet (moisture > 70)
+                moisture_a = 75;
+                moisture_b = 80;
+                // strcpy(recv_data.pcb_name, "Sensor B PCB");
+                // recv_data.soil_moisture = moisture_readings.Moisture_b;
+
+                ESP_LOGI("SIMULATION", "Case 4: Sensor B wet (Moisture_b = %d)", moisture_b);
+                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                state = 0; // Restart the cycle
+                break;
+
+            default:
+                state = 0;
+                break;
+        }
     }
 }
 
 
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
-  ESP_LOGI(TAG, "inside LOGI");
+  //ESP_LOGI(TAG, "inside LOGI");
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
@@ -269,15 +276,20 @@ void updateValveState(void *pvParameters) {
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
       vTaskDelay(1000);
-      // recv_data.soil_moisture = 10;
-      // if (recv_data.soil_moisture < 20 && strcmp(recv_data.pcb_name, "Sensor
-      // A PCB") == 0)
-      if ( recv_data.soil_moisture < 40 &&
-          strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
+
+      // if ( recv_data.soil_moisture < 40 &&
+      //     strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
+      if(moisture_a<40 && isWithinDrainTimeRange())
+      {
         newState = STATE_A_VALVE_OPEN;
-      } else if ( recv_data.soil_moisture < 40 &&
-                 strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
+        on_off_counter++;
+      } 
+      // else if ( recv_data.soil_moisture < 40 &&
+      //            strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
+      else if (moisture_b<40 && isWithinDrainTimeRange())
+      {
         newState = STATE_B_VALVE_OPEN;
+        on_off_counter++;
       } else {
         newState = STATE_IDLE;
       }
@@ -290,21 +302,11 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      on_off_counter++;
+      
       newState = STATE_PUMP_ON_A;
       stateEntryTime = xTaskGetTickCount();
       break;
-    // case STATE_A_FEEDBACK:
-    //   if (DRAIN_NOTE_feedback)
-    //   {
-    //     ESP_LOGI(TAG,"Fdbck received from Valve A");
-    //     newState = STATE_PUMP_ON_A;
-    //     break;
-    //   }
-    //     ESP_LOGI(TAG,"Fdbck receive failed from Valve A");
-    //     newState = STATE_IDLE;
-    //     vTaskDelay(1000);
-    //     break;
+
     case STATE_PUMP_ON_A:
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
@@ -315,17 +317,15 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_START_A;
       break;
     case STATE_IRR_START_A:
-      // while(recv_data.soil_moisture < 80 && strcmp(recv_data.pcb_name,
-      // "Sensor A PCB") == 0)
-      while (recv_data.soil_moisture < 70 &&
-             strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
-              ESP_LOGI(TAG, "IRR A: Moisture = %d", recv_data.soil_moisture);
-        ESP_LOGI(TAG, "IRR A");
-        vTaskDelay(2000);
+      while (moisture_a < 70) {
+      ESP_LOGI(TAG, "Waiting for Sensor A: %d%%", moisture_a);
+      vTaskDelay(pdMS_TO_TICKS(5000));
       }
+
+      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%", moisture_a);
       reset_acknowledgements();
       newState = STATE_PUMP_OFF_A;
-      break;
+     break;
 
     case STATE_PUMP_OFF_A:
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
@@ -347,7 +347,7 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
-      case STATE_IRR_DONE_A:
+    case STATE_IRR_DONE_A:
       ESP_LOGI(TAG, "IRR A done");
       on_off_counter ++;
       newState = STATE_IDLE;
@@ -359,21 +359,10 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      on_off_counter++;
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;
-      //  case STATE_B_FEEDBACK:
-      //    if (DRAIN_NOTE_feedback)
-      //    {
-      //      ESP_LOGI(TAG,"Fdbck received from Valve B");
-      //      newState = STATE_PUMP_ON_B;
-      //      break;
-      //    }
-      //      ESP_LOGI(TAG,"Fdbck receive failed from Valve B");
-      //      newState = STATE_IDLE;
-      //      vTaskDelay(1000);
-      //      break;
+
     case STATE_PUMP_ON_B:
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
@@ -384,14 +373,15 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_START_B;
       break;
     case STATE_IRR_START_B:
-      while (recv_data.soil_moisture < 70 &&
-             strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
-        ESP_LOGI(TAG, "Doing irrigation for sector B");
-        vTaskDelay(1000);
+      while (moisture_b < 70) {
+      ESP_LOGI(TAG, "Waiting for Sensor B: %d%%", moisture_b);
+      vTaskDelay(pdMS_TO_TICKS(5000));
       }
+
+      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%", moisture_b);
       reset_acknowledgements();
       newState = STATE_PUMP_OFF_B;
-      break;
+     break;
 
     case STATE_PUMP_OFF_B:
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
@@ -480,143 +470,143 @@ bool isWithinDrainTimeRange(void) {
 #endif
 }
 
-bool canExitErrorState() {
-  get_sensor_readings(&current_readings);
+// bool canExitErrorState() {
+//   get_sensor_readings(&current_readings);
 
-  return (current_readings.temperature > tfreeze);
-}
+//   return (current_readings.temperature > tfreeze);
+// }
 
-bool IRR_A(void) {
-  static uint32_t last_error_time = 0;
-  if (!AUTO_mode) {
-    return false;
-  }
-  get_sensor_readings(&current_readings);
+// bool IRR_A(void) {
+//   static uint32_t last_error_time = 0;
+//   if (!AUTO_mode) {
+//     return false;
+//   }
+//   get_sensor_readings(&current_readings);
 
-  temperature_state_t temp_state =
-      get_temperature_state(current_readings.temperature);
-  moisture_state_t moisture_state =
-      get_moisture_state(current_readings.humidity);
+//   temperature_state_t temp_state =
+//       get_temperature_state(current_readings.temperature);
+//   moisture_state_t moisture_state =
+//       get_moisture_state(current_readings.humidity);
 
-  if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
-    uint32_t current_time = xTaskGetTickCount();
-    if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-      ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
-               current_readings.temperature);
-      last_error_time = current_time;
-    }
-    return false;
-  }
+//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
+//     uint32_t current_time = xTaskGetTickCount();
+//     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
+//                current_readings.temperature);
+//       last_error_time = current_time;
+//     }
+//     return false;
+//   }
 
-  // if (current_readings.water_temp != 0) {
+//   // if (current_readings.water_temp != 0) {
 
-  //   if (current_readings.water_temp < 0) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGE(TAG, "Frozen pipe");
-  //       last_error_time = current_time;
-  //     }
-  //   }
+//   //   if (current_readings.water_temp < 0) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGE(TAG, "Frozen pipe");
+//   //       last_error_time = current_time;
+//   //     }
+//   //   }
 
-  //   if (water_state == WATER_HOT) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "water hot");
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
+//   //   if (water_state == WATER_HOT) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "water hot");
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
 
-  //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
-  //                current_readings.water_temp, current_readings.temperature);
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
+//   //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
+//   //                current_readings.water_temp, current_readings.temperature);
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
 
-  //   if (water_state != WATER_NORMAL) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
-  //                current_readings.water_temp);
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
-  // }
+//   //   if (water_state != WATER_NORMAL) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
+//   //                current_readings.water_temp);
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
+//   // }
 
-  // ESP_LOGD(TAG, "SPRAY:OK");
-  return true;
-}
+//   // ESP_LOGD(TAG, "SPRAY:OK");
+//   return true;
+// }
 
-bool IRR_B(void) {
-  static uint32_t last_error_time = 0;
-  if (!AUTO_mode) {
-    return false;
-  }
-  get_sensor_readings(&current_readings);
+// bool IRR_B(void) {
+//   static uint32_t last_error_time = 0;
+//   if (!AUTO_mode) {
+//     return false;
+//   }
+//   get_sensor_readings(&current_readings);
 
-  temperature_state_t temp_state =
-      get_temperature_state(current_readings.temperature);
-  moisture_state_t moisture_state =
-      get_moisture_state(current_readings.humidity);
+//   temperature_state_t temp_state =
+//       get_temperature_state(current_readings.temperature);
+//   moisture_state_t moisture_state =
+//       get_moisture_state(current_readings.humidity);
 
-  if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
-    uint32_t current_time = xTaskGetTickCount();
-    if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-      ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
-               current_readings.temperature);
-      last_error_time = current_time;
-    }
-    return false;
-  }
+//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
+//     uint32_t current_time = xTaskGetTickCount();
+//     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
+//                current_readings.temperature);
+//       last_error_time = current_time;
+//     }
+//     return false;
+//   }
 
-  // if (current_readings.water_temp != 0) {
+//   // if (current_readings.water_temp != 0) {
 
-  //   if (current_readings.water_temp < 0) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGE(TAG, "Frozen pipe");
-  //       last_error_time = current_time;
-  //     }
-  //   }
+//   //   if (current_readings.water_temp < 0) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGE(TAG, "Frozen pipe");
+//   //       last_error_time = current_time;
+//   //     }
+//   //   }
 
-  //   if (water_state == WATER_HOT) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "water hot");
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
+//   //   if (water_state == WATER_HOT) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "water hot");
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
 
-  //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
-  //                current_readings.water_temp, current_readings.temperature);
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
+//   //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
+//   //                current_readings.water_temp, current_readings.temperature);
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
 
-  //   if (water_state != WATER_NORMAL) {
-  //     uint32_t current_time = xTaskGetTickCount();
-  //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-  //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
-  //                current_readings.water_temp);
-  //       last_error_time = current_time;
-  //     }
-  //     return false;
-  //   }
-  // }
+//   //   if (water_state != WATER_NORMAL) {
+//   //     uint32_t current_time = xTaskGetTickCount();
+//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
+//   //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
+//   //                current_readings.water_temp);
+//   //       last_error_time = current_time;
+//   //     }
+//   //     return false;
+//   //   }
+//   // }
 
-  // ESP_LOGD(TAG, "SPRAY:OK");
-  return true;
-}
+//   // ESP_LOGD(TAG, "SPRAY:OK");
+//   return true;
+// }
 // bool doDrain(void) {
 //   if (!AUTO_mode || (on_off_counter % 2 != 0)) {
 //     return false; // Early exit if conditions not met
