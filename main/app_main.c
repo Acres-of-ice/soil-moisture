@@ -94,7 +94,6 @@ TaskHandle_t discoveryTaskHandle = NULL;
 #define COMM_TASK_PRIORITY 12 // Highest priority
 #define COMM_TASK_CORE_ID 0
 
-
 static const char *TAG = "main";
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -281,11 +280,10 @@ void pump_button_task(void *arg) {
   }
 }
 
-void app_main(void) 
-{
+void app_main(void) {
 
   esp_log_level_set("Debug", ESP_LOG_DEBUG);
-  //esp_log_level_set("command", ESP_LOG_DEBUG);
+  // esp_log_level_set("command", ESP_LOG_DEBUG);
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
     ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -306,17 +304,17 @@ void app_main(void)
 #if CONFIG_SENDER_A
   g_nodeAddress = SOIL_A;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-    static const char *pcb_a = "Soil_A";
+  static const char *pcb_a = "Soil_A";
   espnow_init2();
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
-vTaskDelay(pdMS_TO_TICKS(5000));
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
+  vTaskDelay(pdMS_TO_TICKS(5000));
   xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_a, 3, NULL);
   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
@@ -327,17 +325,17 @@ vTaskDelay(pdMS_TO_TICKS(5000));
   espnow_init2();
 
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
 
-vTaskDelay(pdMS_TO_TICKS(5000));
-   xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_b, 3, NULL);
-   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
+  vTaskDelay(pdMS_TO_TICKS(5000));
+  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_b, 3, NULL);
+  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
 
 #if CONFIG_RECEIVER
@@ -363,21 +361,22 @@ vTaskDelay(pdMS_TO_TICKS(5000));
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
-    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+  xTaskCreatePinnedToCore(updateValveState, "updateValveState",
                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
                           VALVE_TASK_PRIORITY, &valveTaskHandle,
                           VALVE_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
 
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
-vTaskDelay(pdMS_TO_TICKS(20000));;
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
+  vTaskDelay(pdMS_TO_TICKS(20000));
+  ;
 
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
@@ -407,8 +406,14 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
 
 #endif
 
+<<<<<<< HEAD
   //xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
   //xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL, 5, NULL);
+=======
+  // xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
+  //  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL,
+  //  5, NULL);
+>>>>>>> 09d3c08ef1225eca21ae94d4bb81281fd039c131
 
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
@@ -441,13 +446,13 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
   espnow_init2();
 
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
@@ -461,13 +466,13 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
   espnow_init2();
 
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
@@ -483,17 +488,17 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
   espnow_init2();
 
   xTaskCreatePinnedToCore(
-    espnow_discovery_task, "ESP-NOW Discovery",
-    COMM_TASK_STACK_SIZE,     // Stack size
-    NULL,                     // Parameters
-    (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-    &discoveryTaskHandle,
-    COMM_TASK_CORE_ID // Core ID
-);
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
                           LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
                           LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
-  //xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
+  // xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif
 }
