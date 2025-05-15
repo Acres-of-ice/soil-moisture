@@ -929,26 +929,36 @@ void processValveMessage(comm_t *message) {
   if (relay == 1) {  // Only supporting POSITIVE (1)
     if (state == 1) {
         // VALVE ON: POSITIVE polarity + OE pulse (long)
-        ESP_LOGI(TAG, "Turning ON valve");
+        ESP_LOGI("solenoid", "Turning ON valve");
 
         gpio_set_level(RELAY_POSITIVE, 1);
         gpio_set_level(RELAY_NEGATIVE, 0);
-
+       
+        vTaskDelay(pdMS_TO_TICKS(1000));
         gpio_set_level(OE_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(15));  // ON pulse duration
+        vTaskDelay(pdMS_TO_TICKS(30));  // ON pulse duration
         gpio_set_level(OE_PIN, 0);
 
-        ESP_LOGI(TAG, "Valve ON complete");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        gpio_set_level(RELAY_POSITIVE, 0);
+        //gpio_set_level(RELAY_NEGATIVE, 0);
+
+        ESP_LOGI("solenoid ", "Valve ON complete");
     } else if (state == 0) {
         // VALVE OFF: NEGATIVE polarity + OE pulse (short)
-        ESP_LOGI(TAG, "Turning OFF valve");
+        ESP_LOGI("solenoid", "Turning OFF valve");
 
         gpio_set_level(RELAY_POSITIVE, 0);
         gpio_set_level(RELAY_NEGATIVE, 1);
-
+       
+        vTaskDelay(pdMS_TO_TICKS(1000));
         gpio_set_level(OE_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(15));  // OFF pulse duration
+        vTaskDelay(pdMS_TO_TICKS(30));  // OFF pulse duration
         gpio_set_level(OE_PIN, 0);
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        //gpio_set_level(RELAY_POSITIVE, 0);
+        gpio_set_level(RELAY_NEGATIVE, 0);
 
         ESP_LOGI(TAG, "Valve OFF complete");
     } else {
@@ -2070,9 +2080,9 @@ bool verify_device_mappings(void) {
 
   // Check for critical devices first
   #if CONFIG_RECEIVER
-  const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS, A_VALVE_ADDRESS,
-    B_VALVE_ADDRESS, PUMP_ADDRESS,SOIL_A,SOIL_B};
-  //    const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS,SOIL_B};
+  // const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS, A_VALVE_ADDRESS,
+  //   B_VALVE_ADDRESS, PUMP_ADDRESS,SOIL_A,SOIL_B};
+      const uint8_t critical_devices[] = {SOIL_A,SOIL_B};
   #endif
 
   #if CONFIG_SENDER_A || CONFIG_SENDER_B || CONFIG_VALVE_A || CONFIG_VALVE_B || CONFIG_PUMP
@@ -2233,7 +2243,8 @@ bool nvs_has_valid_mappings(void) {
 
 
 
-// void vTaskESPNOW_TX(void *pvParameters) {
+// void vTaskESPNOW_TX(void *pvParameters) 
+// {
 
 //     int message_count = 0;
 //     TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
@@ -2297,81 +2308,120 @@ bool nvs_has_valid_mappings(void) {
 //           } 
 //       //vTaskDelay(send_interval);
 //       message_count++;
-//       vTaskDelay(pdMS_TO_TICKS(5000));
+//       vTaskDelay(pdMS_TO_TICKS(3000));
 //     }
 // }
 
-
-void vTaskESPNOW_TX(void *pvParameters) 
-{
-    TickType_t cycle_start = xTaskGetTickCount();
-    TickType_t cycle_delay = pdMS_TO_TICKS(5000);
-    TickType_t soil_b_offset = pdMS_TO_TICKS(3000);
-
+void vTaskESPNOW_TX(void *pvParameters) {
+    int message_count = 0;
     const char *own_pcb_name = espnow_get_peer_name(NULL);
-    espnow_message_t sensor_data_a, sensor_data_b;
-    bool has_a = false, has_b = false;
-    uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+    espnow_message_t sensor_data;
 
     while (1) {
-        // ------------------------
-        // Step 1: Drain queue into A or B
-        // ------------------------
-        espnow_message_t temp_msg;
-        while (xQueueReceive(espnow_queue, &temp_msg, 0) == pdTRUE) {
-            if (strcmp(temp_msg.pcb_name, "Soil_A") == 0) {
-                sensor_data_a = temp_msg;
-                has_a = true;
-            } else if (strcmp(temp_msg.pcb_name, "Soil_B") == 0) {
-                sensor_data_b = temp_msg;
-                has_b = true;
-            }
+        if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+            // Format the sensor message string
+            char message_str[64];
+            snprintf(message_str, sizeof(message_str),
+                     "PCB:%s Count:%d S[%d]",
+                     own_pcb_name,
+                     message_count++,
+                     sensor_data.soil_moisture);
+
+            // Prepare a comm_t message
+            comm_t message = {
+                .address = CONDUCTOR_ADDRESS,
+                .command = 0xA3,
+                .source = g_nodeAddress,
+                .retries = 0,
+                .seq_num = 0,
+                .data = {0}
+            };
+            strncpy(message.data, message_str, sizeof(message.data) - 1);
+
+            // Use ESPNOW_queueMessage to send to the conductor
+            ESPNOW_queueMessage(message.address, message.command, message.source, message.retries);
+
+            // Log for debugging
+            ESP_LOGI(TAG, "Queued sensor message: %s", message.data);
         }
 
-        // ------------------------
-        // Step 2: Send Soil A at t = 0s
-        // ------------------------
-        if (has_a && espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
-            char message[128];
-            char timestamp[20];
-            time_t now = time(NULL);
-            strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-            snprintf(message, sizeof(message),
-                     "PCB:%s Count:A S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
-                     sensor_data_a.soil_moisture, sensor_data_a.battery_level,
-                     sensor_data_a.temperature, timestamp);
-
-            espnow_send(peer_mac, message, strlen(message) + 1);
-            ESP_LOGI("TX", "Sent Soil A Data");
-        }
-
-        // ------------------------
-        // Step 3: Delay to 3s, then send Soil B
-        // ------------------------
-        vTaskDelayUntil(&cycle_start, soil_b_offset);
-
-        if (has_b && espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
-            char message[128];
-            char timestamp[20];
-            time_t now = time(NULL);
-            strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-            snprintf(message, sizeof(message),
-                     "PCB:%s Count:B S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
-                     sensor_data_b.soil_moisture, sensor_data_b.battery_level,
-                     sensor_data_b.temperature, timestamp);
-
-            espnow_send(peer_mac, message, strlen(message) + 1);
-            ESP_LOGI("TX", "Sent Soil B Data");
-        }
-
-        // ------------------------
-        // Step 4: Wait for full cycle (5s)
-        // ------------------------
-        vTaskDelayUntil(&cycle_start, cycle_delay);
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
+
+
+
+
+// void vTaskESPNOW_TX(void *pvParameters) 
+// {
+//     TickType_t cycle_start = xTaskGetTickCount();
+//     TickType_t cycle_delay = pdMS_TO_TICKS(5000);
+//     TickType_t soil_b_offset = pdMS_TO_TICKS(3000);
+
+//     const char *own_pcb_name = espnow_get_peer_name(NULL);
+//     espnow_message_t sensor_data_a, sensor_data_b;
+//     bool has_a = false, has_b = false;
+//     uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+
+//     while (1) {
+//         // ------------------------
+//         // Step 1: Drain queue into A or B
+//         // ------------------------
+//         espnow_message_t temp_msg;
+//         while (xQueueReceive(espnow_queue, &temp_msg, 0) == pdTRUE) {
+//             if (strcmp(temp_msg.pcb_name, "Soil_A") == 0) {
+//                 sensor_data_a = temp_msg;
+//                 has_a = true;
+//             } else if (strcmp(temp_msg.pcb_name, "Soil_B") == 0) {
+//                 sensor_data_b = temp_msg;
+//                 has_b = true;
+//             }
+//         }
+
+//         // ------------------------
+//         // Step 2: Send Soil A at t = 0s
+//         // ------------------------
+//         if (has_a && espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
+//             char message[128];
+//             char timestamp[20];
+//             time_t now = time(NULL);
+//             strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+//             snprintf(message, sizeof(message),
+//                      "PCB:%s Count:A S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+//                      sensor_data_a.soil_moisture, sensor_data_a.battery_level,
+//                      sensor_data_a.temperature, timestamp);
+
+//             espnow_send(peer_mac, message, strlen(message) + 1);
+//             ESP_LOGI("TX", "Sent Soil A Data");
+//         }
+
+//         // ------------------------
+//         // Step 3: Delay to 3s, then send Soil B
+//         // ------------------------
+//         vTaskDelayUntil(&cycle_start, soil_b_offset);
+
+//         if (has_b && espnow_get_peer_mac(0, peer_mac) == ESP_OK) {
+//             char message[128];
+//             char timestamp[20];
+//             time_t now = time(NULL);
+//             strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+//             snprintf(message, sizeof(message),
+//                      "PCB:%s Count:B S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+//                      sensor_data_b.soil_moisture, sensor_data_b.battery_level,
+//                      sensor_data_b.temperature, timestamp);
+
+//             espnow_send(peer_mac, message, strlen(message) + 1);
+//             ESP_LOGI("TX", "Sent Soil B Data");
+//         }
+
+//         // ------------------------
+//         // Step 4: Wait for full cycle (5s)
+//         // ------------------------
+//         vTaskDelayUntil(&cycle_start, cycle_delay);
+//     }
+// }
 
 
 
@@ -2393,7 +2443,7 @@ void vTaskESPNOW_RX(void *pvParameters)
 
             ESP_LOGD("Sensor", "\n=== Received Sensor Data ===");
             //ESP_LOGI(TAG, "From MAC: " MACSTR, MAC2STR(recv_data.mac));
-            ESP_LOGD("Sensor", "PCB Name: %s", recv_data.pcb_name);
+            ESP_LOGI("Sensor", "PCB Name: %s", recv_data.pcb_name);
             ESP_LOGI("Sensor", "Soil Moisture: %d%%",recv_data.soil_moisture);
             ESP_LOGD(TAG, "Temperature: %d°C", recv_data.temperature);
             ESP_LOGD(TAG, "Battery Level: %d%%", recv_data.battery_level);

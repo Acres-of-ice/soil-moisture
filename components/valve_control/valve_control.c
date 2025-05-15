@@ -11,6 +11,7 @@
 #include "soil_comm.h"
 #include "valve_control.h"
 #include "wifi_app.h"
+#include "calibrate.h"
 
 static const char *TAG = "ValveControl";
 extern SemaphoreHandle_t stateMutex;
@@ -25,6 +26,7 @@ float tpipe_normal = 10 / 10.0f;
 extern TaskHandle_t valveTaskHandle;
 bool SPRAY_mode = pdFALSE;
 bool DRAIN_mode = pdFALSE;
+extern bool calibration_done;
 
 static ValveState currentState = STATE_IDLE;
 static TickType_t stateEntryTime = 0;
@@ -53,6 +55,36 @@ static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
 
 static const char *PRESSURE_STATE_STR[] = {
     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
+
+
+
+    typedef struct {
+  bool has_temp_humidity;
+  bool has_flowmeter;
+  bool has_pressure;
+  bool has_adc_water_temp;
+  bool has_wind_sensor;
+  bool has_gsm;
+  bool has_relay;
+  bool has_camera;
+  bool has_valve;
+  bool simulate;
+  // Add more sensor flags as needed
+} site_config_t;
+
+    const site_config_t site_config = {
+    //.has_temp_humidity = CONFIG_ENABLE_TEMP_HUMIDITY,
+    .has_flowmeter = CONFIG_ENABLE_FLOWMETER,
+    .has_pressure = CONFIG_ENABLE_PRESSURE,
+    .has_adc_water_temp = CONFIG_ENABLE_ADC_WATER_TEMP,
+    .has_wind_sensor = CONFIG_ENABLE_WIND_SENSOR,
+    //.has_gsm = CONFIG_ENABLE_GSM,
+    //.has_relay = CONFIG_ENABLE_RELAY,
+    //.has_valve = CONFIG_ENABLE_VALVE,
+    //.simulate = CONFIG_ENABLE_SIMULATION_MODE
+    };
+
+//extern const site_config_t site_config;
 
 bool Valve_A_Acknowledged = false;
 bool Valve_B_Acknowledged = false;
@@ -86,15 +118,15 @@ static moisture_state_t get_moisture_state(float humidity) {
   return MOISTURE_LOW;
 }
 
-// static pressure_state_t get_pressure_state(float pressure,
-//                                            float mean_pressure) {
-//   if (!calibration_done)
-//     return PRESSURE_NORMAL;
-//   if (pressure < mean_pressure * 0.7 || pressure > mean_pressure * 1.3) {
-//     return PRESSURE_OUT_OF_RANGE;
-//   }
-//   return PRESSURE_NORMAL;
-// }
+static pressure_state_t get_pressure_state(float pressure,
+                                           float mean_pressure) {
+  if (!calibration_done)
+    return PRESSURE_NORMAL;
+  if (pressure < mean_pressure * 0.7 || pressure > mean_pressure * 1.3) {
+    return PRESSURE_OUT_OF_RANGE;
+  }
+  return PRESSURE_NORMAL;
+}
 
 const char *valveStateToString(ValveState state) {
   switch (state) {
@@ -103,7 +135,7 @@ const char *valveStateToString(ValveState state) {
   case STATE_IRR_START_A:
     return "IRR A Start";
   case STATE_IRR_START_B:
-    return "IRR A Start";
+    return "IRR B Start";
   case STATE_A_VALVE_OPEN:
     return "Valve A open";
   case STATE_B_VALVE_OPEN:
@@ -215,7 +247,7 @@ void simulate_irrigation_workflow(void *arg) {
                 // recv_data.soil_moisture = moisture_readings.Moisture_a;
 
                 ESP_LOGI("SIMULATION", "Case 1: Sensor A dry (Moisture_a = %d)", moisture_a);
-                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));  // 2 minutes
                 state++;
                 break;
 
@@ -226,7 +258,7 @@ void simulate_irrigation_workflow(void *arg) {
                 //recv_data.soil_moisture = moisture_readings.Moisture_a;
 
                 ESP_LOGI("SIMULATION", "Case 2: Sensor A wet (Moisture_a = %d)", moisture_a);
-                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                vTaskDelay(pdMS_TO_TICKS(20 * 60 * 1000));  // 2 minutes
                 state++;
                 break;
 
@@ -237,7 +269,7 @@ void simulate_irrigation_workflow(void *arg) {
                 // recv_data.soil_moisture = moisture_readings.Moisture_b;
 
                 ESP_LOGI("SIMULATION", "Case 3: Sensor B dry (Moisture_b = %d)", moisture_b);
-                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));
                 state++;
                 break;
 
@@ -248,7 +280,7 @@ void simulate_irrigation_workflow(void *arg) {
                 // recv_data.soil_moisture = moisture_readings.Moisture_b;
 
                 ESP_LOGI("SIMULATION", "Case 4: Sensor B wet (Moisture_b = %d)", moisture_b);
-                vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000));  // 2 minutes
+                vTaskDelay(pdMS_TO_TICKS(20 * 60 * 1000)); // 2 minutes
                 state = 0; // Restart the cycle
                 break;
 
@@ -359,6 +391,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(100000);
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -394,7 +427,7 @@ void updateValveState(void *pvParameters) {
       newState = STATE_B_VALVE_CLOSE;
       break;
     case STATE_B_VALVE_CLOSE:
-      if (!sendCommandWithRetry(A_VALVE_ADDRESS, 0x10, nodeAddress)) {
+      if (!sendCommandWithRetry(B_VALVE_ADDRESS, 0x10, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
         newState = STATE_IDLE;
         vTaskDelay(1000);

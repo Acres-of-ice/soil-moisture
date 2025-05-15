@@ -9,6 +9,7 @@
 typedef struct {
   int Moisture_a;
   int Moisture_b;
+  float fountain_pressure;
 } sensor_readings_t;
 
 typedef struct {

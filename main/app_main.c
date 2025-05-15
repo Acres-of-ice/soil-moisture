@@ -47,6 +47,7 @@
 #define OUT_STOP 3
 
 int on_off_counter = 1;
+bool calibration_done = false;
 
 bool lcd_device_ready = false;
 #define LCD_TASK_STACK_SIZE (1024 * 4)
@@ -112,6 +113,8 @@ TaskHandle_t smsManagerTaskHandle = NULL;
 
 QueueHandle_t message_queue = NULL;
 #define MAX_QUEUE_SIZE 8
+
+
 
 espnow_config_t config = {
     .pcb_name = pcb_name,        // Set the PCB name
@@ -405,9 +408,9 @@ vTaskDelay(pdMS_TO_TICKS(20000));;
 #endif
 
   //xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
-  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL, 5, NULL);
+  //xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL, 5, NULL);
 
-  //xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
+  xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
   xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,

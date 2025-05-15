@@ -267,6 +267,30 @@ menu "SX126X Configuration"
 		  default 0 if LOG_SAVE_LEVEL_NONE
 		  default 1 if LOG_SAVE_LEVEL_ERROR
 		  default 2 if LOG_SAVE_LEVEL_WARN
+
+    config CALIBRATION_DURATION_M
+        int "Calibration duration (minutes)"
+        default 1 if SITE_TEST
+        default 4
+        range 1 60
+        help
+            Set the interval in minutes for calibration task.
+
+    config ERROR_DURATION_M
+        int "Error duration (minutes)"
+        default 2 if SITE_TEST
+        default 120
+        range 1 600
+        help
+           Set the interval in minutes for calibration task.
+
+    config POLL_INTERVAL_S
+        int "Poll interval (seconds)"
+        default 1 if SITE_TEST
+        default 3
+        range 1 60
+        help
+            Set the interval in seconds between sensor readings.
   
 	  endmenu
 
@@ -356,6 +380,46 @@ menu "Hardware Configuration"
 		int
 		default 1 if HAS_RELAY
 		default 0
+
+	config HAS_WIND_SENSOR
+        bool "Enable Wind Sensor"
+        default y
+        help
+            Enable if site has a wind sensor.
+    config ENABLE_WIND_SENSOR
+        int
+        default 1 if HAS_WIND_SENSOR
+        default 0
+
+    config HAS_FLOWMETER
+        bool "Enable Flowmeter"
+        default y
+         help
+                Enable if site has a flowmeter.
+    config ENABLE_FLOWMETER
+        int
+        default 1 if HAS_FLOWMETER
+        default 0
+
+    config HAS_PRESSURE
+        bool "Enable pressure sensor"
+        default y
+        help
+            Enable if site has a pressure sensor.
+    config ENABLE_PRESSURE
+        int
+        default 1 if HAS_PRESSURE
+        default 0
+
+    config HAS_ADC_WATER_TEMP
+        bool "Enable ADC Water Temperature Sensor"
+        default n
+        help
+             Enable if site has a water temperature sensor.
+    config ENABLE_ADC_WATER_TEMP
+        int
+        default 1 if HAS_ADC_WATER_TEMP
+        default 0
 endmenu
 
 config ENABLE_DRAIN_TIME_CONFIG
