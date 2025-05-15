@@ -268,18 +268,11 @@ void simulate_irrigation_workflow(void *arg) {
       // strcpy(recv_data.pcb_name, "Sensor B PCB");
       // recv_data.soil_moisture = moisture_readings.Moisture_b;
 
-<<<<<<< HEAD
-                ESP_LOGI("SIMULATION", "Case 1: Sensor A dry (Moisture_a = %d)", moisture_a);
-                vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));  // 2 minutes
-                state++;
-                break;
-=======
       ESP_LOGI("SIMULATION", "Case 3: Sensor B dry (Moisture_b = %d)",
                moisture_b);
       vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
       state++;
       break;
->>>>>>> 09d3c08ef1225eca21ae94d4bb81281fd039c131
 
     case 1: // Case 4: Sensor B wet (moisture > 70)
       moisture_a = 75;
@@ -287,39 +280,6 @@ void simulate_irrigation_workflow(void *arg) {
       // strcpy(recv_data.pcb_name, "Sensor B PCB");
       // recv_data.soil_moisture = moisture_readings.Moisture_b;
 
-<<<<<<< HEAD
-                ESP_LOGI("SIMULATION", "Case 2: Sensor A wet (Moisture_a = %d)", moisture_a);
-                vTaskDelay(pdMS_TO_TICKS(20 * 60 * 1000));  // 2 minutes
-                state++;
-                break;
-
-            case 2:  // Case 3: Sensor B dry (moisture < 40)
-                moisture_a = 75;
-                moisture_b = 35;
-                // strcpy(recv_data.pcb_name, "Sensor B PCB");
-                // recv_data.soil_moisture = moisture_readings.Moisture_b;
-
-                ESP_LOGI("SIMULATION", "Case 3: Sensor B dry (Moisture_b = %d)", moisture_b);
-                vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));
-                state++;
-                break;
-
-            case 3:  // Case 4: Sensor B wet (moisture > 70)
-                moisture_a = 75;
-                moisture_b = 80;
-                // strcpy(recv_data.pcb_name, "Sensor B PCB");
-                // recv_data.soil_moisture = moisture_readings.Moisture_b;
-
-                ESP_LOGI("SIMULATION", "Case 4: Sensor B wet (Moisture_b = %d)", moisture_b);
-                vTaskDelay(pdMS_TO_TICKS(20 * 60 * 1000)); // 2 minutes
-                state = 0; // Restart the cycle
-                break;
-
-            default:
-                state = 0;
-                break;
-        }
-=======
       ESP_LOGI("SIMULATION", "Case 4: Sensor B wet (Moisture_b = %d)",
                moisture_b);
       vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
@@ -329,7 +289,6 @@ void simulate_irrigation_workflow(void *arg) {
     default:
       state = 0;
       break;
->>>>>>> 09d3c08ef1225eca21ae94d4bb81281fd039c131
     }
   }
 }

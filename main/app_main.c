@@ -376,7 +376,7 @@ void app_main(void) {
       COMM_TASK_CORE_ID // Core ID
   );
   vTaskDelay(pdMS_TO_TICKS(20000));
-  ;
+  
 
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
@@ -406,14 +406,9 @@ void app_main(void) {
 
 #endif
 
-<<<<<<< HEAD
-  //xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
-  //xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL, 5, NULL);
-=======
   // xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
   //  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL,
   //  5, NULL);
->>>>>>> 09d3c08ef1225eca21ae94d4bb81281fd039c131
 
   xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
 
