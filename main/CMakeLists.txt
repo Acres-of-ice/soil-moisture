@@ -7,11 +7,11 @@ set(SRCS_LIST
     "lcd.c"
     # "gsm.c"
     "soil_comm.c"
+    "sensor.c"
+    "ads1x1x.c"
 )
 
 if(CONFIG_MASTER)
-    list(APPEND SRCS_LIST "sensor.c")
-    list(APPEND SRCS_LIST "ads1x1x.c")
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
 endif()

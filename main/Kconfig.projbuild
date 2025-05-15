@@ -117,6 +117,12 @@ menu "RTC Configuration"
 			Minute to set (0-59)
 endmenu
 
+config ENABLE_HW
+    bool "Enable Hardware Configuration"
+    default false
+    help
+        Enable to customize hardware settings. If disabled, site defaults will be used.
+
 menu "Hardware Configuration"
 	visible if ENABLE_HW
 

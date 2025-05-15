@@ -1,4 +1,5 @@
 #include "data.h"
+#include "define.h"
 #include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
@@ -20,10 +21,7 @@
 #include "sensor.h"
 #include "valve_control.h"
 
-#define BACKUP_INTERVAL_MS (10 * 60000)
-#define DATA_TIME_MS (2 * 60000)
 #define SPIFFS_SAFE_USAGE 0.65
-#define CONFIG_LOG_SAVE_LEVEL 1
 #define SD_FREQ_HZ 25000000 // 4 MHz for SD card
 #define HOST_ID SPI2_HOST
 #define SD_PIN_NUM_MISO 19
@@ -45,124 +43,13 @@ spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
 
 BackupInfo backup_info[2] = {{"data.csv", 0, 0}, {"log.csv", 0, 0}};
-const char *DATA_FILE_HEADER = "Time,Counter,Moisture A, Moisture B";
+const char *DATA_FILE_HEADER =
+    CONFIG_SITE_NAME " Time, Counter, Soil A, Soil B, Temp, Humidity, Voltage,"
+                     "Pressure, Water temp, Discharge\n";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
-// data_statistics_t data_stats = {0};
-
-// // Initialize moving average structure
-// void init_data_statistics(void) {
-//   memset(&data_stats, 0, sizeof(data_statistics_t));
-//   strncpy(data_stats.last_data_time, fetchTime(),
-//           sizeof(data_stats.last_data_time) - 1);
-//   data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
-
-//   // Try to load previous statistics from SPIFFS if you want persistence
-//   // This is optional but useful to maintain counts across reboots
-//   FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "rb");
-//   if (stats_file != NULL) {
-//     fread(&data_stats, sizeof(data_statistics_t), 1, stats_file);
-//     fclose(stats_file);
-//     ESP_LOGI(TAG, "Loaded existing statistics: %lu total data points",
-//              data_stats.total_data_points);
-//   }
-// }
-
-// void save_data_statistics(void) {
-//   FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "wb");
-//   if (stats_file != NULL) {
-//     fwrite(&data_stats, sizeof(data_statistics_t), 1, stats_file);
-//     fclose(stats_file);
-//   }
-// }
-
-// void update_data_statistics(const char *site_name) {
-//   data_stats.total_data_points++;
-//   strncpy(data_stats.last_data_time, fetchTime(),
-//           sizeof(data_stats.last_data_time) - 1);
-//   data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
-
-//   // Update site-specific counter
-//   if (strcmp(site_name, "Ig") == 0) {
-//     data_stats.site_data_points[0]++;
-//   } else if (strcmp(site_name, "Ay") == 0) { // Add your actual site names
-//     data_stats.site_data_points[1]++;
-//   } else if (strcmp(site_name, "Ur") == 0) { // Add your actual site names
-//     data_stats.site_data_points[2]++;
-//   } else if (strcmp(site_name, "Ku") == 0) { // Add your actual site names
-//     data_stats.site_data_points[3]++;
-//   } else if (strcmp(site_name, "Li") == 0) { // Add your actual site names
-//     data_stats.site_data_points[4]++;
-//   } else if (strcmp(site_name, "Sa") == 0) { // Add your actual site names
-//     data_stats.site_data_points[5]++;
-//   } else if (strcmp(site_name, "St") == 0) { // Add your actual site names
-//     data_stats.site_data_points[6]++;
-//   } else if (strcmp(site_name, "Tu") == 0) { // Add your actual site names
-//     data_stats.site_data_points[7]++;
-//   } else if (strcmp(site_name, "Ot") == 0) { // Add your actual site names
-//     data_stats.site_data_points[8]++;
-//   }
-
-//   // Save statistics periodically (e.g., every 10 data points)
-//   if (data_stats.total_data_points % 10 == 0) {
-//     save_data_statistics();
-//   }
-// }
-
-// void print_data_statistics(void) {
-//   ESP_LOGI(TAG, "Data Collection Statistics:");
-//   ESP_LOGI(TAG, "------------------------");
-//   ESP_LOGI(TAG, "Total data points: %lu", data_stats.total_data_points);
-//   ESP_LOGI(TAG, "Last data received: %s", data_stats.last_data_time);
-//   ESP_LOGI(TAG, "Distribution by site:");
-//   ESP_LOGI(TAG, "  Igoo: %lu (%.1f%%)", data_stats.site_data_points[0],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[0] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Ayee: %lu (%.1f%%)", data_stats.site_data_points[1],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[1] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Ursi: %lu (%.1f%%)", data_stats.site_data_points[2],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[2] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Kuri: %lu (%.1f%%)", data_stats.site_data_points[3],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[3] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Likir: %lu (%.1f%%)", data_stats.site_data_points[4],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[4] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, " Sakti: %lu (%.1f%%)", data_stats.site_data_points[5],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[5] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, " Stakmo: %lu (%.1f%%)", data_stats.site_data_points[6],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[6] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Tuna: %lu (%.1f%%)", data_stats.site_data_points[7],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[7] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-//   ESP_LOGI(TAG, "  Other: %lu (%.1f%%)", data_stats.site_data_points[8],
-//            (data_stats.total_data_points > 0)
-//                ? (float)data_stats.site_data_points[8] * 100.0f /
-//                      data_stats.total_data_points
-//                : 0.0f);
-// }
 
 // Function to list SD card contents
 void list_sd_card_contents() {
@@ -291,77 +178,6 @@ esp_err_t append_to_sd_file(const char *sd_path, const char *spiffs_path,
   return ESP_OK;
 }
 
-void backup_task(void *pvParameters) {
-  TickType_t last_backup_time = xTaskGetTickCount();
-  static char spiffs_path[64];
-  static char sd_path[64];
-
-  while (1) {
-
-    if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack in backup: %d",
-               uxTaskGetStackHighWaterMark(NULL));
-    }
-    // Wait for notification or timeout
-    uint32_t ulNotificationValue =
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(BACKUP_INTERVAL_MS));
-
-    TickType_t current_time = xTaskGetTickCount();
-    bool perform_backup_now = false;
-
-    if (ulNotificationValue > 0) {
-      // Notification received, perform immediate backup
-      ESP_LOGI(TAG, "Backup task notified, performing immediate backup");
-      perform_backup_now = true;
-    } else if ((current_time - last_backup_time) >=
-               pdMS_TO_TICKS(BACKUP_INTERVAL_MS)) {
-      perform_backup_now = true;
-    }
-
-    ValveState currentState = getCurrentState();
-    bool suitable_state =
-        (currentState == STATE_IDLE || currentState == STATE_VALVE_A_CLOSE ||
-         currentState == STATE_VALVE_A_CLOSE ||
-         currentState == STATE_VALVE_B_CLOSE ||
-         currentState == STATE_VALVE_B_CLOSE ||
-         currentState == STATE_PUMP_OFF_A || currentState == STATE_PUMP_ON_A ||
-         currentState == STATE_PUMP_ON_B || currentState == STATE_PUMP_OFF_B ||
-         currentState == STATE_ERROR || currentState == STATE_IRR_DONE_A ||
-         currentState == STATE_IRR_DONE_B);
-
-    if ((perform_backup_now) && (suitable_state)) {
-      if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
-        ESP_LOGW(TAG, "Backup Failed to get SPI mutex");
-      } else {
-        for (int i = 0; i < 2; i++) {
-          snprintf(spiffs_path, sizeof(spiffs_path), "%s/%s",
-                   SPIFFS_MOUNT_POINT, backup_info[i].filename);
-          snprintf(sd_path, sizeof(sd_path), "%s/%s", SD_MOUNT_POINT,
-                   backup_info[i].filename);
-          // Add small delay between operations
-          vTaskDelay(pdMS_TO_TICKS(10));
-          if (has_new_data(spiffs_path, sd_path, &backup_info[i])) {
-            ESP_LOGI(TAG, "New data found, updating backup for %s",
-                     backup_info[i].filename);
-            if (append_to_sd_file(sd_path, spiffs_path, &backup_info[i]) ==
-                ESP_OK) {
-              ESP_LOGI(TAG, "Backup completed for %s", backup_info[i].filename);
-            } else {
-              ESP_LOGE(TAG, "Backup failed for %s", backup_info[i].filename);
-            }
-          } else {
-            ESP_LOGI(TAG, "No new data for %s", backup_info[i].filename);
-          }
-        }
-        last_backup_time = current_time;
-        xSemaphoreGive(spi_mutex);
-      }
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Small delay to prevent busy waiting
-  }
-}
-
 #define SHORT_SMS_BUFFER_SIZE 20
 static int custom_log_function(const char *fmt, va_list args) {
   char buffer[512];
@@ -432,7 +248,8 @@ static int custom_log_function(const char *fmt, va_list args) {
   }
 
   // Write to file if the log level is at or above the minimum save level
-  if (logFile && level <= CONFIG_LOG_SAVE_LEVEL) {
+  // if (logFile && level <= CUSTOM_LOG_LEVEL_ERROR) {
+  if (logFile && level <= ESP_LOG_ERROR) {
     // time_t current_time = time(NULL);
     fprintf(logFile, "%s, %s, %s, %s\n", fetchTime(), level_str, tag,
             short_msg);

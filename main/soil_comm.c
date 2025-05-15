@@ -544,7 +544,7 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
       if (!Valve_A_Acknowledged) {
         Valve_A_Acknowledged = true;
         xSemaphoreGive(Valve_A_AckSemaphore);
-        ESP_LOGD(TAG, "Gave DRAIN_NOTE_AckSemaphore (Valve A)");
+        ESP_LOGD(TAG, "Gave Valve_A_AckSemaphore (Valve A)");
       }
       break;
 
@@ -552,7 +552,7 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
       if (!Valve_B_Acknowledged) {
         Valve_B_Acknowledged = true;
         xSemaphoreGive(Valve_B_AckSemaphore);
-        ESP_LOGD(TAG, "Gave SOURCE_NOTE_AckSemaphore (Valve B)");
+        ESP_LOGD(TAG, "Gave Valve_B_AckSemaphore (Valve A)");
       }
       break;
 
@@ -756,22 +756,6 @@ void processSprayMessage(comm_t *message) {
   vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-// bool isWithinDrainTimeRange(void) {
-//   #ifdef CONFIG_ENABLE_DRAIN_TIME_CONFIG
-//   char *timeStr = fetchTime();
-//   int year, month, day, hour, minute;
-//   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-//   return ((hour > CONFIG_DRAIN_START_HOUR ||
-//            (hour == CONFIG_DRAIN_START_HOUR &&
-//             minute >= CONFIG_DRAIN_START_MINUTE)) &&
-//           (hour < CONFIG_DRAIN_END_HOUR || (hour == CONFIG_DRAIN_END_HOUR &&
-//                                             minute <
-//                                             CONFIG_DRAIN_END_MINUTE)));
-// #else
-//   return false; // If drain time config is not enabled, always return false
-// #endif
-//   }
-//
 void reset_acknowledgements() {
   Valve_A_Acknowledged = false;
   Valve_B_Acknowledged = false;
@@ -842,11 +826,11 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
   ESP_LOGD(TAG, "Received message from %s (0x%02X, RSSI: %d)", pcb_name,
            sender_device_addr, rssi);
 
-// Log signal quality if needed
-// if ((rssi < -75) && (!IS_SITE("Sakti"))) {
-// ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
-// update_status_message("Poor signal: RSSI: %d dBm", rssi);
-// }
+  // Log signal quality if needed
+  if (rssi < -75) {
+    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+    update_status_message("Poor signal: RSSI: %d dBm", rssi);
+  }
 //       // Extract PCB name between "PCB:" and " Count:"
 #if CONFIG_MASTER
   char msg[data_len + 1];
@@ -896,12 +880,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
       //   ESP_LOGI(TAG, "Raw data (%d bytes):", data_len);
       for (int i = 0; i < 5; i++) {
-        ESP_LOGI(TAG, "Byte[%d]: 0x%02X", i, data[i]);
-      }
-      // Ensure we have enough data for a complete message
-      if (data_len - 1 < sizeof(comm_t)) {
-        ESP_LOGE(TAG, "Command message too short: %d bytes", data_len);
-        return;
+        ESP_LOGD(TAG, "Byte[%d]: 0x%02X", i, data[i]);
       }
 
       comm_t message = {0};
@@ -1598,7 +1577,7 @@ bool verify_device_mappings(void) {
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
     CONFIG_PUMP
-  const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS};
+  const uint8_t critical_devices[] = {MASTER_ADDRESS};
 #endif
   const int num_critical_devices = sizeof(critical_devices);
   int found_devices = 0;
@@ -1792,6 +1771,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
                sensor_data_a.battery_level, sensor_data_a.temperature,
                timestamp);
 
+      ESP_LOGD("TX_DEBUG", "Soil A message content (length: %d): %s",
+               strlen(message) + 1, message);
+
       espnow_send(peer_mac, message, strlen(message) + 1);
       ESP_LOGI("TX", "Sent Soil A Data");
     }
@@ -1812,6 +1794,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
                own_pcb_name, sensor_data_b.soil_moisture,
                sensor_data_b.battery_level, sensor_data_b.temperature,
                timestamp);
+
+      ESP_LOGD("TX_DEBUG", "Soil b message content (length: %d): %s",
+               strlen(message) + 1, message);
 
       espnow_send(peer_mac, message, strlen(message) + 1);
       ESP_LOGI("TX", "Sent Soil B Data");
