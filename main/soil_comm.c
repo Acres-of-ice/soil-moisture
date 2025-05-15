@@ -588,6 +588,9 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     case MASTER_ADDRESS:
       ESP_LOGD(TAG, "Master ACK");
       break;
+    case 0xFE:
+      ESP_LOGD(TAG, "Broadcast message");
+      break;
 
     default:
       ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X", device_addr);
