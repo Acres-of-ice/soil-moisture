@@ -2,21 +2,20 @@
 set(SRCS_LIST 
     "app_main.c"
     "valve_control.c"
-    # "button_control.c"
-    # "rtc_operations.c"
+    "button_control.c"
     "data.c"
     "lcd.c"
     # "gsm.c"
     "soil_comm.c"
 )
 
-if(CONFIG_CONDUCTOR)
+if(CONFIG_MASTER)
     list(APPEND SRCS_LIST "sensor.c")
     list(APPEND SRCS_LIST "ads1x1x.c")
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
 endif()
 
-idf_component_register(SRCS "app_main.c" 
+idf_component_register(SRCS ${SRCS_LIST}
                     INCLUDE_DIRS "."
-                    REQUIRES fatfs esp_wifi spiffs nvs_flash rtc espnow_lib espressif__mdns-v1.4.0)
+                    REQUIRES esp32-button app_update esp_http_server esp_app_format fatfs esp_wifi spiffs nvs_flash rtc espnow_lib espressif__mdns-v1.4.0)

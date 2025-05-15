@@ -7,18 +7,18 @@
 #define COMM_TASK_PRIORITY 12 // Highest priority
 #define COMM_TASK_CORE_ID 0
 
-#define SMS_TASK_STACK_SIZE (1024 * 8)
-#define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
-#define SMS_TASK_CORE_ID 0
+// #define SMS_TASK_STACK_SIZE (1024 * 8)
+// #define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
+// #define SMS_TASK_CORE_ID 0
 
 // Critical Control Tasks - Core 0
 #define VALVE_TASK_STACK_SIZE (1024 * 6)
 #define VALVE_TASK_PRIORITY 11
 #define VALVE_TASK_CORE_ID 0
 
-#define BUTTON_TASK_STACK_SIZE (1024 * 4)
-#define BUTTON_TASK_PRIORITY 10
-#define BUTTON_TASK_CORE_ID 0
+// #define BUTTON_TASK_STACK_SIZE (1024 * 4)
+// #define BUTTON_TASK_PRIORITY 10
+// #define BUTTON_TASK_CORE_ID 0
 
 // Sensor Tasks - Core 0
 #define ADC_TASK_STACK_SIZE (1024 * 4)
@@ -61,20 +61,8 @@
 #define BACKUP_TASK_PRIORITY 6
 #define BACKUP_TASK_CORE_ID 1
 
-#define HEX_DATA_TASK_STACK_SIZE (1024 * 4)
-#define HEX_DATA_TASK_PRIORITY 6
-#define HEX_DATA_TASK_CORE_ID 1
-
-#define MQTT_TASK_STACK_SIZE (1024 * 8)
-#define MQTT_TASK_PRIORITY 8
-#define MQTT_TASK_CORE_ID 1
-
-#define MQTT_MANAGER_TASK_STACK_SIZE (1024 * 4)
-#define MQTT_MANAGER_TASK_PRIORITY 4
-#define MQTT_MANAGER_TASK_CORE_ID 1
-
-#define TIMELAPSE_TASK_STACK_SIZE (1024 * 3)
-#define TIMELAPSE_TASK_PRIORITY 7
-#define TIMELAPSE_TASK_CORE_ID 0
+// #define HEX_DATA_TASK_STACK_SIZE (1024 * 4)
+// #define HEX_DATA_TASK_PRIORITY 6
+// #define HEX_DATA_TASK_CORE_ID 1
 
 #endif /* MAIN_TASKS_COMMON_H_ */

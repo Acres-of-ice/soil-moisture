@@ -1,15 +1,11 @@
 #ifndef SENSOR_H
 #define SENSOR_H
 
+#include "define.h"
 #include "esp_err.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-typedef struct {
-  int Moisture_a;
-  int Moisture_b;
-} sensor_readings_t;
 
 typedef struct {
   uint8_t soil_moisture; // buf[0]
@@ -17,18 +13,8 @@ typedef struct {
   uint8_t battery_level; // buf[3]
   char pcb_name[32];
 } espnow_message_t;
-#define ESPNOW_MAX_PAYLOAD_SIZE 250 // Leave some room for headers
-// Message structure
-// typedef struct {
-//     uint8_t address;
-//     uint8_t command;
-//     uint8_t source;
-//     uint8_t retries;
-//     uint8_t seq_num;
-//     char data[ESPNOW_MAX_PAYLOAD_SIZE - 5]; // Reserve space for headers
-// } espnow_message_t;
 
-// extern QueueHandle_t espnow_queue;
+#define ESPNOW_MAX_PAYLOAD_SIZE 250 // Leave some room for headers
 
 void vext_on();
 void wifi_init_sta(void);

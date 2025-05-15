@@ -1,18 +1,19 @@
 #include "button_control.h"
 #include "button.h"
 #include "data.h"
+#include "define.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
-#include "soil_comm.h"
 #include "gsm.h"
 #include "lcd.h"
+#include "soil_comm.h"
 #include "valve_control.h"
 #include "wifi_app.h"
 
 static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
-extern bool sta_enabled; // WiFi status flag
+extern bool sta_enabled;  // WiFi status flag
 static char response_sms[32];
 extern int on_off_counter;
 extern SemaphoreHandle_t i2c_mutex;
@@ -20,10 +21,6 @@ extern TaskHandle_t wifiTaskHandle;
 extern char *log_path;
 extern char *data_path;
 extern const char *DATA_FILE_HEADER; // Declaration
-#define A_btn 25 // Replace with actual GPIO pin for WiFi button
-#define B_btn 26 // Replace with actual GPIO pin for Demo mode button
-#define C_btn 27 // Replace with actual GPIO pin for Backup button
-#define D_btn 15 // Replace with actual GPIO pin for Backup button
 
 extern bool errorConditionMet;
 
@@ -46,26 +43,26 @@ void a_btn_short_press(void) {
       errorConditionMet = false; // Reset error flag
     }
 
-    //ESP_LOGI(TAG, "Counter: %d", on_off_counter);
+    // ESP_LOGI(TAG, "Counter: %d", on_off_counter);
 
     if (on_off_counter % 2 == 0) {
-      newState = STATE_B_VALVE_OPEN;
+      newState = STATE_VALVE_B_OPEN;
       // Create compact response message with new counter value
       // Using static buffer defined at the top
-      snprintf(response_sms, sizeof(response_sms), "Manual drain mode");
+      // snprintf(response_sms, sizeof(response_sms), "Manual drain mode");
 
       // Send the response SMS
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+      // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
 
       ESP_LOGI(TAG, "Manual drain mode");
     } else {
-      newState = STATE_A_VALVE_OPEN;
+      newState = STATE_VALVE_A_OPEN;
       // Create compact response message with new counter value
       // Using static buffer defined at the top
-      snprintf(response_sms, sizeof(response_sms), "Manual spray mode");
+      // snprintf(response_sms, sizeof(response_sms), "Manual spray mode");
 
       // Send the response SMS
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+      // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
 
       ESP_LOGI(TAG, "Manual spray mode");
     }
@@ -77,49 +74,34 @@ void a_btn_short_press(void) {
 
 void a_btn_long_press(void) {
   ESP_LOGI(TAG, "Calibration reset");
-//   calibration_done = false;
-//   mean_fountain_pressure = 0;
+  //   calibration_done = false;
+  //   mean_fountain_pressure = 0;
   static char
       display_calibration[5]; // Buffer to hold the string representation
-  //int calibration_value = (int)(mean_fountain_pressure);
-//   snprintf(display_calibration, sizeof(display_calibration), "%2dP",
-// //            calibration_value);
+  // int calibration_value = (int)(mean_fountain_pressure);
+  //   snprintf(display_calibration, sizeof(display_calibration), "%2dP",
+  // //            calibration_value);
 
-//   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-//     lcd_put_cur(0, 10);
-//     lcd_send_string(display_calibration);
-//     vTaskDelay(100);
-//     lcd_put_cur(1, 0);
-//     xSemaphoreGive(i2c_mutex);
-//   }
+  //   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+  //     lcd_put_cur(0, 10);
+  //     lcd_send_string(display_calibration);
+  //     vTaskDelay(100);
+  //     lcd_put_cur(1, 0);
+  //     xSemaphoreGive(i2c_mutex);
+  //   }
 }
 
 void b_btn_short_press(void) {
 
-  // if (IS_SITE("Test")){
-  //   vTaskDelay(2000);
-  //   wifi_enabled = true;
-  // }
   wifi_enabled = !wifi_enabled;
   ESP_LOGI(TAG, "WiFi %s", wifi_enabled ? "enabled" : "disabled");
   if (wifi_enabled) {
     if (wifiTaskHandle != NULL) {
       vTaskResume(wifiTaskHandle);
     }
-
-#ifdef CONFIG_CONDUCTOR
     wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
-#endif
-#ifdef CONFIG_AWS
-    wifi_app_send_message(WIFI_APP_MSG_START_STA);
-#endif
   } else {
-#ifdef CONFIG_CONDUCTOR
     wifi_app_send_message(WIFI_APP_MSG_STOP_HTTP_SERVER);
-#endif
-#ifdef CONFIG_AWS
-    wifi_app_send_message(WIFI_APP_MSG_STOP_STA);
-#endif
     vTaskDelay(100);
     if (wifiTaskHandle != NULL) {
       vTaskSuspend(wifiTaskHandle);
@@ -128,30 +110,26 @@ void b_btn_short_press(void) {
 }
 
 void b_btn_long_press(void) {
-//   if (backupTaskHandle != NULL) {
-//     xTaskNotifyGive(backupTaskHandle);
-//     ESP_LOGD(TAG, "Forcing backup task to run (long press)");
-//   } 
-//   else {
-    ESP_LOGW(TAG, "Backup task handle is NULL");
-//  }
+  //   if (backupTaskHandle != NULL) {
+  //     xTaskNotifyGive(backupTaskHandle);
+  //     ESP_LOGD(TAG, "Forcing backup task to run (long press)");
+  //   }
+  //   else {
+  ESP_LOGW(TAG, "Backup task handle is NULL");
+  //  }
 }
 
 void c_btn_short_press(void) {
-  snprintf(response_sms, sizeof(response_sms), "Counter:%d ",
-           on_off_counter);
-  ESP_LOGI(TAG, "%s", response_sms);
+  // snprintf(response_sms, sizeof(response_sms), "Counter:%d ",
+  // on_off_counter); ESP_LOGI(TAG, "%s", response_sms);
 
-//   if (gsm_init_success) {
-//     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
+  //   if (gsm_init_success) {
+  //     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
 
-// #if CONFIG_CONDUCTOR
-//     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-// #endif
-//  } 
-  //else {
-    ESP_LOGW(TAG, "GSM Not Initialised");
- // }
+  // #if CONFIG_CONDUCTOR
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+  // #endif
+  //  }
 }
 
 void c_btn_long_press(void) {
@@ -211,13 +189,13 @@ void c_btn_long_press(void) {
   ESP_LOGI(TAG, "All files cleared and reinitialized");
 
   // Optional: Send SMS notification
-//   if (gsm_init_success) {
-//     snprintf(sms_message, sizeof(sms_message), "Files cleared");
+  //   if (gsm_init_success) {
+  //     snprintf(sms_message, sizeof(sms_message), "Files cleared");
 
-// #if CONFIG_CONDUCTOR
-//     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-// #endif
-//   }
+  // #if CONFIG_CONDUCTOR
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+  // #endif
+  //   }
 }
 
 void d_btn_short_press(void) {
@@ -308,15 +286,15 @@ QueueHandle_t initialize_button_queue(int nodeAddress) {
   QueueHandle_t button_events = NULL;
 
   switch (nodeAddress) {
-  case CONDUCTOR_ADDRESS:
+  case MASTER_ADDRESS:
     button_events = button_init(PIN_BIT(A_btn) | PIN_BIT(B_btn) |
                                 PIN_BIT(C_btn) | PIN_BIT(D_btn));
     break;
-//   case SOURCE_NOTE_ADDRESS:
-//   case DRAIN_NOTE_ADDRESS:
-//   case AIR_NOTE_ADDRESS:
-//     button_events = button_init(PIN_BIT(feed1_GPIO) | PIN_BIT(feed2_GPIO));
-//     break;
+    //   case SOURCE_NOTE_ADDRESS:
+    //   case DRAIN_NOTE_ADDRESS:
+    //   case AIR_NOTE_ADDRESS:
+    //     button_events = button_init(PIN_BIT(feed1_GPIO) |
+    //     PIN_BIT(feed2_GPIO)); break;
   default:
     ESP_LOGW(TAG, "Unknown node address: %d", nodeAddress);
     return NULL;
@@ -334,7 +312,7 @@ void setup_conductor_buttons(void) {
                           a_btn_short_press, a_btn_long_press);
   // B Button (former WIFIBACKUP_BUTTON_GPIO)
   register_button_actions(1, // C_btn
-                          b_btn_short_press,b_btn_long_press);
+                          b_btn_short_press, b_btn_long_press);
   // C Button (former WIFIBACKUP_BUTTON_GPIO)
   // if (IS_SITE("Ursi")){
   //   register_button_actions(2,  // C_btn
@@ -342,17 +320,16 @@ void setup_conductor_buttons(void) {
   //                         a_btn_long_press);
   // }else{
   register_button_actions(2, // C_btn
-                           c_btn_short_press,c_btn_long_press);
+                          c_btn_short_press, c_btn_long_press);
   // }
 
-//   if (!site_config.has_water_temp) {
-//     register_button_actions(3, // D_btn
-//                             d_btn_short_press, d_btn_long_press);
-//   }
+  //   if (!site_config.has_water_temp) {
+  //     register_button_actions(3, // D_btn
+  //                             d_btn_short_press, d_btn_long_press);
+  //   }
 }
 
-void button_task(void *pvParameters) 
-{
+void button_task(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   button_event_t ev;
   QueueHandle_t button_events = initialize_button_queue(nodeAddress);
@@ -363,7 +340,7 @@ void button_task(void *pvParameters)
   }
 
   // Initialize conductor buttons if needed
-  if (nodeAddress == CONDUCTOR_ADDRESS) {
+  if (nodeAddress == MASTER_ADDRESS) {
     setup_conductor_buttons();
   }
 
@@ -373,7 +350,7 @@ void button_task(void *pvParameters)
     }
 
     if (xQueueReceive(button_events, &ev, pdMS_TO_TICKS(1000))) {
-      if (nodeAddress == CONDUCTOR_ADDRESS) {
+      if (nodeAddress == MASTER_ADDRESS) {
         if (ev.pin == A_btn)
           handle_button_event(0, &ev);
         else if (ev.pin == B_btn)
@@ -383,32 +360,10 @@ void button_task(void *pvParameters)
         // else if ((ev.pin == D_btn) && (!site_config.has_water_temp))
         //   handle_button_event(3, &ev);
       }
-    //    else if (nodeAddress == DRAIN_NOTE_ADDRESS) {
-    //     handle_feedback_buttons(&ev, nodeAddress);
-    //   }
+      //    else if (nodeAddress == DRAIN_NOTE_ADDRESS) {
+      //     handle_feedback_buttons(&ev, nodeAddress);
+      //   }
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
-
-// void handle_feedback_buttons(button_event_t *ev, int nodeAddress) {
-//   if (ev->pin == feed1_GPIO &&
-//       ((ev->event == BUTTON_DOWN) || (ev->event == BUTTON_UP))) {
-//     ESP_LOGI(TAG, "Feedback triggered");
-//     // Check if we can send the feedback message
-//     if (canSendFeedbackMessage()) {
-//       gpio_set_level(RELAY_2, 0);
-//       ESP_LOGW(TAG, "Heating cable off");
-//       for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
-//         ESPNOW_queueMessage(CONDUCTOR_ADDRESS, 0xFE, nodeAddress, retry);
-//         vTaskDelay(20);
-//       }
-//       ESP_LOGI(TAG, "Feedback message sent to Conductor");
-//     } else {
-//       ESP_LOGW(TAG, "No recent message from Conductor, feedback not sent");
-//     }
-//   }
-// }
-
-// Add this function to be called from button_control.c
-//bool canSendFeedbackMessage() { return receivedConductorMessageRecently(); }

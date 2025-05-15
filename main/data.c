@@ -3,7 +3,7 @@
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
-//#include "tasks_common.h"
+// #include "tasks_common.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
@@ -13,15 +13,15 @@
 
 // #include "define.h"
 // #include "gsm.h"
- #include "lcd.h"
+#include "esp_spiffs.h"
+#include "http_server.h"
+#include "lcd.h"
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "valve_control.h"
-#include "http_server.h"
-#include "esp_spiffs.h"
 
 #define BACKUP_INTERVAL_MS (10 * 60000)
-#define DATA_TIME_MS (2* 60000)
+#define DATA_TIME_MS (2 * 60000)
 #define SPIFFS_SAFE_USAGE 0.65
 #define CONFIG_LOG_SAVE_LEVEL 1
 #define SD_FREQ_HZ 25000000 // 4 MHz for SD card
@@ -45,8 +45,7 @@ spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
 
 BackupInfo backup_info[2] = {{"data.csv", 0, 0}, {"log.csv", 0, 0}};
-const char *DATA_FILE_HEADER =
-    "Time,Counter,Moisture A, Moisture B";
+const char *DATA_FILE_HEADER = "Time,Counter,Moisture A, Moisture B";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
@@ -321,12 +320,14 @@ void backup_task(void *pvParameters) {
 
     ValveState currentState = getCurrentState();
     bool suitable_state =
-        (currentState == STATE_IDLE || currentState == STATE_A_VALVE_CLOSE ||
-         currentState ==STATE_A_VALVE_CLOSE ||currentState == STATE_B_VALVE_CLOSE ||
-         currentState ==STATE_B_VALVE_CLOSE || currentState == STATE_PUMP_OFF_A ||
-         currentState ==STATE_PUMP_ON_A || currentState == STATE_PUMP_ON_B ||
-         currentState ==STATE_PUMP_OFF_B ||
-         currentState == STATE_ERROR || currentState == STATE_IRR_DONE_A|| currentState == STATE_IRR_DONE_B);
+        (currentState == STATE_IDLE || currentState == STATE_VALVE_A_CLOSE ||
+         currentState == STATE_VALVE_A_CLOSE ||
+         currentState == STATE_VALVE_B_CLOSE ||
+         currentState == STATE_VALVE_B_CLOSE ||
+         currentState == STATE_PUMP_OFF_A || currentState == STATE_PUMP_ON_A ||
+         currentState == STATE_PUMP_ON_B || currentState == STATE_PUMP_OFF_B ||
+         currentState == STATE_ERROR || currentState == STATE_IRR_DONE_A ||
+         currentState == STATE_IRR_DONE_B);
 
     if ((perform_backup_now) && (suitable_state)) {
       if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
@@ -446,8 +447,8 @@ static int custom_log_function(const char *fmt, va_list args) {
     //     xSemaphoreGive(i2c_mutex);
     //   }
     //   if (gsm_init_success) {
-    //     snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag, short_msg);
-    //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    //     snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag,
+    //     short_msg); sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
     //   } else if ((site_config.has_relay) && (g_nodeAddress != GSM_ADDRESS)) {
     //     // LoRa error message handling
     //     comm_t error_msg = {
@@ -661,8 +662,8 @@ esp_err_t init_spiffs(void) {
 //       ESP_LOGI(TAG, "%s", data_entry);
 //     }
 
-//     // Changed to vTaskDelay for simplicity and to handle task suspension better
-//     vTaskDelay(pdMS_TO_TICKS(DATA_TIME_MS));
+//     // Changed to vTaskDelay for simplicity and to handle task suspension
+//     better vTaskDelay(pdMS_TO_TICKS(DATA_TIME_MS));
 //   }
 // }
 
@@ -700,14 +701,14 @@ esp_err_t copy_file(const char *src_path, const char *dest_path) {
   return ret;
 }
 
-//void get_spiffs_usage(size_t *total, size_t *used) {
-//   esp_err_t ret = esp_spiffs_info("storage", total, used);
-//   if (ret != ESP_OK) {
-//     ESP_LOGE(TAG, "Failed to get SPIFFS partition information");
-//     *total = 0;
-//     *used = 0;
-//   }
-// }
+// void get_spiffs_usage(size_t *total, size_t *used) {
+//    esp_err_t ret = esp_spiffs_info("storage", total, used);
+//    if (ret != ESP_OK) {
+//      ESP_LOGE(TAG, "Failed to get SPIFFS partition information");
+//      *total = 0;
+//      *used = 0;
+//    }
+//  }
 
 // esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove) {
 //   FILE *file = fopen(path, "r+");
@@ -721,10 +722,8 @@ esp_err_t copy_file(const char *src_path, const char *dest_path) {
 //   long file_size = ftell(file);
 
 //   if (file_size <= bytes_to_remove) {
-//     // If we need to remove more bytes than the file size, just clear the file
-//     fclose(file);
-//     file = fopen(path, "w");
-//     if (!file) {
+//     // If we need to remove more bytes than the file size, just clear the
+//     file fclose(file); file = fopen(path, "w"); if (!file) {
 //       ESP_LOGE(TAG, "Failed to clear file: %s", path);
 //       return ESP_FAIL;
 //     }
@@ -876,7 +875,6 @@ esp_err_t truncate_file_start(const char *path, size_t new_size) {
 //   xSemaphoreGive(file_mutex);
 //   return success;
 // }
-
 
 // bool appendFile(const char *path, const char *message) {
 //   ESP_LOGV(TAG, "Appending to file: %s", path);

@@ -22,54 +22,48 @@ extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
 
-#define CONDUCTOR_ADDRESS 0x01   // Master node
-#define SOURCE_NOTE_ADDRESS 0x02 // Master node
-#define DRAIN_NOTE_ADDRESS 0x03  // Slave node
-#define AIR_NOTE_ADDRESS 0x04    // Slave node
-#define AWS_ADDRESS 0x33         // Slave node
-#define GSM_ADDRESS 0x99         // Slave node
-//
-// ==================== State Machine Definitions ====================
-typedef enum {
-  STATE_IDLE,
-  STATE_DRAIN_START,
-  STATE_DRAIN_FEEDBACK_DRAIN_NOTE,
-  STATE_DRAIN_HEAT_DRAIN_NOTE,
-  STATE_DRAIN_WAIT_SOURCE_NOTE,
-  STATE_DRAIN_WAIT_AIR_NOTE,
-  STATE_DRAIN_DONE,
-  STATE_SPRAY_START,
-  STATE_SPRAY_FEEDBACK_DRAIN_NOTE,
-  STATE_SPRAY_HEAT_DRAIN_NOTE,
-  STATE_SPRAY_WAIT_AIR_NOTE,
-  STATE_SPRAY_WAIT_SOURCE_NOTE,
-  STATE_SPRAY_DONE,
-  STATE_SPRAY_CALIBRATION,
-  STATE_ERROR,
-  STATE_UNKNOWN
-} ValveState;
+// Device type identifiers (high nibble)
+#define DEVICE_TYPE_MASTER 0xA0
+#define DEVICE_TYPE_VALVE 0xB0
+#define DEVICE_TYPE_SOIL 0xC0
+#define DEVICE_TYPE_PUMP 0xD0    // Reserved for future use
+#define DEVICE_TYPE_WEATHER 0xE0 // Reserved for future use
+
+// Device addresses (high nibble = type, low nibble = instance ID)
+#define MASTER_ADDRESS (DEVICE_TYPE_MASTER | 0x01) // 0xA1 - Master node
+#define VALVE_A_ADDRESS (DEVICE_TYPE_VALVE | 0x01) // 0xB1 - Valve A
+#define VALVE_B_ADDRESS (DEVICE_TYPE_VALVE | 0x02) // 0xB2 - Valve B
+#define SOIL_A_ADDRESS (DEVICE_TYPE_SOIL | 0x01)   // 0xC1 - Soil sensor A
+#define SOIL_B_ADDRESS (DEVICE_TYPE_SOIL | 0x02)   // 0xC2 - Soil sensor B
+#define PUMP_ADDRESS (DEVICE_TYPE_PUMP | 0x02)     // 0xE2 - Pump
 
 // ==================== GPIO Definitions ====================
 #define RELAY_1 GPIO_NUM_16
 #define RELAY_2 GPIO_NUM_13
 #define RELAY_3 GPIO_NUM_12
-// #define RELAY_1 GPIO_NUM_2
-// #define RELAY_2 GPIO_NUM_3
-// #define RELAY_3 GPIO_NUM_4
 #define BOOST_EN GPIO_NUM_17
 #define SIM_GPIO GPIO_NUM_13
 #define ZONE1_GPIO 32
 #define ZONE2_GPIO 25
 #define feed1_GPIO GPIO_NUM_26
 #define feed2_GPIO GPIO_NUM_27
-// #define feed1_GPIO GPIO_NUM_20
-// #define feed2_GPIO GPIO_NUM_21
 #define VTG_SENS_GPIO 35
 
 #define A_btn 25 // Replace with actual GPIO pin for WiFi button
 #define B_btn 26 // Replace with actual GPIO pin for Demo mode button
 #define C_btn 27 // Replace with actual GPIO pin for Backup button
 #define D_btn 15 // Replace with actual GPIO pin for Backup button
+
+#define RELAY_POSITIVE 26
+#define RELAY_NEGATIVE 27
+#define OE_PIN 12
+
+#define PULSE_DURATION_MS 50
+
+#define START_btn 4
+#define STOP_btn 5
+#define OUT_START 2
+#define OUT_STOP 3
 
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
@@ -85,26 +79,11 @@ typedef struct {
   uint8_t retries;
   uint8_t seq_num;
   char data[HEX_SIZE * 2 + 1]; // Add this line to include hex data
-  // } lora_message_t;
 } comm_t;
 
 // extern lora_message_t message;
 extern comm_t message;
 extern QueueHandle_t message_queue;
-
-// ==================== LoRa Definitions ====================
-#define SPI_BUS_FREQ_HZ 10000000 // 10 MHz - adjust based on your needs
-// #define SD_FREQ_HZ         4000000   // 4 MHz for SD card
-#define SD_FREQ_HZ 25000000 // 4 MHz for SD card
-#define HOST_ID SPI2_HOST
-
-extern bool DRAIN_NOTE_acknowledged;
-extern bool HEAT_acknowledged;
-extern bool SOURCE_NOTE_acknowledged;
-extern bool AIR_NOTE_acknowledged;
-extern bool DRAIN_NOTE_feedback;
-extern bool SOURCE_NOTE_feedback;
-extern bool heat_on;
 
 // ==================== Timeout Configurations ====================
 #define SERVER_TIMEOUT_S (CONFIG_SERVER_TIMEOUT_M * 60)
@@ -116,12 +95,6 @@ extern bool heat_on;
 #define VALVE_TIMEOUT_MS (CONFIG_VALVE_TIMEOUT_S * 1000)
 #define RETRY_DELAY_MS (CONFIG_RETRY_DELAY_S * 1000)
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
-#define ACK_TIMEOUT_MS (CONFIG_ACK_TIMEOUT_S * 1000)
-#define RCV_TIMEOUT_MS (CONFIG_RCV_TIMEOUT_S)
-#define BACKUP_INTERVAL_MS (CONFIG_BACKUP_INTERVAL_M * 60000)
-// #define BACKUP_INTERVAL_MS (CONFIG_BACKUP_INTERVAL_H * 3000)
-#define CONDUCTOR_MESSAGE_TIMEOUT_S (30 * 60 * 1000) // 30 minutes in seconds
-#define SMS_CHECK_MS (CONFIG_SMS_CHECK_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 
 // ==================== Logging Definitions ====================
@@ -176,6 +149,7 @@ extern char uptime_str[5];
 #define cc6_SYMBOL_ADDRESS 0x05
 #define cc7_SYMBOL_ADDRESS 0x06
 #define cc8_SYMBOL_ADDRESS 0x07
+
 //======================I2C Definitions=====================
 extern i2c_master_bus_handle_t i2c0bus;
 
@@ -198,7 +172,6 @@ typedef struct {
 
 extern const site_config_t site_config;
 
-// Structure for plain float values
 typedef struct {
   float temperature;
   float humidity;
@@ -207,6 +180,8 @@ typedef struct {
   float water_temp;
   float discharge;
   float voltage;
+  int soil_A;
+  int soil_B;
 } sensor_readings_t;
 
 // Declare the globals
@@ -216,6 +191,8 @@ extern sensor_readings_t readings;
 extern float mean_fountain_pressure;
 extern float tpipe_normal;
 extern float tpipe_hot;
+extern float soil_dry;
+extern float soil_moist;
 
 // ==================== Miscellaneous Definitions ====================
 #define MAX_QUEUE_SIZE 8
@@ -264,68 +241,6 @@ typedef struct wifi_app_queue_message {
 
 extern QueueHandle_t wifi_app_queue_handle;
 extern bool http_server_active;
-
-// ==================== MQTT Definitions ====================
-#define MAX_PAYLOAD_SIZE 256
-#define CIRCULAR_BUFFER_SIZE 10
-
-typedef struct {
-  char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
-  char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
-  uint16_t counter;                 // On/off counter
-  int16_t temperature;        // Temperature * 10 to preserve one decimal place
-  uint16_t wind;              // Wind speed * 10
-  uint16_t fountain_pressure; // Fountain pressure * 10
-  int16_t water_temp;         // Water temperature * 10
-  int16_t discharge;          // Discharge * 10
-} hex_data_t;
-
-typedef struct {
-  char buffer[CIRCULAR_BUFFER_SIZE][MAX_PAYLOAD_SIZE];
-  int head;
-  int tail;
-  int count;
-  SemaphoreHandle_t mutex;
-} CircularBuffer;
-extern CircularBuffer payload_buffer;
-
-#define HEX_BUFFER_SIZE 8
-#define MAX_HEX_SIZE (HEX_SIZE * 2 + 1)
-
-typedef struct {
-  char buffer[HEX_BUFFER_SIZE][MAX_HEX_SIZE];
-  int head;
-  int tail;
-  int count;
-  SemaphoreHandle_t mutex;
-} HexCircularBuffer;
-
-extern HexCircularBuffer hex_buffer;
-
-// ==================== SMS Definitions ====================
-
-extern QueueHandle_t sms_evt_queue, sms_queue;
-#define SMS_BUFFER_SIZE 60
-#define SHORT_SMS_BUFFER_SIZE 20
-typedef struct {
-  char phone_number[20];
-  char message[SMS_BUFFER_SIZE];
-} sms_message_t;
-extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
-
-// ==================== AWS Stats ====================
-#define MAX_SITES 11
-
-typedef struct {
-  uint32_t total_data_points;
-  uint32_t
-      site_data_points[MAX_SITES]; // Assuming you define MAX_SITES in define.h
-  char last_data_time[32];
-} data_statistics_t;
-extern data_statistics_t data_stats;
-
-extern bool wifi_enabled;
-extern float ice_index;
 
 // ==================== Simulation mode ====================
 // Test case data structure

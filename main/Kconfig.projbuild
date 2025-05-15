@@ -10,7 +10,7 @@ menu "App Configuration"
     config SITE_NAME
         string
         default "Test" if SITE_TEST
-        default "Skuast" if SITE_IGOO
+        default "Skuast" if SITE_SKUAST
 
     choice PCB
         prompt "Select PCB Configuration"
@@ -164,6 +164,117 @@ menu "Drain Time Configuration"
 		help
 			Set the minute when the forced drain time ends.
 endmenu
+
+config ENABLE_TIME_CONFIG
+    bool "Enable Timeout Configuration"
+    default false
+    help
+        Enable this option to customize timeout settings. If disabled, default values will be used.
+
+menu "Time Configuration"
+    visible if ENABLE_TIME_CONFIG
+
+    config SMS_INTERVAL_M
+        int "Hex data and sms send interval (minutes)"
+        default 10 if SITE_TEST
+        default 20
+        range 1 60
+        help
+            Timeout for SMS and HEX  in minutes.
+
+    config MODE_TIMEOUT_M
+        int "Mode timeout (minutes)"
+        default 3 if SITE_TEST
+        default 3
+        range 1 30
+        help
+            Timeout for mode operations in minutes.
+
+    config DATA_TIME_M
+        int "Data logging interval (minutes)"
+        default 2 if SITE_TEST
+        default 5
+        range 1 60
+        help
+            Interval for data logging in seconds (default: 5 minutes).
+
+    config CALIBRATION_DURATION_M
+        int "Calibration duration (minutes)"
+        default 1 if SITE_TEST
+        default 4
+        range 1 60
+        help
+            Set the interval in minutes for calibration task.
+
+    config ERROR_DURATION_M
+        int "Error duration (minutes)"
+        default 2 if SITE_TEST
+        default 120
+        range 1 600
+        help
+            Set the interval in minutes for calibration task.
+
+    config POLL_INTERVAL_S
+        int "Poll interval (seconds)"
+        default 1 if SITE_TEST
+        default 3
+        range 1 60
+        help
+            Set the interval in seconds between sensor readings.
+
+    config SMS_CHECK_M
+        int "SMS Check Interval (minutes)"
+        default 1 if SITE_TEST
+        default 3
+        range 1 60
+        help
+            Set the interval in minutes to check for new data to send via SMS.
+
+    config STATE_TIMEOUT_M
+        int "State machine timeout (minutes)"
+        default 5
+        range 1 60
+        help
+            Timeout for state machine in minutes.
+
+    config VALVE_TIMEOUT_S
+        int "Valve operation timeout (seconds)"
+        default 6 if SITE_TEST
+        default 90
+        range 1 3600
+        help
+            Timeout for valve operations in seconds.
+
+    config SERVER_TIMEOUT_M
+        int "Server timeout (minutes)"
+        default 2 if SITE_TEST
+        default 5
+        range 1 60
+        help
+            Interval for keeping server on
+endmenu
+
+menu "WiFi Configuration"
+    config WIFI_SSID
+        string "Primary WiFi SSID"
+        default "YourSSID"
+        help
+            Primary SSID (network name) for the example to connect to.
+
+    config WIFI_PASSWORD
+        string "Primary WiFi Password"
+        default "YourPassword"
+        help
+            WiFi password for the primary SSID.
+            Can be left blank if the network has no security set.
+
+    config MAX_WIFI_RETRY
+        int "Maximum retry"
+        default 3
+        help
+            Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+endmenu
+
 endmenu
 
 
