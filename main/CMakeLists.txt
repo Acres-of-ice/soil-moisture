@@ -7,6 +7,7 @@ set(SRCS_LIST
     "lcd.c"
     # "gsm.c"
     "soil_comm.c"
+    "soil_sensor.c"
     "sensor.c"
     "ads1x1x.c"
 )

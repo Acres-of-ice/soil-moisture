@@ -62,8 +62,8 @@ extern uint8_t sequence_number;
 
 #define START_btn 4
 #define STOP_btn 5
-#define OUT_START 2
-#define OUT_STOP 3
+#define PUMP_START 2
+#define PUMP_STOP 3
 
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name

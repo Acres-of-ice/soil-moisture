@@ -1,21 +1,11 @@
-#ifndef ESPNOW_COM_H
-#define ESPNOW_COM_H
+#ifndef SOIL_COMM_H
+#define SOIL_COMM_H
 
 #include "define.h"
 #include "esp_now.h"
 #include "valve_control.h"
 
-#define OUT_START 2
-#define OUT_STOP 3
-
-typedef struct {
-  char pcb_name[32];
-  int soil_moisture;
-  int temperature;
-  int battery_level;
-  char timestamp[20];
-  int8_t rssi; // Add this field for RSSI
-} espnow_recv_data_t;
+#define SENSOR_DATA_QUEUE_SIZE 10
 
 // Initialize ESP-NOW communication
 esp_err_t espnow_init();
@@ -48,7 +38,6 @@ esp_err_t load_device_mappings_from_nvs(void);
 esp_err_t save_device_mappings_to_nvs(void);
 
 // Task and queue functions
-void vTaskESPNOW_TX(void *pvParameters);
 void vTaskESPNOW_RX(void *pvParameters);
 void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
                          uint8_t retries);

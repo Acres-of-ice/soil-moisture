@@ -9,6 +9,7 @@
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "soil_comm.h"
+#include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
 

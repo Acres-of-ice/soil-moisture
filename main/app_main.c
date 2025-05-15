@@ -22,6 +22,10 @@
 #include "valve_control.h"
 #include "wifi_app.h"
 
+#if CONFIG_SOIL_A || CONFIG_SOIL_B
+#include "soil_sensor.h"
+#endif
+
 int on_off_counter = 1;
 bool lcd_device_ready = false;
 i2c_master_bus_handle_t i2c0bus = NULL;
@@ -84,15 +88,15 @@ void init_gpio_pump(void) {
   gpio_set_direction(STOP_btn, GPIO_MODE_INPUT);
   gpio_set_pull_mode(STOP_btn, GPIO_PULLUP_ONLY);
   gpio_config_t io_conf = {.pin_bit_mask =
-                               (1ULL << OUT_START) | (1ULL << OUT_STOP),
+                               (1ULL << PUMP_START) | (1ULL << PUMP_STOP),
                            .mode = GPIO_MODE_OUTPUT,
                            .pull_down_en = 0,
                            .pull_up_en = 0,
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
 
-  gpio_set_level(OUT_START, 0);
-  gpio_set_level(OUT_STOP, 0);
+  gpio_set_level(PUMP_START, 0);
+  gpio_set_level(PUMP_STOP, 0);
 
   ESP_LOGI(TAG, "GPIOs initialized");
 }
@@ -139,16 +143,16 @@ void pump_button_task(void *arg) {
     if (gpio_get_level(START_btn) == 1) {
       button_state = BUTTON_START_PRESSED;
       ESP_LOGI(TAG, "START button pressed. Turning ON OUT_START for 1 second.");
-      gpio_set_level(OUT_START, 1);
+      gpio_set_level(PUMP_START, 1);
       vTaskDelay(pdMS_TO_TICKS(1000));
-      gpio_set_level(OUT_START, 0);
+      gpio_set_level(PUMP_START, 0);
       ESP_LOGI(TAG, "OUT_START turned OFF.");
     } else if (gpio_get_level(STOP_btn) == 1) {
       button_state = BUTTON_STOP_PRESSED;
       ESP_LOGI(TAG, "STOP button pressed. Turning ON OUT_STOP for 1 second.");
-      gpio_set_level(OUT_STOP, 1);
+      gpio_set_level(PUMP_STOP, 1);
       vTaskDelay(pdMS_TO_TICKS(1000));
-      gpio_set_level(OUT_STOP, 0);
+      gpio_set_level(PUMP_STOP, 0);
       ESP_LOGI(TAG, "OUT_STOP turned OFF.");
     } else {
       if (button_state != BUTTON_IDLE) {
@@ -264,19 +268,23 @@ void app_main(void) {
   //       vTaskDelay(pdMS_TO_TICKS(100));
   //     }
 
-  xTaskCreatePinnedToCore(
-      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
-      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(10000));
+  // xTaskCreatePinnedToCore(
+  //     dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
+  //     DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
+  // vTaskDelay(pdMS_TO_TICKS(10000));
 #endif
 
 #if CONFIG_SOIL_A
+  // Initialize as Soil A sensor
   g_nodeAddress = SOIL_A_ADDRESS;
-  static const char *pcb_a = "Soil_A";
   const esp_app_desc_t *app_desc = esp_app_get_description();
   ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
+
+  // Initialize ESP-NOW communication
   espnow_init2();
+
+  // Start ESP-NOW discovery task
   xTaskCreatePinnedToCore(
       espnow_discovery_task, "ESP-NOW Discovery",
       COMM_TASK_STACK_SIZE,     // Stack size
@@ -285,19 +293,44 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
+
+  // Brief delay to allow discovery to start
   vTaskDelay(pdMS_TO_TICKS(5000));
-  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_a, 3, NULL);
-  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
+
+  // Initialize soil sensor
+  soil_sensor_init();
+
+  // Start sensor reading task
+  xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
+              "soil_sensor",    // Task name
+              1024 * 4,         // Stack size
+              NULL, // No parameters needed - node type determined in init
+              3,    // Priority
+              NULL  // No handle needed
+  );
+
+  // Start ESP-NOW transmission task
+  xTaskCreate(vTaskESPNOW_TX, // Transmission task
+              "transmit",     // Task name
+              1024 * 4,       // Stack size
+              NULL,           // No parameters needed
+              5,              // Priority
+              NULL            // No handle needed
+  );
 #endif
 
 #if CONFIG_SOIL_B
-  g_nodeAddress = SOIL_A_ADDRESS;
-  static const char *pcb_a = "Soil_A";
+  // Initialize as Soil B sensor
+  g_nodeAddress =
+      SOIL_B_ADDRESS; // Fixed: was incorrectly set to SOIL_A_ADDRESS
   const esp_app_desc_t *app_desc = esp_app_get_description();
   ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
+
+  // Initialize ESP-NOW communication
   espnow_init2();
 
+  // Start ESP-NOW discovery task
   xTaskCreatePinnedToCore(
       espnow_discovery_task, "ESP-NOW Discovery",
       COMM_TASK_STACK_SIZE,     // Stack size
@@ -307,9 +340,29 @@ void app_main(void) {
       COMM_TASK_CORE_ID // Core ID
   );
 
+  // Brief delay to allow discovery to start
   vTaskDelay(pdMS_TO_TICKS(5000));
-  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_b, 3, NULL);
-  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
+
+  // Initialize soil sensor
+  soil_sensor_init();
+
+  // Start sensor reading task
+  xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
+              "soil_sensor",    // Task name
+              1024 * 4,         // Stack size
+              NULL, // No parameters needed - node type determined in init
+              3,    // Priority
+              NULL  // No handle needed
+  );
+
+  // Start ESP-NOW transmission task
+  xTaskCreate(vTaskESPNOW_TX, // Transmission task
+              "transmit",     // Task name
+              1024 * 4,       // Stack size
+              NULL,           // No parameters needed
+              5,              // Priority
+              NULL            // No handle needed
+  );
 #endif
 
 #if CONFIG_VALVE_A
