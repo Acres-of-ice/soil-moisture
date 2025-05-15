@@ -26,6 +26,15 @@ extern "C" {
 /** Maximum PCB name length */
 #define ESPNOW_MAX_PCB_NAME_LENGTH 20
 
+/* Peer information structure */
+typedef struct {
+  uint8_t mac[ESP_NOW_ETH_ALEN];
+  char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
+  bool has_pcb_name;
+  int64_t last_seen; // Timestamp when last seen
+  int8_t rssi;       // Last signal strength
+} peer_info_t;
+
 /** Message type definitions */
 typedef enum {
   ESPNOW_DATA_BROADCAST,
@@ -34,7 +43,7 @@ typedef enum {
 } espnow_data_type_t;
 
 /** Simple broadcast authentication message type */
-#define ESPNOW_AUTH 4
+#define ESPNOW_AUTH 9
 
 /** Event callback types */
 typedef enum {
@@ -115,6 +124,21 @@ typedef struct {
 /** Broadcast MAC address */
 extern const uint8_t ESPNOW_BROADCAST_MAC[ESP_NOW_ETH_ALEN];
 
+/* Forward declarations of static functions */
+static void espnow_send_cb(const uint8_t *mac_addr,
+                           esp_now_send_status_t status);
+static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
+                           const uint8_t *data, int len);
+static void espnow_task(void *pvParameter);
+static void init_own_mac(void);
+static bool is_own_mac(const uint8_t *mac_addr);
+static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name);
+static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
+                                      size_t len, bool include_pcb_name);
+static int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
+                             uint16_t *seq, uint32_t *magic, char *pcb_name);
+static void add_authenticated_peer(const uint8_t *mac_addr);
+
 /**
  * @brief Initialize the ESP-NOW library with the given configuration
  *
@@ -183,11 +207,6 @@ int espnow_get_peer_count(void);
  */
 esp_err_t espnow_get_peer_mac(int index, uint8_t *mac_addr);
 
-esp_err_t espnow_store_peer_pcb_name(const uint8_t *mac_addr,
-  const char *pcb_name);
-
-esp_err_t espnow_add_authenticated_peer(const uint8_t *mac_addr);
-
 /**
  * @brief Start peer discovery process
  *
@@ -242,6 +261,26 @@ bool espnow_is_peer_initiator(const uint8_t *mac_addr);
  * @return esp_err_t ESP_OK on success, or an error code
  */
 esp_err_t espnow_broadcast_auth(void);
+
+/**
+ * @brief Store PCB name for a peer
+ *
+ * @param mac_addr MAC address of the peer
+ * @param pcb_name PCB name to store
+ * @return esp_err_t ESP_OK on success, error otherwise
+ */
+esp_err_t espnow_store_peer_pcb_name(const uint8_t *mac_addr,
+                                     const char *pcb_name);
+/**
+ * @brief Add a peer to the authenticated peers list without requiring
+ * authentication
+ *
+ * This is useful when loading known peers from NVS storage.
+ *
+ * @param mac_addr MAC address of the peer to add
+ * @return esp_err_t ESP_OK on success, error otherwise
+ */
+esp_err_t espnow_add_authenticated_peer(const uint8_t *mac_addr);
 
 #ifdef __cplusplus
 }

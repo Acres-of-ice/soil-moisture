@@ -72,10 +72,10 @@ menu "ESP-NOW Library Configuration"
             When enabled, ESP-NOW will try to load device-to-MAC address mappings from NVS
             instead of running a full discovery process. Discovery will only run if no valid
             mappings are found or if manually triggered.
-    
+
     config ESPNOW_FORCE_DISCOVERY
         bool "Force device discovery"
-        default "y"
+        default "n"
         depends on ESPNOW_USE_STORED_MAPPINGS
         help
             When enabled along with USE_STORED_MAPPINGS, a discovery will always be performed
