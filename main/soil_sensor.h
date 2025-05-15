@@ -24,7 +24,6 @@ typedef struct {
   int soil_moisture;   // Soil moisture percentage (0-100)
   float battery_level; // Battery level percentage (0-100)
   int8_t rssi;         // Signal strength in dBm
-  uint8_t mac[ESP_NOW_ETH_ALEN]; // MAC address (optional)
 } espnow_recv_data_t;
 
 // Function prototypes for sensor operations

@@ -245,54 +245,43 @@ extern bool http_server_active;
 // ==================== Simulation mode ====================
 // Test case data structure
 typedef struct {
-  float air_temp;          // Temperature in Celsius
-  float water_temp;        // Water temperature in Celsius
-  float pressure;          // Fountain pressure
+  int soil_A;              // Soil moisture A percentage
+  int soil_B;              // Soil moisture B percentage
   const char *description; // Test case description
 } test_case_t;
 
-// Test cases based on configured temperature thresholds
-// All temperatures converted from tenths of °C to °C
+// Test cases for soil moisture simulation
 static const test_case_t test_cases[] = {
-    // ---- Spray Temperature Tests (TSPRAY = 2.5°C) ----
-    {99, 2.0, 5.0, "Just above spray temp - should not spray"},
-    {2.4, 0.0, 5.0, "Just below spray temp - should spray"},
-    {2.5, 2.0, 5.0, "At spray temp exactly - edge case"},
-    // ---- Freeze Temperature Tests (TFREEZE = -12.0°C) ----
-    {-11.9, 2.0, 5.0, "Above freeze temp - should spray"},
-    {-12.1, 2.0, 5.0, "Below freeze temp - should not spray"},
-    {-12.0, 2.0, 5.0, "At freeze temp exactly - edge case"},
-    // ---- Pipe Hot Temperature Tests (TPIPE_HOT = 3.5°C) ----
-    {2.0, 3.6, 5.0, "Water above hot threshold - should drain"},
-    {2.0, 3.4, 5.0, "Water below hot threshold - should spray"},
-    {2.0, 3.5, 5.0, "Water at hot threshold - edge case"},
-    // ---- Pipe Normal Temperature Tests (TPIPE_NORMAL = 1.5°C) ----
-    {2.0, 1.6, 5.0, "Water above normal temp - should spray"},
-    {2.0, 1.4, 5.0, "Water below normal temp - should not spray"},
-    {2.0, 1.5, 5.0, "Water at normal temp - edge case"},
-    // ---- Critical Combined Scenarios ----
-    {-5.0, 1.6, 5.0, "Cold air but safe - should spray"},
-    {3.0, 1.6, 5.0, "Warm air - should not spray"},
-    {2.0, 0.5, 5.0, "Cold water - should trigger drain"},
-    {2.0, 4.5, 5.0, "Hot water - should drain"},
-    // ---- Sensor Error Cases ----
-    {99.0, 2.0, 5.0, "Temperature sensor error"},
-    {2.0, 0.0, 5.0, "Water temperature sensor error"},
-    {2.0, -1.0, 5.0, "Frozen pipe condition"},
-    // ---- Pressure Tests with Valid Temperatures ----
-    {2.0, 2.0, 0.2, "Low pressure check"},
-    {2.0, 2.0, 9.8, "High pressure check"},
-    {2.0, 2.0, 5.0, "Normal pressure check"},
-    // ---- Multiple Parameter Edge Cases ----
-    {-11.8, 3.4, 0.3, "Near freeze, near hot water, low pressure"},
-    {2.4, 1.6, 9.5, "Near spray temp, good water, high pressure"},
-    {2.6, 3.6, 0.2, "Above spray, hot water, low pressure"},
-    // ---- Optimal Operating Conditions ----
-    {0.0, 2.0, 5.0, "Ideal winter conditions"},
-    {2.0, 2.5, 5.0, "Perfect operating conditions"},
-    // ---- Extreme Cases ----
-    {15.0, 10.0, 15.0, "All parameters too high"},
-    {-20.0, 0.0, 0.1, "All parameters too low"}};
+    // Low moisture scenarios (should trigger irrigation)
+    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
+     "Both sensors dry - both should trigger irrigation"},
+    {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15,
+     "Sensor A marginal, B dry - B should trigger irrigation"},
+    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
+     "Sensor A dry, B marginal - A should trigger irrigation"},
+
+    // Mixed moisture scenarios
+    {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5,
+     "Sensor A dry, B wet - only A should trigger irrigation"},
+    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10,
+     "Sensor A wet, B dry - only B should trigger irrigation"},
+
+    // High moisture scenarios (should not trigger irrigation)
+    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 5,
+     "Both sensors wet - neither should trigger irrigation"},
+    {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20,
+     "Both sensors very wet - neither should trigger irrigation"},
+
+    // Edge cases
+    {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY, "Both sensors at threshold - edge case"},
+    {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1,
+     "Sensor A just below threshold, B just above threshold"},
+    {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1,
+     "Sensor A just above threshold, B just below threshold"},
+
+    // Extreme cases
+    {0, 100, "Sensor A bone dry, B saturated"},
+    {100, 0, "Sensor A saturated, B bone dry"}};
 
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
 #define TEST_DELAY_MS (120 * 1000) // 5 second delay between tests

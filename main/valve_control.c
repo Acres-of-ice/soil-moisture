@@ -10,18 +10,12 @@
 #include "sensor.h"
 #include "soil_comm.h"
 #include "soil_sensor.h"
-#include "valve_control.h"
 #include "wifi_app.h"
 
 static const char *TAG = "ValveControl";
 extern SemaphoreHandle_t stateMutex;
 static TickType_t stateStartTime = 0; // Tracks when we entered current state
 bool AUTO_mode = pdTRUE;
-// Convert Kconfig integers to floats by dividing by 10
-float tspray = 10 / 10.0f;
-float tfreeze = 10 / 10.0f;
-float tpipe_hot = 10 / 10.0f;
-float tpipe_normal = 10 / 10.0f;
 
 extern TaskHandle_t valveTaskHandle;
 bool SPRAY_mode = pdFALSE;
@@ -48,10 +42,6 @@ static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
                                        [TEMP_TOO_HIGH] = "TEMP:HIGH",
                                        [TEMP_TOO_LOW] = "TEMP:LOW"};
 
-// static const char *WATER_STATE_STR[] = {[WATER_FREEZING] = "WATER:FREEZE",
-//                                         [WATER_HOT] = "WATER:HOT",
-//                                         [WATER_NORMAL] = "WATER:NORMAL"};
-
 static const char *PRESSURE_STATE_STR[] = {
     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
 
@@ -68,15 +58,6 @@ static int moisture_level = 0;
 
 void update_moisture_readings(int a) { moisture_level = a; }
 
-// Helper functions to determine states
-static temperature_state_t get_temperature_state(float temperature) {
-  if (temperature >= tspray)
-    return TEMP_TOO_HIGH;
-  if (temperature <= tfreeze)
-    return TEMP_TOO_LOW;
-  return TEMP_NORMAL;
-}
-
 static moisture_state_t get_moisture_state(float humidity) {
   if (humidity >= 80)
     return MOISTURE_HIGH;
@@ -84,16 +65,6 @@ static moisture_state_t get_moisture_state(float humidity) {
     return MOISTURE_NORMAL;
   return MOISTURE_LOW;
 }
-
-// static pressure_state_t get_pressure_state(float pressure,
-//                                            float mean_pressure) {
-//   if (!calibration_done)
-//     return PRESSURE_NORMAL;
-//   if (pressure < mean_pressure * 0.7 || pressure > mean_pressure * 1.3) {
-//     return PRESSURE_OUT_OF_RANGE;
-//   }
-//   return PRESSURE_NORMAL;
-// }
 
 const char *valveStateToString(ValveState state) {
   switch (state) {
@@ -126,37 +97,38 @@ const char *valveStateToString(ValveState state) {
   }
 }
 
-// void simulation_task(void *pvParameters) {
-//   const char *TAG = "Simulation";
-//   size_t test_index = 0;
+void set_simulated_values(int soil_A_value, int soil_B_value) {
+  soil_A = soil_A_value;
+  soil_B = soil_B_value;
+}
 
-//   ESP_LOGI(TAG, "Starting automated test sequence with %d test cases",
-//            NUM_TEST_CASES);
+void simulation_task(void *pvParameters) {
+  const char *TAG = "Simulation";
+  size_t test_index = 0;
 
-//   while (1) {
-//     // Get current test case
-//     test_case_t current_test = test_cases[test_index];
+  ESP_LOGI(TAG, "Starting automated test sequence with %d test cases",
+           NUM_TEST_CASES);
 
-//     // Set test values
-//     set_simulated_values(current_test.air_temp, current_test.water_temp,
-//                          current_test.pressure);
+  while (1) {
+    // Get current test case
+    test_case_t current_test = test_cases[test_index];
 
-//     // Run and log test results
-//     ESP_LOGI(TAG, "Test case %d: %s", test_index + 1,
-//     current_test.description); ESP_LOGI(TAG, "Values: Air=%.1f°C,
-//     Water=%.1f°C, Pressure=%.1f",
-//              current_test.air_temp, current_test.water_temp,
-//              current_test.pressure);
+    // Set test values
+    set_simulated_values(current_test.soil_A, current_test.soil_B);
 
-//     // Move to next test case
-//     test_index = (test_index + 1) % NUM_TEST_CASES;
+    // Run and log test results
+    ESP_LOGI(TAG, "Test case %d: %s", test_index + 1, current_test.description);
+    ESP_LOGI(TAG, "Values: Soil A=%d%%, Soil B=%d%%", current_test.soil_A,
+             current_test.soil_B);
+    // Move to next test case
+    test_index = (test_index + 1) % NUM_TEST_CASES;
 
-//     // Delay before next test
-//     vTaskDelay(pdMS_TO_TICKS(TEST_DELAY_MS));
-//   }
+    // Delay before next test
+    vTaskDelay(pdMS_TO_TICKS(TEST_DELAY_MS));
+  }
 
-//   vTaskDelete(NULL);
-// }
+  vTaskDelete(NULL);
+}
 
 // Helper function to convert nodeAddress to PCB name
 const char *get_pcb_name(uint8_t nodeAddress) {
@@ -195,63 +167,6 @@ static bool isStateTimedOut(ValveState state) {
   return false;
 }
 
-void simulate_irrigation_workflow(void *arg) {
-  int state = 0;
-  // sensor_readings_t moisture_readings = {0};
-  ESP_LOGI("Simulate", "inside simulate");
-  while (true) {
-    switch (state) {
-    case 0: // Case 1: Sensor A dry (moisture < 40)
-      soil_A = 30;
-      soil_B = 60; // Assume Sensor B is neutral
-      // strcpy(recv_data.pcb_name, "Sensor A PCB");
-      // recv_data.soil_moisture = moisture_readings.soil_A;
-
-      ESP_LOGI("SIMULATION", "Case 1: Sensor A dry (soil_A = %d)", soil_A);
-      vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
-      state++;
-      break;
-
-    case 1: // Case 2: Sensor A wet (moisture > 70)
-      soil_A = 75;
-      soil_B = 60;
-      // strcpy(recv_data.pcb_name, "Sensor A PCB");
-      // recv_data.soil_moisture = moisture_readings.soil_A;
-
-      ESP_LOGI("SIMULATION", "Case 2: Sensor A wet (soil_A = %d)", soil_A);
-      vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
-      state++;
-      break;
-
-    case 2: // Case 3: Sensor B dry (moisture < 40)
-      soil_A = 75;
-      soil_B = 35;
-      // strcpy(recv_data.pcb_name, "Sensor B PCB");
-      // recv_data.soil_moisture = moisture_readings.soil_B;
-
-      ESP_LOGI("SIMULATION", "Case 3: Sensor B dry (soil_B = %d)", soil_B);
-      vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
-      state++;
-      break;
-
-    case 3: // Case 4: Sensor B wet (moisture > 70)
-      soil_A = 75;
-      soil_B = 80;
-      // strcpy(recv_data.pcb_name, "Sensor B PCB");
-      // recv_data.soil_moisture = moisture_readings.soil_B;
-
-      ESP_LOGI("SIMULATION", "Case 4: Sensor B wet (soil_B = %d)", soil_B);
-      vTaskDelay(pdMS_TO_TICKS(2 * 60 * 1000)); // 2 minutes
-      state = 0;                                // Restart the cycle
-      break;
-
-    default:
-      state = 0;
-      break;
-    }
-  }
-}
-
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   // ESP_LOGI(TAG, "inside LOGI");
@@ -265,19 +180,17 @@ void updateValveState(void *pvParameters) {
 
     switch (newState) {
     case STATE_IDLE:
+      ESP_LOGI(TAG, "Values: Soil A=%d%%, Soil B=%d%%", soil_A, soil_B);
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
       vTaskDelay(1000);
 
-      // if ( recv_data.soil_moisture < 40 &&
-      //     strcmp(recv_data.pcb_name, "Sensor A PCB") == 0) {
-      if (soil_A < 40 && isWithinDrainTimeRange()) {
+      // if (soil_A < CONFIG_SOIL_DRY && isWithinDrainTimeRange()) {
+      if (soil_A < CONFIG_SOIL_DRY) {
         newState = STATE_VALVE_A_OPEN;
         on_off_counter++;
-      }
-      // else if ( recv_data.soil_moisture < 40 &&
-      //            strcmp(recv_data.pcb_name, "Sensor B PCB") == 0) {
-      else if (soil_B < 40 && isWithinDrainTimeRange()) {
+        // } else if (soil_B < CONFIG_SOIL_DRY && isWithinDrainTimeRange()) {
+      } else if (soil_B < CONFIG_SOIL_DRY) {
         newState = STATE_VALVE_B_OPEN;
         on_off_counter++;
       } else {
@@ -306,8 +219,9 @@ void updateValveState(void *pvParameters) {
       }
       newState = STATE_IRR_START_A;
       break;
+
     case STATE_IRR_START_A:
-      while (soil_A < 70) {
+      while (soil_A < CONFIG_SOIL_WET) {
         ESP_LOGI(TAG, "Waiting for Sensor A: %d%%", soil_A);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
@@ -363,7 +277,7 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_START_B;
       break;
     case STATE_IRR_START_B:
-      while (soil_B < 70) {
+      while (soil_B < CONFIG_SOIL_WET) {
         ESP_LOGI(TAG, "Waiting for Sensor B: %d%%", soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
@@ -478,7 +392,8 @@ bool isWithinDrainTimeRange(void) {
 //   moisture_state_t moisture_state =
 //       get_moisture_state(current_readings.humidity);
 
-//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
+//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90))
+//   {
 //     uint32_t current_time = xTaskGetTickCount();
 //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
 //       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
@@ -545,7 +460,8 @@ bool isWithinDrainTimeRange(void) {
 //   moisture_state_t moisture_state =
 //       get_moisture_state(current_readings.humidity);
 
-//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90)) {
+//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90))
+//   {
 //     uint32_t current_time = xTaskGetTickCount();
 //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
 //       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
@@ -617,7 +533,8 @@ bool isWithinDrainTimeRange(void) {
 //   // pressure_state_t pressure_state = get_pressure_state(
 //   //     current_readings.fountain_pressure, mean_fountain_pressure);
 
-//   if ((temp_state == TEMP_TOO_HIGH) && (current_readings.temperature < 90)) {
+//   if ((temp_state == TEMP_TOO_HIGH) && (current_readings.temperature < 90))
+//   {
 //     ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
 //              current_readings.temperature);
 //     return true;

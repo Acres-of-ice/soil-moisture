@@ -842,7 +842,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
   // Log signal quality if needed
   if (rssi < -75) {
     ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
-    update_status_message("Poor signal: RSSI: %d dBm", rssi);
+    // update_status_message("Poor signal: RSSI: %d dBm", rssi);
   }
 
 #if CONFIG_MASTER
@@ -869,7 +869,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     recv_data.battery_level = battery;
     message_received = true;
 
-    ESP_LOGI(TAG, "Moisture %d%% from %s", moisture, battery,
+    ESP_LOGI(TAG, "Moisture %d%% from %s", moisture,
              get_pcb_name(recv_data.node_address));
     return;
   }
@@ -1538,11 +1538,10 @@ bool verify_device_mappings(void) {
 
 // Check for critical devices first
 #if CONFIG_MASTER
-  // const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
-  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS,
-  //                                     SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
-  const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_A_ADDRESS};
-//    const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS,SOIL_B};
+  const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
+                                      VALVE_B_ADDRESS, PUMP_ADDRESS,
+                                      SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
+  // const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_A_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \

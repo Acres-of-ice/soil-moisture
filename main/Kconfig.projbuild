@@ -5,6 +5,8 @@ menu "App Configuration"
         
         config SITE_SKUAST
             bool "Skuast"
+        config SITE_TEST
+            bool "Test"
     endchoice
 
     config SITE_NAME
@@ -258,6 +260,33 @@ menu "Time Configuration"
         range 1 60
         help
             Interval for keeping server on
+endmenu
+
+config ENABLE_SIMULATION_MODE
+    int
+    default 1 if SITE_TEST
+    default 0
+    help
+        Enable simulation mode which uses fixed simulated sensor readings instead of real sensor data.
+
+menu "Soil Moisture Thresholds"
+    config SOIL_DRY
+        int "Soil Dry Threshold (%)"
+        range 0 100
+        default 40
+        help
+            Set the soil moisture threshold below which irrigation will start.
+            Value is a percentage (0-100). Lower values mean drier soil.
+            Example: 40 means irrigation starts when moisture falls below 40%.
+            
+    config SOIL_WET
+        int "Soil Wet Threshold (%)"
+        range 0 100
+        default 70
+        help
+            Set the soil moisture threshold at which irrigation will stop.
+            Value is a percentage (0-100). Higher values mean wetter soil.
+            Example: 70 means irrigation stops when moisture reaches 70%.
 endmenu
 
 menu "WiFi Configuration"

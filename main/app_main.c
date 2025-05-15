@@ -19,12 +19,11 @@
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "soil_comm.h"
+#include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
 
-#if CONFIG_SOIL_A || CONFIG_SOIL_B
-#include "soil_sensor.h"
-#endif
+const site_config_t site_config = {.simulate = CONFIG_ENABLE_SIMULATION_MODE};
 
 int on_off_counter = 1;
 bool lcd_device_ready = false;
@@ -44,6 +43,7 @@ TaskHandle_t dataLoggingTaskHandle = NULL;
 TaskHandle_t valveTaskHandle = NULL;
 TaskHandle_t discoveryTaskHandle = NULL;
 TaskHandle_t smsTaskHandle = NULL;
+TaskHandle_t simulationTaskHandle = NULL;
 
 static const char *TAG = "APP";
 char last_message[256] = {0}; // Adjust size as needed
@@ -209,7 +209,28 @@ void app_main(void) {
   const esp_app_desc_t *app_desc = esp_app_get_description();
   ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
+
   espnow_init2();
+
+  if (site_config.simulate) {
+    ESP_LOGW(TAG, "Simulation ON");
+    update_status_message("Simulation ON");
+    xTaskCreatePinnedToCore(simulation_task, "simulation_task",
+                            SIMULATION_TASK_STACK_SIZE, NULL,
+                            SIMULATION_TASK_PRIORITY, &simulationTaskHandle,
+                            SIMULATION_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  } else {
+    xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery",
+        COMM_TASK_STACK_SIZE,     // Stack size
+        NULL,                     // Parameters
+        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+        &discoveryTaskHandle,
+        COMM_TASK_CORE_ID // Core ID
+    );
+  }
+
   vTaskDelay(pdMS_TO_TICKS(2000));
   stateMutex = xSemaphoreCreateMutex();
   message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
@@ -230,25 +251,10 @@ void app_main(void) {
                           VALVE_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
 
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-  vTaskDelay(pdMS_TO_TICKS(20000));
-  ;
-
   // xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
   //                         &g_nodeAddress, BUTTON_TASK_PRIORITY,
   //                         &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   // vTaskDelay(pdMS_TO_TICKS(100));
-
-  // xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
-  //  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL,
-  //  5, NULL);
 
   xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
 
@@ -256,7 +262,7 @@ void app_main(void) {
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
       WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
 
