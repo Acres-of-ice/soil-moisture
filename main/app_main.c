@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "button_control.h"
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
@@ -293,12 +292,12 @@ void app_main(void) {
   }
   ESP_ERROR_CHECK(ret);
 
-  if (init_hex_buffer() != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize hex buffer");
-    vTaskDelete(NULL);
-  }
+  // if (init_hex_buffer() != ESP_OK) {
+  //   ESP_LOGE(TAG, "Failed to initialize hex buffer");
+  //   vTaskDelete(NULL);
+  // }
 
-#if CONFIG_SENDER_A
+#if CONFIG_SOIL_A
   g_nodeAddress = SOIL_A;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   static const char *pcb_a = "Soil_A";
@@ -315,7 +314,7 @@ void app_main(void) {
   xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_a, 3, NULL);
   xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
 #endif
-#if CONFIG_SENDER_B
+#if CONFIG_SOIL_B
   g_nodeAddress = SOIL_B;
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   static const char *pcb_b = "Soil_B";

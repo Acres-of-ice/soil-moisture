@@ -182,7 +182,7 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
       .data = {0} // Initialize data to empty string
   };
 
-#if CONFIG_RECEIVER
+#if CONFIG_MASTER
   // Special handling for hex data commands
   // if (command == 0xA3) {
   // ESP_LOGI(TAG,"iniside receiver send");
@@ -1121,7 +1121,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 // update_status_message("Poor signal: RSSI: %d dBm", rssi);
 // }
 //       // Extract PCB name between "PCB:" and " Count:"
-#if CONFIG_RECEIVER
+#if CONFIG_MASTER
   char msg[data_len + 1];
   memcpy(msg, data, data_len);
   msg[data_len] = '\0';
@@ -2049,14 +2049,14 @@ bool verify_device_mappings(void) {
       espnow_get_peer_name(NULL); // NULL returns own PCB name
 
 // Check for critical devices first
-#if CONFIG_RECEIVER
+#if CONFIG_MASTER
   const uint8_t critical_devices[] = {
       CONDUCTOR_ADDRESS, A_VALVE_ADDRESS, B_VALVE_ADDRESS,
       PUMP_ADDRESS,      SOIL_A,          SOIL_B};
 //    const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS,SOIL_B};
 #endif
 
-#if CONFIG_SENDER_A || CONFIG_SENDER_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||  \
+#if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
     CONFIG_PUMP
   const uint8_t critical_devices[] = {CONDUCTOR_ADDRESS};
 #endif
@@ -2354,7 +2354,7 @@ void vTaskESPNOW_TX(void *pvParameters) {
   }
 }
 
-#if CONFIG_RECEIVER
+#if CONFIG_MASTER
 
 void vTaskESPNOW_RX(void *pvParameters) {
   ESP_LOGD("Sensor", "ESP-NOW RX task started");

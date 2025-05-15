@@ -308,41 +308,41 @@ static void mdns_example_task(void *pvParameters)
     }
 }
 
-// void app_main(void)
-// {
-//     ESP_ERROR_CHECK(nvs_flash_init());
-//     ESP_ERROR_CHECK(esp_netif_init());
-//     ESP_ERROR_CHECK(esp_event_loop_create_default());
+void app_main(void)
+{
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-//     initialise_mdns();
+    initialise_mdns();
 
-//     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-//      * Read "Establishing Wi-Fi or Ethernet Connection" section in
-//      * examples/protocols/README.md for more information about this function.
-//      */
-//     ESP_ERROR_CHECK(example_connect());
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
 
-// #if defined(CONFIG_MDNS_ADD_CUSTOM_NETIF) && !defined(CONFIG_MDNS_PREDEF_NETIF_STA) && !defined(CONFIG_MDNS_PREDEF_NETIF_ETH)
-//     /* Demonstration of adding a custom netif to mdns service, but we're adding the default example one,
-//      * so we must disable all predefined interfaces (PREDEF_NETIF_STA, AP and ETH) first
-//      */
-//     ESP_ERROR_CHECK(mdns_register_netif(EXAMPLE_INTERFACE));
-//     /* It is not enough to just register the interface, we have to enable is manually.
-//      * This is typically performed in "GOT_IP" event handler, but we call it here directly
-//      * since the `EXAMPLE_INTERFACE` netif is connected already, to keep the example simple.
-//      */
-//     ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_ENABLE_IP4 | MDNS_EVENT_ENABLE_IP6));
-//     ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_ANNOUNCE_IP4 | MDNS_EVENT_ANNOUNCE_IP6));
+#if defined(CONFIG_MDNS_ADD_CUSTOM_NETIF) && !defined(CONFIG_MDNS_PREDEF_NETIF_STA) && !defined(CONFIG_MDNS_PREDEF_NETIF_ETH)
+    /* Demonstration of adding a custom netif to mdns service, but we're adding the default example one,
+     * so we must disable all predefined interfaces (PREDEF_NETIF_STA, AP and ETH) first
+     */
+    ESP_ERROR_CHECK(mdns_register_netif(EXAMPLE_INTERFACE));
+    /* It is not enough to just register the interface, we have to enable is manually.
+     * This is typically performed in "GOT_IP" event handler, but we call it here directly
+     * since the `EXAMPLE_INTERFACE` netif is connected already, to keep the example simple.
+     */
+    ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_ENABLE_IP4 | MDNS_EVENT_ENABLE_IP6));
+    ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_ANNOUNCE_IP4 | MDNS_EVENT_ANNOUNCE_IP6));
 
-// #if defined(CONFIG_MDNS_RESPOND_REVERSE_QUERIES)
-//     ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_IP4_REVERSE_LOOKUP | MDNS_EVENT_IP6_REVERSE_LOOKUP));
-// #endif
+#if defined(CONFIG_MDNS_RESPOND_REVERSE_QUERIES)
+    ESP_ERROR_CHECK(mdns_netif_action(EXAMPLE_INTERFACE, MDNS_EVENT_IP4_REVERSE_LOOKUP | MDNS_EVENT_IP6_REVERSE_LOOKUP));
+#endif
 
-// #endif // CONFIG_MDNS_ADD_CUSTOM_NETIF
+#endif // CONFIG_MDNS_ADD_CUSTOM_NETIF
 
-//     initialise_button();
-//     xTaskCreate(&mdns_example_task, "mdns_example_task", 2048, NULL, 5, NULL);
-// }
+    initialise_button();
+    xTaskCreate(&mdns_example_task, "mdns_example_task", 2048, NULL, 5, NULL);
+}
 
 /** Generate host name based on sdkconfig, optionally adding a portion of MAC address to it.
  *  @return host name string allocated from the heap
