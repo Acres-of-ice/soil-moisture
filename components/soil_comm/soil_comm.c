@@ -2219,76 +2219,166 @@ bool nvs_has_valid_mappings(void) {
 
 
 
-void vTaskESPNOW_TX(void *pvParameters) 
-{
+// void vTaskESPNOW_TX(void *pvParameters) 
+// {
 
+//     int message_count = 0;
+//     TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
+//     bool at_least_one_peer_authenticated = false;
+//     const char *own_pcb_name = espnow_get_peer_name(NULL);
+//     espnow_message_t sensor_data;
+//     uint8_t peer_mac[ESP_NOW_ETH_ALEN];
+//     const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
+
+//     uint8_t conductor_mac[ESP_NOW_ETH_ALEN];
+
+//     get_mac_for_device(CONDUCTOR_ADDRESS, conductor_mac);
+    
+//     while (1) {
+//       int auth_peer_count = espnow_get_peer_count();
+//       ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
+
+//           if (espnow_get_peer_mac(0, peer_mac) == ESP_OK)
+
+//           // Check if there's sensor data available
+//           if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE)
+//           {
+//             // Get current timestamp
+//             char timestamp[20];
+//             time_t now = time(NULL);
+//             struct tm *timeinfo = localtime(&now);
+//             strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
+//             timeinfo);
+
+//             // Format the message with sensor data
+//             char message[128];
+//             int msg_len = snprintf(
+//                 message, sizeof(message),
+//                 "PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
+//                  message_count++, sensor_data.soil_moisture,
+//                 sensor_data.battery_level, sensor_data.temperature,
+//                 timestamp);
+//             ESP_LOGI("TX", "sensor_data: Moisture=%d, Battery=%d, Temp=%d",
+//                   sensor_data.soil_moisture, sensor_data.battery_level,
+//                   sensor_data.temperature);
+
+//             if (msg_len >= sizeof(message)) {
+//               ESP_LOGE(TAG, "Message truncated!");
+//               msg_len = sizeof(message) - 1;
+//             }
+
+//               esp_err_t send_result = espnow_send(peer_mac, message, msg_len
+//               + 1);
+//             if (send_result != ESP_OK) {
+//               ESP_LOGE(TAG, "Failed to send message: %s",
+//                        esp_err_to_name(send_result));
+//             }
+//             ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_mac);
+//             //}
+//           }
+//       //vTaskDelay(send_interval);
+//       message_count++;
+//       vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+// }
+
+void vTaskESPNOW_TX(void *pvParameters) {
     int message_count = 0;
-    TickType_t send_interval = pdMS_TO_TICKS(10000); // Start with 10 seconds
-    bool at_least_one_peer_authenticated = false;
-
-    // Give time for peer discovery
-    // ESP_LOGI(TAG, "Starting peer discovery...");
-    // espnow_start_discovery(5000);
-    // vTaskDelay(pdMS_TO_TICKS(5000));
-
-    // Get our own PCB name for message inclusion
     const char *own_pcb_name = espnow_get_peer_name(NULL);
     espnow_message_t sensor_data;
-    uint8_t peer_mac[ESP_NOW_ETH_ALEN];
-    const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
-
-    uint8_t conductor_mac[ESP_NOW_ETH_ALEN];
-
-    get_mac_for_device(CONDUCTOR_ADDRESS, conductor_mac);
-    //const char *peer_pcb_name = espnow_get_peer_name(peer_mac);
+   clearMessageQueue();
+    while (!ESPNOW_isQueueEmpty()) {
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
     while (1) {
-      // Get authenticated peer count
-      int auth_peer_count = espnow_get_peer_count();
-      ESP_LOGI(TAG, "Authenticated peer count: %d", auth_peer_count);
+        if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+            // Prepare formatted sensor data string
+            char formatted_str[128];
+            int len = snprintf(formatted_str, sizeof(formatted_str),
+                               "PCB:%s Count:%d S[%d]",
+                               own_pcb_name,
+                               message_count++,
+                               sensor_data.soil_moisture);
 
-          if (espnow_get_peer_mac(0, peer_mac) == ESP_OK)
-
-          // Check if there's sensor data available
-          if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE)
-          {
-            // Get current timestamp
-            char timestamp[20];
-            time_t now = time(NULL);
-            struct tm *timeinfo = localtime(&now);
-            strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S",
-            timeinfo);
-
-            // Format the message with sensor data
-            char message[128];
-            int msg_len = snprintf(
-                message, sizeof(message),
-                "PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]", own_pcb_name,
-                 message_count++, sensor_data.soil_moisture,
-                sensor_data.battery_level, sensor_data.temperature,
-                timestamp);
-            ESP_LOGI("TX", "sensor_data: Moisture=%d, Battery=%d, Temp=%d",
-                  sensor_data.soil_moisture, sensor_data.battery_level,
-                  sensor_data.temperature);
-
-            if (msg_len >= sizeof(message)) {
-              ESP_LOGE(TAG, "Message truncated!");
-              msg_len = sizeof(message) - 1;
+            if (len >= sizeof(formatted_str)) {
+                ESP_LOGE(TAG, "Formatted message too long, truncated");
+                formatted_str[sizeof(formatted_str) - 1] = '\0';
             }
 
-              esp_err_t send_result = espnow_send(peer_mac, message, msg_len
-              + 1);
-            if (send_result != ESP_OK) {
-              ESP_LOGE(TAG, "Failed to send message: %s",
-                       esp_err_to_name(send_result));
+            // Create and queue a comm_t message
+            comm_t message = {
+                .address = CONDUCTOR_ADDRESS,
+                .command = 0xA3,
+                .source = g_nodeAddress,  // global node address
+                .retries = 0,
+                .seq_num = sequence_number++, // optional: track for ordering
+                .data = {0}
+            };
+            strncpy(message.data, formatted_str, sizeof(message.data) - 1);
+
+            if (xQueueSend(message_queue, &message, 0) != pdPASS) {
+                ESP_LOGE(TAG, "Failed to queue message to CONDUCTOR");
+            } else {
+                ESP_LOGI(TAG, "Queued to CONDUCTOR: %s", message.data);
             }
-            ESP_LOGI(TAG, "Sending to PCB %s with sensor data", peer_mac);
-            //}
-          }
-      //vTaskDelay(send_interval);
-      message_count++;
-      vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
+
+
+// void vTaskESPNOW_TX(void *pvParameters) {
+//     int message_count = 0;
+
+//     // Get own PCB name for inclusion
+//     const char *own_pcb_name = espnow_get_peer_name(NULL);
+//     espnow_message_t sensor_data;
+
+//     // Get Conductor MAC address once at the start
+//     uint8_t conductor_mac[ESP_NOW_ETH_ALEN] = {0};
+//     get_mac_for_device(CONDUCTOR_ADDRESS, conductor_mac);
+
+//     if (memcmp(conductor_mac, (uint8_t[ESP_NOW_ETH_ALEN]){0}, ESP_NOW_ETH_ALEN) == 0) {
+//         ESP_LOGE(TAG, "Conductor MAC not found, cannot send messages");
+//         vTaskDelete(NULL);
+//         return;
+//     }
+
+//     while (1) {
+//         if (xQueueReceive(espnow_queue, &sensor_data, 0) == pdTRUE) {
+//             // Timestamp
+//             char timestamp[20];
+//             time_t now = time(NULL);
+//             struct tm *timeinfo = localtime(&now);
+//             strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+//             // Format sensor data message
+//             char message[128];
+//             int msg_len = snprintf(message, sizeof(message),
+//                 "PCB:%s Count:%d S[%d]B[%d]T[%d]D[%s]",
+//                 own_pcb_name, message_count++,
+//                 sensor_data.soil_moisture, sensor_data.battery_level,
+//                 sensor_data.temperature, timestamp);
+
+//             if (msg_len >= sizeof(message)) {
+//                 ESP_LOGE(TAG, "Message truncated");
+//                 msg_len = sizeof(message) - 1;
+//             }
+
+//             // Send the message
+//             esp_err_t send_result = espnow_send(conductor_mac, (uint8_t *)message, msg_len + 1);
+//             if (send_result != ESP_OK) {
+//                 ESP_LOGE(TAG, "Failed to send message to conductor: %s", esp_err_to_name(send_result));
+//             } else {
+//                 ESP_LOGI(TAG, "Sent to CONDUCTOR: %s", message);
+//             }
+//         }
+
+//         vTaskDelay(pdMS_TO_TICKS(3000));  // Delay before next reading
+//     }
+// }
+
 
 // void vTaskESPNOW_TX(void *pvParameters) {
 //     int message_count = 0;
