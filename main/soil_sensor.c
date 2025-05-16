@@ -239,7 +239,8 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
  */
 bool queue_sensor_data(const espnow_recv_data_t *data) {
   if (sensor_data_queue == NULL)
-    return false;
+    ESP_LOGD(TAG, "Queued sensor data");
+  return false;
   return xQueueSend(sensor_data_queue, data, 0) == pdTRUE;
 }
 
@@ -252,7 +253,8 @@ bool queue_sensor_data(const espnow_recv_data_t *data) {
  */
 bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
   if (sensor_data_queue == NULL)
-    return false;
+    ESP_LOGW(TAG, "Sensor queue null");
+  return false;
   return xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms)) ==
          pdTRUE;
 }
@@ -425,7 +427,7 @@ void start_soil_sensor_tasks(void) {
 // Start ESP-NOW transmission task if this is a soil sensor
 #if defined(CONFIG_SOIL_A) || defined(CONFIG_SOIL_B)
   xTaskCreate(vTaskESPNOW_TX, "espnow_tx", 4096, NULL, 5, NULL);
-  ESP_LOGI(TAG, "ESP-NOW transmission task started");
+  ESP_LOGI(TAG, "ESP-NOW TX transmission task started");
 #endif
 
   ESP_LOGI(TAG, "Soil sensor tasks started");

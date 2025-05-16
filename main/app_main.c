@@ -56,24 +56,6 @@ char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 QueueHandle_t message_queue = NULL;
 #define MAX_QUEUE_SIZE 8
 
-espnow_config_t config = {
-    .pcb_name = pcb_name,        // Set the PCB name
-    .wifi_channel = 1,           // WiFi channel (must match WiFi config)
-    .send_delay_ms = 1000,       // Delay between sends
-    .enable_long_range = true,   // Enable long range mode
-    .enable_encryption = false,  // No encryption for simplicity
-    .recv_cb = on_data_received, // Callback for received data
-    .send_cb = on_data_sent,     // Callback for sent data
-
-    // Authentication settings
-    .require_auth = true,           // Enable authentication
-    .auth_key = "MIS4201",          // Set authentication key
-    .auth_broadcast_interval_ms = 0 // Set authentication key
-
-    // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
-    // .max_auth_attempts;     // Maximum authentication attempts per peer
-};
-
 typedef enum {
   BUTTON_IDLE,
   BUTTON_START_PRESSED,
@@ -249,7 +231,7 @@ void app_main(void) {
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
 
-  xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
+  // xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
   vTaskDelay(pdMS_TO_TICKS(10000));
   xTaskCreatePinnedToCore(updateValveState, "updateValveState",
                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,

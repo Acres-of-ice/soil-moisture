@@ -39,6 +39,7 @@ extern TaskHandle_t valveTaskHandle;
 #define MAX_RETRIES 10
 
 static time_t last_conductor_message_time = 0;
+static sensor_readings_t soil_readings = {0}; // Local buffer
 
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
@@ -869,8 +870,26 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     recv_data.battery_level = battery;
     message_received = true;
 
-    ESP_LOGI(TAG, "Moisture %d%% from %s", moisture,
+    // Process the received data
+    ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
+    ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
+    ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
+    ESP_LOGI(TAG, "Signal Strength: %d dBm", recv_data.rssi);
+    ESP_LOGI(TAG, "==========================\n");
+
+    // Update global readings if needed
+    if (recv_data.node_address == SOIL_A_ADDRESS) {
+      soil_readings.soil_A = recv_data.soil_moisture;
+    } else if (recv_data.node_address == SOIL_B_ADDRESS) {
+      soil_readings.soil_B = recv_data.soil_moisture;
+    }
+    // Now take mutex only for the quick copy operation
+    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+      // Quick memcpy to update the shared readings
+      memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
+      xSemaphoreGive(readings_mutex);
+    }
     return;
   }
 #endif
@@ -1101,7 +1120,7 @@ esp_err_t espnow_init2(void) {
       .send_delay_ms = 1000,      // Optional: adjust based on your needs
       .enable_encryption = false, // Set to true if you need encryption
       .require_auth = true,       // Enable authentication
-      .auth_key = "AIR4201",      // Set a secret auth key shared by all devices
+      .auth_key = "MIS4201",      // Set a secret auth key shared by all devices
       .auth_broadcast_interval_ms = 0, // Broadcast auth every 5 seconds
       .discovery_timeout_ms = 180000,  // 30 seconds timeout for discovery
       .max_auth_attempts = 2,          // Maximum auth attempts per peer
@@ -1539,10 +1558,10 @@ bool verify_device_mappings(void) {
 
 // Check for critical devices first
 #if CONFIG_MASTER
-  const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
-                                      VALVE_B_ADDRESS, PUMP_ADDRESS,
-                                      SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
-  // const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_A_ADDRESS};
+  // const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
+  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS,
+  //                                     SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
+  const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_B_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
@@ -1701,43 +1720,46 @@ bool nvs_has_valid_mappings(void) {
   return result;
 }
 
-#if CONFIG_MASTER
-void vTaskESPNOW_RX(void *pvParameters) {
-  ESP_LOGD("Sensor", "ESP-NOW RX task started");
-  espnow_recv_data_t recv_data;
-  static sensor_readings_t soil_readings = {0}; // Local buffer
-
-  while (1) {
-    // Try to get data from the queue with a timeout
-    if (receive_sensor_data(&recv_data, 1000)) {
-      // Process the received data
-      ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
-      ESP_LOGD(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
-               get_pcb_name(recv_data.node_address));
-      ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
-      ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
-      ESP_LOGD(TAG, "==========================\n");
-
-      // Update global readings if needed
-      if (recv_data.node_address == SOIL_A_ADDRESS) {
-        soil_readings.soil_A = recv_data.soil_moisture;
-      } else if (recv_data.node_address == SOIL_B_ADDRESS) {
-        soil_readings.soil_B = recv_data.soil_moisture;
-      }
-      // Now take mutex only for the quick copy operation
-      if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-        // Quick memcpy to update the shared readings
-        memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
-        xSemaphoreGive(readings_mutex);
-      }
-    }
-
-    // Short delay to prevent tight loop
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
-}
-
-#endif
+// #if CONFIG_MASTER
+// void vTaskESPNOW_RX(void *pvParameters) {
+//   ESP_LOGI(TAG, "ESP-NOW RX task started");
+//   espnow_recv_data_t recv_data;
+//   static sensor_readings_t soil_readings = {0}; // Local buffer
+//
+//   while (1) {
+//     // Try to get data from the queue with a timeout
+//     if (receive_sensor_data(&recv_data, 1000)) {
+//       // Process the received data
+//       ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
+//       ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
+//                get_pcb_name(recv_data.node_address));
+//       ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
+//       ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
+//       ESP_LOGD(TAG, "==========================\n");
+//
+//       // Update global readings if needed
+//       if (recv_data.node_address == SOIL_A_ADDRESS) {
+//         soil_readings.soil_A = recv_data.soil_moisture;
+//         ESP_LOGD(TAG, "Soil A reading copied");
+//       } else if (recv_data.node_address == SOIL_B_ADDRESS) {
+//         soil_readings.soil_B = recv_data.soil_moisture;
+//         ESP_LOGD(TAG, "Soil B reading copied");
+//       }
+//       // Now take mutex only for the quick copy operation
+//       if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+//         // Quick memcpy to update the shared readings
+//         memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
+//         ESP_LOGI(TAG, "Soil A and B memcopied");
+//         xSemaphoreGive(readings_mutex);
+//       }
+//     }
+//
+//     // Short delay to prevent tight loop
+//     vTaskDelay(pdMS_TO_TICKS(100));
+//   }
+// }
+//
+// #endif
 
 void vTaskESPNOW(void *pvParameters) {
   // ESP_LOGI(TAG,"inside vtask espnow");
