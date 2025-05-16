@@ -142,7 +142,7 @@ config ENABLE_TIME_CONFIG
 		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
 
 menu "Time Configuration"
-	visible if ENABLE_DRAIN_TIME_CONFIG
+	visible if ENABLE_TIME_CONFIG
 
 	config START_HOUR
 		int "Drain start hour (0-23)"
