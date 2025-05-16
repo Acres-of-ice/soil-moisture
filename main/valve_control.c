@@ -327,17 +327,16 @@ bool isTimeoutReached(TickType_t timeout) {
 }
 
 bool isWithinTimeRange(void) {
-#ifdef CONFIG_ENABLE_DRAIN_TIME_CONFIG
+#ifdef CONFIG_ENABLE_TIME_CONFIG
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-  return ((hour > CONFIG_DRAIN_START_HOUR ||
-           (hour == CONFIG_DRAIN_START_HOUR &&
-            minute >= CONFIG_DRAIN_START_MINUTE)) &&
-          (hour < CONFIG_DRAIN_END_HOUR || (hour == CONFIG_DRAIN_END_HOUR &&
-                                            minute < CONFIG_DRAIN_END_MINUTE)));
+  return ((hour > CONFIG_START_HOUR ||
+           (hour == CONFIG_START_HOUR && minute >= CONFIG_START_MINUTE)) &&
+          (hour < CONFIG_END_HOUR ||
+           (hour == CONFIG_END_HOUR && minute < CONFIG_END_MINUTE)));
 #else
-  return false; // If drain time config is not enabled, always return false
+  return true; // If drain time config is not enabled, always return false
 #endif
 }
 
