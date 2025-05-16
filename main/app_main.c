@@ -434,9 +434,9 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
-                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
-                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
   // xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif

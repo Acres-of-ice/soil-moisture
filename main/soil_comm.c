@@ -961,10 +961,11 @@ void serialize_message(const comm_t *message, uint8_t *buffer) {
 }
 
 bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
-  if (size != sizeof(comm_t)) {
-    ESP_LOGW(TAG, "Not right size %d byte packet received instead of %d byte",
-             size, sizeof(comm_t));
-  }
+  // if (size != sizeof(comm_t)) {
+  //   ESP_LOGW(TAG, "Not right size %d byte packet received instead of %d
+  //   byte",
+  //            size, sizeof(comm_t));
+  // }
 
   message->address = buffer[0];
   message->command = buffer[1];

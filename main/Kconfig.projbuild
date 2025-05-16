@@ -47,27 +47,27 @@ menu "App Configuration"
     config ESPTOOLPY_FLASHSIZE
         string
         default "8MB" if MASTER
-        default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B
+        default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
     config ESPTOOLPY_FLASHSIZE_2MB
         string
         default n if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
-        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B
+        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
     config ESPTOOLPY_FLASHSIZE_4MB
         string
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
-        default "partitions/partitions_CONDUCTOR.csv" if CONDUCTOR
-        default "partitions/partitions_VALVES.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B
+        default "partitions/master.csv" if MASTER
+        default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
 config ENABLE_RTC
 	bool "Enable RTC Configuration"
