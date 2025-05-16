@@ -40,15 +40,13 @@ extern TaskHandle_t valveTaskHandle;
 
 static time_t last_conductor_message_time = 0;
 
-extern sensor_readings_t data_readings;
-
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
   uint8_t device_addr;
   uint8_t mac_addr[ESP_NOW_ETH_ALEN];
 } device_mac_mapping_t;
 
-#define MAX_DEVICE_MAPPINGS 10
+#define MAX_DEVICE_MAPPINGS 20
 static device_mac_mapping_t device_mappings[MAX_DEVICE_MAPPINGS] = {0};
 static int num_device_mappings = 0;
 

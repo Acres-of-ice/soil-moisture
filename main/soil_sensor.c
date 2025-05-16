@@ -152,62 +152,7 @@ int8_t get_current_rssi(void) {
  *
  * @return float Battery level percentage (0-100)
  */
-float read_battery_level(void) {
-  // #ifdef CONFIG_USE_BATTERY_MONITORING
-  //   // Implementation depends on your hardware setup
-  //   // This is a placeholder - replace with actual battery monitoring code
-  //
-  //   // Example assuming a battery ADC channel
-  //   const int BATTERY_ADC_CHANNEL = ADC_CHANNEL_3; // Use appropriate channel
-  //
-  //   if (adc1_handle == NULL) {
-  //     return 100.0f; // Default to 100% if ADC not initialized
-  //   }
-  //
-  //   int raw_value = 0;
-  //   adc_oneshot_chan_cfg_t config = {
-  //       .bitwidth = ADC_BITWIDTH_DEFAULT,
-  //       .atten = ADC_ATTEN_DB_11,
-  //   };
-  //
-  //   ESP_ERROR_CHECK(
-  //       adc_oneshot_config_channel(adc1_handle, BATTERY_ADC_CHANNEL,
-  //       &config));
-  //   esp_err_t err =
-  //       adc_oneshot_read(adc1_handle, BATTERY_ADC_CHANNEL, &raw_value);
-  //
-  //   if (err != ESP_OK) {
-  //     return 100.0f; // Default to 100% on error
-  //   }
-  //
-  //   // Convert ADC reading to voltage
-  //   // Assuming 3.3V ADC reference, voltage divider, etc.
-  //   // Adjust these values based on your hardware
-  //   const float MAX_BATTERY_VOLTAGE = 4.2f;
-  //   const float MIN_BATTERY_VOLTAGE = 3.3f;
-  //   const float ADC_MAX = 4095.0f;
-  //   const float VOLTAGE_DIVIDER = 2.0f; // Adjust based on your circuit
-  //
-  //   float voltage = (raw_value / ADC_MAX) * 3.3f * VOLTAGE_DIVIDER;
-  //   float percentage = (voltage - MIN_BATTERY_VOLTAGE) * 100.0f /
-  //                      (MAX_BATTERY_VOLTAGE - MIN_BATTERY_VOLTAGE);
-  //
-  //   // Clamp to valid range
-  //   if (percentage < 0.0f)
-  //     percentage = 0.0f;
-  //   if (percentage > 100.0f)
-  //     percentage = 100.0f;
-  //
-  //   ESP_LOGD(TAG, "Battery ADC: %d, Voltage: %.2fV, Level: %.1f%%",
-  //   raw_value,
-  //            voltage, percentage);
-  //
-  //   return percentage;
-  // #else
-  // Battery monitoring disabled
-  return 100.0f;
-  // #endif
-}
+float read_battery_level(void) { return 100.0f; }
 
 /**
  * @brief Update sensor readings from hardware

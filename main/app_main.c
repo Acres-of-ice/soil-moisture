@@ -67,7 +67,7 @@ espnow_config_t config = {
 
     // Authentication settings
     .require_auth = true,           // Enable authentication
-    .auth_key = "AIR4201",          // Set authentication key
+    .auth_key = "MIS4201",          // Set authentication key
     .auth_broadcast_interval_ms = 0 // Set authentication key
 
     // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
