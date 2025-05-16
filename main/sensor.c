@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "ads1x1x.h"
+// #include "ads1x1x.h"
 #include "sensor.h"
 
 static const char *TAG = "SENSOR";
@@ -20,26 +20,27 @@ sensor_readings_t simulated_readings = {.soil_A = 15.0f, .soil_B = 25.0f};
 
 sensor_readings_t data_readings;
 
-// Modbus sensor definitions
-static const modbus_sensor_t temp_humidity_sensor = {.slave_addr = 0x01,
-                                                     .function_code = 0x03,
-                                                     .reg_addr = 0x0000,
-                                                     .reg_count = 0x0002,
-                                                     .parse_data =
-                                                         parse_temp_humidity};
-
-static const modbus_sensor_t flow_temp_sensor = {.slave_addr = 0x02,
-                                                 .function_code = 0x04,
-                                                 .reg_addr = 0x0015,
-                                                 .reg_count = 0x0001,
-                                                 .parse_data = parse_flow_temp};
-
-static const modbus_sensor_t flow_discharge_sensor = {.slave_addr = 0x02,
-                                                      .function_code = 0x04,
-                                                      .reg_addr = 0x0007,
-                                                      .reg_count = 0x0001,
-                                                      .parse_data =
-                                                          parse_flow_discharge};
+// // Modbus sensor definitions
+// static const modbus_sensor_t temp_humidity_sensor = {.slave_addr = 0x01,
+//                                                      .function_code = 0x03,
+//                                                      .reg_addr = 0x0000,
+//                                                      .reg_count = 0x0002,
+//                                                      .parse_data =
+//                                                          parse_temp_humidity};
+//
+// static const modbus_sensor_t flow_temp_sensor = {.slave_addr = 0x02,
+//                                                  .function_code = 0x04,
+//                                                  .reg_addr = 0x0015,
+//                                                  .reg_count = 0x0001,
+//                                                  .parse_data =
+//                                                  parse_flow_temp};
+//
+// static const modbus_sensor_t flow_discharge_sensor = {.slave_addr = 0x02,
+//                                                       .function_code = 0x04,
+//                                                       .reg_addr = 0x0007,
+//                                                       .reg_count = 0x0001,
+//                                                       .parse_data =
+//                                                           parse_flow_discharge};
 
 // Voltage monitoring variables
 static adc_oneshot_unit_handle_t adc_handle = NULL;
@@ -163,62 +164,64 @@ float convert_raw_to_voltage(int16_t raw_value) {
   return (float)(raw_value * V_REF) / RESOLUTION;
 }
 
-float read_channel(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config, uint8_t ch) {
-  float value = 99.0f;
-  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-    switch (ch) {
-    case 0:
-      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_0);
-      value = convertToUnit(adc_i2c, p_config, 30);
-      break;
-    case 1:
-      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_1);
-      value = convertToUnit(adc_i2c, p_config,
-                            IS_SITE("Igoo") ? (10.2 * 10) : (10.2 * 4));
-      break;
-    case 2:
-      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_2);
-      value = convertToUnit(adc_i2c, p_config, 100);
-      break;
-    case 3:
-      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_3);
-      value = convertToUnit(adc_i2c, p_config, 10.2);
-      break;
-    }
-    xSemaphoreGive(i2c_mutex);
-  }
-  return value;
-}
-
-double convertToUnit(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config,
-                     double maxUnit) {
-  if (maxUnit == 0) {
-    ESP_LOGE(
-        TAG,
-        "Sensor not connected or convertTOUnit Function not called properly");
-    return 0.0;
-  }
-
-  int16_t raw_value;
-  double Volt, Amp, unit;
-
-  ADS1x1x_start_conversion(adc_i2c, p_config);
-  vTaskDelay(pdMS_TO_TICKS(20));
-
-  raw_value = ADS1x1x_read(adc_i2c);
-  Volt = convert_raw_to_voltage(raw_value);
-  Amp = F_map(Volt, 0, 4.096, 0, 27.293);
-  Amp = (Amp < 4) ? 4 : (Amp > 20) ? 20 : Amp;
-
-  const double minCurrent = 4.0;
-  const double maxCurrent = 20.0;
-  const double minUnit = 0.0;
-
-  unit =
-      ((Amp - minCurrent) / (maxCurrent - minCurrent)) * (maxUnit - minUnit) +
-      minUnit;
-  return (double)((int)(unit * 10000 + 0.5)) / 10000;
-}
+// float read_channel(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config, uint8_t
+// ch) {
+//   float value = 99.0f;
+//   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+//     switch (ch) {
+//     case 0:
+//       ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_0);
+//       value = convertToUnit(adc_i2c, p_config, 30);
+//       break;
+//     case 1:
+//       ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_1);
+//       value = convertToUnit(adc_i2c, p_config,
+//                             IS_SITE("Igoo") ? (10.2 * 10) : (10.2 * 4));
+//       break;
+//     case 2:
+//       ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_2);
+//       value = convertToUnit(adc_i2c, p_config, 100);
+//       break;
+//     case 3:
+//       ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_3);
+//       value = convertToUnit(adc_i2c, p_config, 10.2);
+//       break;
+//     }
+//     xSemaphoreGive(i2c_mutex);
+//   }
+//   return value;
+// }
+//
+// double convertToUnit(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config,
+//                      double maxUnit) {
+//   if (maxUnit == 0) {
+//     ESP_LOGE(
+//         TAG,
+//         "Sensor not connected or convertTOUnit Function not called
+//         properly");
+//     return 0.0;
+//   }
+//
+//   int16_t raw_value;
+//   double Volt, Amp, unit;
+//
+//   ADS1x1x_start_conversion(adc_i2c, p_config);
+//   vTaskDelay(pdMS_TO_TICKS(20));
+//
+//   raw_value = ADS1x1x_read(adc_i2c);
+//   Volt = convert_raw_to_voltage(raw_value);
+//   Amp = F_map(Volt, 0, 4.096, 0, 27.293);
+//   Amp = (Amp < 4) ? 4 : (Amp > 20) ? 20 : Amp;
+//
+//   const double minCurrent = 4.0;
+//   const double maxCurrent = 20.0;
+//   const double minUnit = 0.0;
+//
+//   unit =
+//       ((Amp - minCurrent) / (maxCurrent - minCurrent)) * (maxUnit - minUnit)
+//       + minUnit;
+//   return (double)((int)(unit * 10000 + 0.5)) / 10000;
+// }
 
 // Modbus Functions
 static void buffer_to_hex_string(const uint8_t *buffer, int length,
@@ -348,106 +351,106 @@ void modbus_init(void) {
   ESP_ERROR_CHECK(uart_driver_install(MB_PORT_NUM, 256, 256, 0, NULL, 0));
 }
 
-void sensor_task(void *pvParameters) {
-  static i2c_dev_t i2c_dev_ads = {0};
-  static ADS1x1x_config_t ch1 = {0};
-  static float adc_readings_arr[4];
-  static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
-  static float discharge = 99.0f, dummy = 99.0f;
-  static sensor_readings_t local_readings = {0}; // Local buffer
-  TickType_t last_wake_time;
-
-  // Initialize ADC if needed
-  if (i2c0bus != NULL) {
-    i2c_device_add(&i2c0bus, &i2c_dev_ads, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
-                   I2C_ADC_FREQ_HZ);
-    if (ADS1x1x_init(&ch1, ADS1115, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
-                     MUX_SINGLE_3, PGA_4096) == 0) {
-      ESP_LOGE(TAG, "Failed to initialize ADS1115");
-    }
-  }
-
-  // After other initializations but before the main loop
-  esp_err_t voltage_init_result = voltage_monitor_init();
-  if (voltage_init_result != ESP_OK) {
-    ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
-             esp_err_to_name(voltage_init_result));
-  }
-
-  last_wake_time = xTaskGetTickCount();
-
-  while (1) {
-    // Do all sensor readings first without mutex
-    if (i2c0bus != NULL) {
-      for (int i = 0; i < 4; i++) {
-        adc_readings_arr[i] = read_channel(&i2c_dev_ads, &ch1, i);
-        if (i == 2) {
-          adc_readings_arr[i] -= 50;
-          if (IS_SITE("Likir"))
-            adc_readings_arr[i] -= 1.10;
-          else if (IS_SITE("Ursi"))
-            adc_readings_arr[i] -= 0.53;
-          else if (IS_SITE("Tuna"))
-            adc_readings_arr[i] -= 0.14;
-          else if (IS_SITE("Kuri"))
-            adc_readings_arr[i] -= 0.1;
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
-      }
-
-      local_readings.wind = adc_readings_arr[0];
-      local_readings.fountain_pressure = adc_readings_arr[1];
-      if (site_config.has_adc_water_temp) {
-        if (IS_SITE("Likir")) {
-          local_readings.water_temp = 2;
-        } else {
-          local_readings.water_temp = adc_readings_arr[2];
-        }
-      }
-    }
-
-    // Handle Modbus readings without mutex
-    if (site_config.has_temp_humidity) {
-      int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
-      if (result == 0) {
-        local_readings.temperature = temp1;
-        local_readings.humidity = humidity;
-      } else {
-        local_readings.temperature = 99.0f;
-        local_readings.humidity = 99.0f;
-      }
-      vTaskDelay(pdMS_TO_TICKS(50));
-    }
-
-    if (site_config.has_flowmeter) {
-      int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
-      if (result == 0 && !site_config.has_adc_water_temp) {
-        local_readings.water_temp = temp2;
-      }
-
-      result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
-      if (result == 0) {
-        local_readings.discharge = discharge;
-      }
-    }
-
-    if (adc_handle != NULL) {
-      local_readings.voltage = measure_voltage();
-    } else {
-      // Default value if ADC not initialized
-      local_readings.voltage = 0.0f;
-    }
-
-    // Now take mutex only for the quick copy operation
-    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-      // Quick memcpy to update the shared readings
-      memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
-      xSemaphoreGive(readings_mutex);
-    }
-
-    vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
-  }
-}
+// void sensor_task(void *pvParameters) {
+//   static i2c_dev_t i2c_dev_ads = {0};
+//   static ADS1x1x_config_t ch1 = {0};
+//   static float adc_readings_arr[4];
+//   static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
+//   static float discharge = 99.0f, dummy = 99.0f;
+//   static sensor_readings_t local_readings = {0}; // Local buffer
+//   TickType_t last_wake_time;
+//
+//   // Initialize ADC if needed
+//   if (i2c0bus != NULL) {
+//     i2c_device_add(&i2c0bus, &i2c_dev_ads, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
+//                    I2C_ADC_FREQ_HZ);
+//     if (ADS1x1x_init(&ch1, ADS1115, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
+//                      MUX_SINGLE_3, PGA_4096) == 0) {
+//       ESP_LOGE(TAG, "Failed to initialize ADS1115");
+//     }
+//   }
+//
+//   // After other initializations but before the main loop
+//   esp_err_t voltage_init_result = voltage_monitor_init();
+//   if (voltage_init_result != ESP_OK) {
+//     ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
+//              esp_err_to_name(voltage_init_result));
+//   }
+//
+//   last_wake_time = xTaskGetTickCount();
+//
+//   while (1) {
+//     // Do all sensor readings first without mutex
+//     if (i2c0bus != NULL) {
+//       for (int i = 0; i < 4; i++) {
+//         adc_readings_arr[i] = read_channel(&i2c_dev_ads, &ch1, i);
+//         if (i == 2) {
+//           adc_readings_arr[i] -= 50;
+//           if (IS_SITE("Likir"))
+//             adc_readings_arr[i] -= 1.10;
+//           else if (IS_SITE("Ursi"))
+//             adc_readings_arr[i] -= 0.53;
+//           else if (IS_SITE("Tuna"))
+//             adc_readings_arr[i] -= 0.14;
+//           else if (IS_SITE("Kuri"))
+//             adc_readings_arr[i] -= 0.1;
+//         }
+//         vTaskDelay(pdMS_TO_TICKS(10));
+//       }
+//
+//       local_readings.wind = adc_readings_arr[0];
+//       local_readings.fountain_pressure = adc_readings_arr[1];
+//       if (site_config.has_adc_water_temp) {
+//         if (IS_SITE("Likir")) {
+//           local_readings.water_temp = 2;
+//         } else {
+//           local_readings.water_temp = adc_readings_arr[2];
+//         }
+//       }
+//     }
+//
+//     // Handle Modbus readings without mutex
+//     if (site_config.has_temp_humidity) {
+//       int result = modbus_read_sensor(&temp_humidity_sensor, &temp1,
+//       &humidity); if (result == 0) {
+//         local_readings.temperature = temp1;
+//         local_readings.humidity = humidity;
+//       } else {
+//         local_readings.temperature = 99.0f;
+//         local_readings.humidity = 99.0f;
+//       }
+//       vTaskDelay(pdMS_TO_TICKS(50));
+//     }
+//
+//     if (site_config.has_flowmeter) {
+//       int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+//       if (result == 0 && !site_config.has_adc_water_temp) {
+//         local_readings.water_temp = temp2;
+//       }
+//
+//       result = modbus_read_sensor(&flow_discharge_sensor, &discharge,
+//       &dummy); if (result == 0) {
+//         local_readings.discharge = discharge;
+//       }
+//     }
+//
+//     if (adc_handle != NULL) {
+//       local_readings.voltage = measure_voltage();
+//     } else {
+//       // Default value if ADC not initialized
+//       local_readings.voltage = 0.0f;
+//     }
+//
+//     // Now take mutex only for the quick copy operation
+//     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+//       // Quick memcpy to update the shared readings
+//       memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+//       xSemaphoreGive(readings_mutex);
+//     }
+//
+//     vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
+//   }
+// }
 
 void set_simulated_values(int soil_A, int soil_B) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {

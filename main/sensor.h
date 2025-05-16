@@ -7,7 +7,7 @@
 #include "i2cdev.h"
 #include <stdint.h>
 
-#include "ads1x1x.h"
+// #include "ads1x1x.h"
 #include "define.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc_cal.h"
@@ -68,11 +68,12 @@ void parse_flow_discharge(const uint8_t *response, int len, float *discharge,
                           float *unused);
 
 // ADC functions
-float read_channel(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config, uint8_t ch);
-double convertToUnit(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config,
-                     double maxUnit);
-float convert_raw_to_voltage(int16_t raw_value);
-float F_map(float x, float in_min, float in_max, float out_min, float out_max);
+// float read_channel(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config, uint8_t
+// ch); double convertToUnit(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config,
+//                      double maxUnit);
+// float convert_raw_to_voltage(int16_t raw_value);
+// float F_map(float x, float in_min, float in_max, float out_min, float
+// out_max);
 
 // Reading getter functions
 void get_sensor_readings(sensor_readings_t *readings);

@@ -148,7 +148,7 @@ void updateValveState(void *pvParameters) {
 
       get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
-               output_readings->soil_A, output_readings->soil_B);
+               current_readings.soil_A, current_readings.soil_B);
       vTaskDelay(1000);
 
       if (current_readings.soil_A < CONFIG_SOIL_DRY && isWithinTimeRange()) {
