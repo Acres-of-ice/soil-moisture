@@ -40,6 +40,6 @@ bool canExitErrorState();
 const char *valveStateToString(ValveState state);
 void simulate_irrigation_workflow(void *arg);
 const char *get_pcb_name(uint8_t nodeAddress);
-bool isWithinTimeRange(void);
+bool isWithinOFFTimeRange(void);
 
 #endif // VALVE_CONTROL_H
