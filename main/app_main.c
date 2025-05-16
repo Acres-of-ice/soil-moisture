@@ -118,11 +118,6 @@ void init_gpio(void) {
                            .pull_down_en = GPIO_PULLDOWN_DISABLE,
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
-
-  // Set all LOW initially
-  gpio_set_level(RELAY_POSITIVE, 0);
-  gpio_set_level(RELAY_NEGATIVE, 0);
-  gpio_set_level(OE_PIN, 0);
 }
 
 esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
@@ -400,7 +395,10 @@ void app_main(void) {
 
 #if CONFIG_VALVE_B
   g_nodeAddress = VALVE_B_ADDRESS;
-  init_gpio();
+  // Set all LOW initially
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 0);
+  gpio_set_level(OE_PIN, 0);
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
 
