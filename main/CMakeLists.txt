@@ -9,7 +9,7 @@ set(SRCS_LIST
     "soil_comm.c"
     "soil_sensor.c"
     "sensor.c"
-    # "ads1x1x.c"
+    "ads1x1x.c"
 )
 
 if(CONFIG_MASTER)

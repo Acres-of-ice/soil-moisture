@@ -151,11 +151,12 @@ void updateValveState(void *pvParameters) {
                current_readings.soil_A, current_readings.soil_B);
       vTaskDelay(1000);
 
-      if (current_readings.soil_A < CONFIG_SOIL_DRY && isWithinTimeRange()) {
+      if (current_readings.soil_A < CONFIG_SOIL_DRY &&
+          !isWithinOFFTimeRange()) {
         newState = STATE_VALVE_A_OPEN;
         counter++;
       } else if (current_readings.soil_B < CONFIG_SOIL_DRY &&
-                 isWithinTimeRange()) {
+                 !isWithinOFFTimeRange()) {
         newState = STATE_VALVE_B_OPEN;
         counter++;
       } else {
@@ -352,214 +353,17 @@ bool isTimeoutReached(TickType_t timeout) {
   return (xTaskGetTickCount() - stateEntryTime) >= pdMS_TO_TICKS(timeout);
 }
 
-bool isWithinTimeRange(void) {
-#ifdef CONFIG_ENABLE_TIME_CONFIG
+bool isWithinOFFTimeRange(void) {
+#ifdef CONFIG_ENABLE_OFF_TIME_CONFIG
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-  return ((hour > CONFIG_START_HOUR ||
-           (hour == CONFIG_START_HOUR && minute >= CONFIG_START_MINUTE)) &&
-          (hour < CONFIG_END_HOUR ||
-           (hour == CONFIG_END_HOUR && minute < CONFIG_END_MINUTE)));
+  return (
+      (hour > CONFIG_OFF_START_HOUR ||
+       (hour == CONFIG_OFF_START_HOUR && minute >= CONFIG_OFF_START_MINUTE)) &&
+      (hour < CONFIG_OFF_END_HOUR ||
+       (hour == CONFIG_OFF_END_HOUR && minute < CONFIG_OFF_END_MINUTE)));
 #else
-  return true; // If drain time config is not enabled, always return false
+  return false;
 #endif
 }
-
-// bool canExitErrorState() {
-//   get_sensor_readings(&current_readings);
-
-//   return (current_readings.temperature > tfreeze);
-// }
-
-// bool IRR_A(void) {
-//   static uint32_t last_error_time = 0;
-//   if (!AUTO_mode) {
-//     return false;
-//   }
-//   get_sensor_readings(&current_readings);
-
-//   temperature_state_t temp_state =
-//       get_temperature_state(current_readings.temperature);
-//   moisture_state_t moisture_state =
-//       get_moisture_state(current_readings.humidity);
-
-//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90))
-//   {
-//     uint32_t current_time = xTaskGetTickCount();
-//     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
-//                current_readings.temperature);
-//       last_error_time = current_time;
-//     }
-//     return false;
-//   }
-
-//   // if (current_readings.water_temp != 0) {
-
-//   //   if (current_readings.water_temp < 0) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGE(TAG, "Frozen pipe");
-//   //       last_error_time = current_time;
-//   //     }
-//   //   }
-
-//   //   if (water_state == WATER_HOT) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "water hot");
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-
-//   //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
-//   //                current_readings.water_temp,
-//   current_readings.temperature);
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-
-//   //   if (water_state != WATER_NORMAL) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
-//   //                current_readings.water_temp);
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-//   // }
-
-//   // ESP_LOGD(TAG, "SPRAY:OK");
-//   return true;
-// }
-
-// bool IRR_B(void) {
-//   static uint32_t last_error_time = 0;
-//   if (!AUTO_mode) {
-//     return false;
-//   }
-//   get_sensor_readings(&current_readings);
-
-//   temperature_state_t temp_state =
-//       get_temperature_state(current_readings.temperature);
-//   moisture_state_t moisture_state =
-//       get_moisture_state(current_readings.humidity);
-
-//   if ((temp_state == TEMP_TOO_LOW) && (current_readings.temperature < 90))
-//   {
-//     uint32_t current_time = xTaskGetTickCount();
-//     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//       ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
-//                current_readings.temperature);
-//       last_error_time = current_time;
-//     }
-//     return false;
-//   }
-
-//   // if (current_readings.water_temp != 0) {
-
-//   //   if (current_readings.water_temp < 0) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGE(TAG, "Frozen pipe");
-//   //       last_error_time = current_time;
-//   //     }
-//   //   }
-
-//   //   if (water_state == WATER_HOT) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "water hot");
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-
-//   //   if ((water_state == WATER_NORMAL) && (temp_state == TEMP_TOO_LOW)) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "%.1f C %.1f C  Ok water but low temp",
-//   //                current_readings.water_temp,
-//   current_readings.temperature);
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-
-//   //   if (water_state != WATER_NORMAL) {
-//   //     uint32_t current_time = xTaskGetTickCount();
-//   //     if ((current_time - last_error_time) > pdMS_TO_TICKS(10000)) {
-//   //       ESP_LOGD(TAG, "%s %.1f C", WATER_STATE_STR[water_state],
-//   //                current_readings.water_temp);
-//   //       last_error_time = current_time;
-//   //     }
-//   //     return false;
-//   //   }
-//   // }
-
-//   // ESP_LOGD(TAG, "SPRAY:OK");
-//   return true;
-// }
-// bool doDrain(void) {
-//   if (!AUTO_mode || (counter % 2 != 0)) {
-//     return false; // Early exit if conditions not met
-//   }
-
-//   // if (isWithinDrainTimeRange()) {
-//   //   ESP_LOGI(TAG, "DRAIN time forced");
-//   //   return true;
-//   // }
-
-//   get_sensor_readings(&current_readings);
-//   temperature_state_t temp_state =
-//       get_temperature_state(current_readings.temperature);
-//   moisture_state_t moisture_state =
-//   get_moisture_state(current_readings.humidity);
-//   // pressure_state_t pressure_state = get_pressure_state(
-//   //     current_readings.fountain_pressure, mean_fountain_pressure);
-
-//   if ((temp_state == TEMP_TOO_HIGH) && (current_readings.temperature < 90))
-//   {
-//     ESP_LOGD(TAG, "%s %.1f", TEMP_STATE_STR[temp_state],
-//              current_readings.temperature);
-//     return true;
-//   }
-
-//   if (current_readings.water_temp != 0) {
-
-//     if (current_readings.water_temp < 0) {
-//       ESP_LOGW(TAG, "Frozen pipe");
-//     }
-
-//     if ((water_state == WATER_HOT) && (temp_state != TEMP_TOO_LOW)) {
-//       ESP_LOGW(TAG, "%.1f water high", current_readings.water_temp);
-//       // errorConditionMet = true;
-//       return true;
-//     }
-//     if (water_state == WATER_FREEZING) {
-//       ESP_LOGE(TAG, "%.1f water low", current_readings.water_temp);
-//       errorConditionMet = true;
-//       return true;
-//     }
-//   }
-
-//   if ((pressure_state == PRESSURE_OUT_OF_RANGE) &&
-//       (water_state != WATER_NORMAL)) {
-//     ESP_LOGE(TAG, "(Mean:%.1f, Now:%.1f) %s", mean_fountain_pressure,
-//              current_readings.fountain_pressure,
-//              PRESSURE_STATE_STR[pressure_state]);
-
-//     errorConditionMet = true;
-//     return true;
-//   }
-
-//   // ESP_LOGD(TAG, "DRAIN:NO");
-//   return false;
-// }

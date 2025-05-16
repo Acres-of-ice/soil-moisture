@@ -135,37 +135,37 @@ menu "Hardware Configuration"
 			Enable this for sites using LCD with I2C address 0x3F.
 endmenu
 
-config ENABLE_TIME_CONFIG
-	bool "Enable Time Configuration"
+config ENABLE_OFF_TIME_CONFIG
+	bool "Enable OFF Time Configuration"
 	default false
 	help
 		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
 
-menu "Time Configuration"
-	visible if ENABLE_TIME_CONFIG
+menu "OFF Time Configuration"
+	visible if ENABLE_OFF_TIME_CONFIG
 
-	config START_HOUR
-		int "Drain start hour (0-23)"
+	config OFF_START_HOUR
+		int "OFF start hour (0-23)"
 		default 0
 		range 0 23
 		help
 			Set the hour when the forced drain time starts (24-hour format).
 
-	config START_MINUTE
+	config OFF_START_MINUTE
 		int "Drain start minute (0-59)"
 		default 0
 		range 0 59
 		help
 			Set the minute when the forced drain time starts.
 
-	config END_HOUR
+	config OFF_END_HOUR
 		int "Drain end hour (0-23)"
 		default 23
 		range 0 23
 		help
 			Set the hour when the forced drain time ends (24-hour format).
 
-	config END_MINUTE
+	config OFF_END_MINUTE
 		int "Drain end minute (0-59)"
 		default 59
 		range 0 59
