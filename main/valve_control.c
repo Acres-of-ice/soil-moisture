@@ -31,9 +31,6 @@ static sensor_readings_t current_readings;
 extern espnow_recv_data_t recv_data;
 extern char last_sender_pcb_name[20];
 
-extern int soil_A;
-extern int soil_B;
-
 extern int counter;
 
 bool errorConditionMet = false;
@@ -146,15 +143,19 @@ void updateValveState(void *pvParameters) {
 
     switch (newState) {
     case STATE_IDLE:
-      ESP_LOGI(TAG, "Values: Soil A=%d%%, Soil B=%d%%", soil_A, soil_B);
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
+
+      get_sensor_readings(&current_readings);
+      ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
+               output_readings->soil_A, output_readings->soil_B);
       vTaskDelay(1000);
 
-      if (soil_A < CONFIG_SOIL_DRY && isWithinTimeRange()) {
+      if (current_readings.soil_A < CONFIG_SOIL_DRY && isWithinTimeRange()) {
         newState = STATE_VALVE_A_OPEN;
         counter++;
-      } else if (soil_B < CONFIG_SOIL_DRY && isWithinTimeRange()) {
+      } else if (current_readings.soil_B < CONFIG_SOIL_DRY &&
+                 isWithinTimeRange()) {
         newState = STATE_VALVE_B_OPEN;
         counter++;
       } else {
@@ -185,12 +186,13 @@ void updateValveState(void *pvParameters) {
       break;
 
     case STATE_IRR_START_A:
-      while (soil_A < CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Waiting for Sensor A: %d%%", soil_A);
+      while (current_readings.soil_A < CONFIG_SOIL_WET) {
+        ESP_LOGD(TAG, "Waiting for Sensor A: %d%%", current_readings.soil_A);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
 
-      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%", soil_A);
+      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%",
+               current_readings.soil_A);
       reset_acknowledgements();
       newState = STATE_PUMP_OFF_A;
       break;
@@ -241,12 +243,13 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_START_B;
       break;
     case STATE_IRR_START_B:
-      while (soil_B < CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Waiting for Sensor B: %d%%", soil_B);
+      while (current_readings.soil_B < CONFIG_SOIL_WET) {
+        ESP_LOGD(TAG, "Waiting for Sensor B: %d%%", current_readings.soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
 
-      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%", soil_B);
+      ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%",
+               current_readings.soil_B);
       reset_acknowledgements();
       newState = STATE_PUMP_OFF_B;
       break;

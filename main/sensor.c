@@ -449,21 +449,6 @@ void sensor_task(void *pvParameters) {
   }
 }
 
-// void set_simulated_values(int soil_A, int soil_B, float temp, float
-// water_temp,
-//                           float pressure) {
-//   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-//     simulated_readings.soil_A = soil_A;
-//     simulated_readings.soil_B = soil_B;
-//     simulated_readings.temperature = temp;
-//     simulated_readings.water_temp = water_temp;
-//     simulated_readings.fountain_pressure = pressure;
-//     simulated_readings.voltage = 12.6f; // Add a default simulated voltage
-//     xSemaphoreGive(readings_mutex);
-//   } else {
-//     ESP_LOGW(TAG, "Failed to get mutex for setting simulated values");
-//   }
-// }
 void set_simulated_values(int soil_A, int soil_B) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
     simulated_readings.soil_A = soil_A;
@@ -482,32 +467,40 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
   if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
     if (site_config.simulate) {
       // Copy simulated readings to output
-      output_readings->temperature = simulated_readings.temperature;
-      output_readings->humidity = simulated_readings.humidity;
-      output_readings->water_temp = simulated_readings.water_temp;
-      output_readings->wind = simulated_readings.wind;
-      output_readings->fountain_pressure = simulated_readings.fountain_pressure;
-      output_readings->discharge = simulated_readings.discharge;
-      output_readings->voltage = simulated_readings.voltage;
+      output_readings->soil_A = simulated_readings.soil_A;
+      output_readings->soil_B = simulated_readings.soil_B;
+      // output_readings->temperature = simulated_readings.temperature;
+      // output_readings->humidity = simulated_readings.humidity;
+      // output_readings->water_temp = simulated_readings.water_temp;
+      // output_readings->wind = simulated_readings.wind;
+      // output_readings->fountain_pressure =
+      // simulated_readings.fountain_pressure; output_readings->discharge =
+      // simulated_readings.discharge; output_readings->voltage =
+      // simulated_readings.voltage;
     } else {
       // Copy all readings
-      output_readings->temperature = readings.temperature;
-      output_readings->humidity = readings.humidity;
-      output_readings->water_temp = readings.water_temp;
-      output_readings->wind = readings.wind;
-      output_readings->fountain_pressure = readings.fountain_pressure;
-      output_readings->discharge = readings.discharge;
-      output_readings->voltage = readings.voltage;
+      output_readings->soil_A = readings.soil_A;
+      output_readings->soil_B = readings.soil_B;
+      // output_readings->temperature = readings.temperature;
+      // output_readings->humidity = readings.humidity;
+      // output_readings->water_temp = readings.water_temp;
+      // output_readings->wind = readings.wind;
+      // output_readings->fountain_pressure = readings.fountain_pressure;
+      // output_readings->discharge = readings.discharge;
+      // output_readings->voltage = readings.voltage;
     }
 
-    ESP_LOGD(
-        TAG,
-        "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
-        "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
-        output_readings->temperature, output_readings->humidity,
-        output_readings->water_temp, output_readings->wind,
-        output_readings->fountain_pressure, output_readings->discharge,
-        output_readings->voltage);
+    ESP_LOGD(TAG, "Sensor Readings - Soil A: %d, Soil B: %d",
+             output_readings->soil_A, output_readings->soil_B);
+
+    // ESP_LOGD(
+    //     TAG,
+    //     "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
+    //     "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f
+    //     V", output_readings->temperature, output_readings->humidity,
+    //     output_readings->water_temp, output_readings->wind,
+    //     output_readings->fountain_pressure, output_readings->discharge,
+    //     output_readings->voltage);
 
     xSemaphoreGive(readings_mutex);
   } else {
@@ -516,12 +509,12 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
   }
 }
 
-// void set_simulated_values(int soil_A_value, int soil_B_value) {
-//   soil_A = soil_A_value;
-//   soil_B = soil_B_value;
-// }
-//
 void simulation_task(void *pvParameters) {
+
+  // Initialize mutex if not already done
+  if (readings_mutex == NULL) {
+    readings_mutex = xSemaphoreCreateMutex();
+  }
   const char *TAG = "Simulation";
   size_t test_index = 0;
 

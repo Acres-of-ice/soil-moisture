@@ -1704,6 +1704,7 @@ bool nvs_has_valid_mappings(void) {
 void vTaskESPNOW_RX(void *pvParameters) {
   ESP_LOGD("Sensor", "ESP-NOW RX task started");
   espnow_recv_data_t recv_data;
+  static sensor_readings_t soil_readings = {0}; // Local buffer
 
   while (1) {
     // Try to get data from the queue with a timeout
@@ -1718,9 +1719,15 @@ void vTaskESPNOW_RX(void *pvParameters) {
 
       // Update global readings if needed
       if (recv_data.node_address == SOIL_A_ADDRESS) {
-        data_readings.soil_A = recv_data.soil_moisture;
+        soil_readings.soil_A = recv_data.soil_moisture;
       } else if (recv_data.node_address == SOIL_B_ADDRESS) {
-        data_readings.soil_B = recv_data.soil_moisture;
+        soil_readings.soil_B = recv_data.soil_moisture;
+      }
+      // Now take mutex only for the quick copy operation
+      if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+        // Quick memcpy to update the shared readings
+        memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
+        xSemaphoreGive(readings_mutex);
       }
     }
 

@@ -183,6 +183,7 @@ void app_main(void) {
   // esp_log_level_set("AIR", ESP_LOG_DEBUG);
   // esp_log_level_set("LCD", ESP_LOG_DEBUG);
 
+  esp_log_level_set("nvs", ESP_LOG_NONE);
   esp_log_level_set("wifi", ESP_LOG_NONE);
   esp_log_level_set("wifi_init", ESP_LOG_NONE);
   esp_log_level_set("phy_init", ESP_LOG_NONE);
