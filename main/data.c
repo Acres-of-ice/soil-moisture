@@ -206,7 +206,7 @@ esp_err_t init_data_module(void) {
 // Initialize SPIFFS
 esp_err_t init_spiffs(void) {
   esp_vfs_spiffs_conf_t conf = {.base_path = SPIFFS_MOUNT_POINT,
-                                .partition_label = "spiffs",
+                                .partition_label = "storage",
                                 .max_files = 20,
                                 .format_if_mount_failed = true};
   esp_err_t ret = esp_vfs_spiffs_register(&conf);
@@ -216,7 +216,7 @@ esp_err_t init_spiffs(void) {
     return ret;
   }
 
-  ret = esp_spiffs_info("spiffs", &totalBytes, &usedBytes);
+  ret = esp_spiffs_info("storage", &totalBytes, &usedBytes);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "esp_spiffs_info failed: %s", esp_err_to_name(ret));
     return ret;
