@@ -8,6 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
+// Modern ADC calibration API
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+
 // #include "ads1x1x.h"
 #include "sensor.h"
 
@@ -44,7 +48,7 @@ sensor_readings_t data_readings;
 
 // Voltage monitoring variables
 static adc_oneshot_unit_handle_t adc_handle = NULL;
-static esp_adc_cal_characteristics_t *adc_chars = NULL;
+static adc_cali_handle_t adc_cali_handle = NULL; // Modern calibration handle
 static float current_voltage = 0.0f;
 
 // Voltage monitoring function implementations
@@ -79,8 +83,20 @@ float measure_voltage(void) {
 
   adc_reading /= VOLTAGE_NUM_SAMPLES;
 
-  // Convert ADC reading to voltage in millivolts
-  uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+  // Convert ADC reading to voltage in millivolts using modern calibration API
+  int voltage_mv = 0;
+  if (adc_cali_handle != NULL) {
+    esp_err_t ret =
+        adc_cali_raw_to_voltage(adc_cali_handle, adc_reading, &voltage_mv);
+    if (ret != ESP_OK) {
+      ESP_LOGW(TAG, "Error calibrating ADC value: %s", esp_err_to_name(ret));
+    }
+  } else {
+    // Fallback if calibration not available
+    voltage_mv = adc_reading * 3300 /
+                 4095; // Approximate for 12-bit ADC with 3.3V reference
+    ESP_LOGW(TAG, "ADC calibration not available, using approximation");
+  }
 
   // Convert millivolts to volts
   float vout = voltage_mv / 1000.0f;
@@ -95,44 +111,52 @@ float measure_voltage(void) {
   return vin;
 }
 
-esp_err_t voltage_monitor_init(void) {
-  esp_err_t ret;
-
-  // Initialize ADC
-  adc_oneshot_unit_init_cfg_t init_config = {
-      .unit_id = VOLTAGE_ADC_UNIT,
-  };
-
-  ret = adc_oneshot_new_unit(&init_config, &adc_handle);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize ADC: %s", esp_err_to_name(ret));
-    return ret;
-  }
-
-  // Configure ADC channel
-  adc_oneshot_chan_cfg_t channel_config = {.atten = VOLTAGE_ADC_ATTEN,
-                                           .bitwidth = VOLTAGE_ADC_WIDTH};
-
-  ret = adc_oneshot_config_channel(adc_handle, VOLTAGE_ADC_CHANNEL,
-                                   &channel_config);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to configure ADC channel: %s", esp_err_to_name(ret));
-    return ret;
-  }
-
-  // Initialize ADC calibration
-  adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-  if (adc_chars == NULL) {
-    ESP_LOGE(TAG, "Failed to allocate memory for ADC calibration");
-    return ESP_ERR_NO_MEM;
-  }
-
-  esp_adc_cal_characterize(VOLTAGE_ADC_UNIT, VOLTAGE_ADC_ATTEN,
-                           VOLTAGE_ADC_WIDTH, 1100, adc_chars);
-
-  ESP_LOGD(TAG, "Voltage monitor initialized successfully");
-  return ESP_OK;
-}
+// esp_err_t voltage_monitor_init(void) {
+//   esp_err_t ret;
+//
+//   // Initialize ADC
+//   adc_oneshot_unit_init_cfg_t init_config = {
+//       .unit_id = VOLTAGE_ADC_UNIT,
+//   };
+//
+//   ret = adc_oneshot_new_unit(&init_config, &adc_handle);
+//   if (ret != ESP_OK) {
+//     ESP_LOGE(TAG, "Failed to initialize ADC: %s", esp_err_to_name(ret));
+//     return ret;
+//   }
+//
+//   // Configure ADC channel
+//   adc_oneshot_chan_cfg_t channel_config = {.atten = VOLTAGE_ADC_ATTEN,
+//                                            .bitwidth = VOLTAGE_ADC_WIDTH};
+//
+//   ret = adc_oneshot_config_channel(adc_handle, VOLTAGE_ADC_CHANNEL,
+//                                    &channel_config);
+//   if (ret != ESP_OK) {
+//     ESP_LOGE(TAG, "Failed to configure ADC channel: %s",
+//     esp_err_to_name(ret)); return ret;
+//   }
+//
+//   // Initialize ADC calibration using modern API
+//   adc_cali_curve_fitting_config_t cali_config = {
+//       .unit_id = VOLTAGE_ADC_UNIT,
+//       .atten = VOLTAGE_ADC_ATTEN,
+//       .bitwidth = VOLTAGE_ADC_WIDTH,
+//   };
+//
+//   // ret = adc_cali_create_scheme_curve_fitting(&cali_config,
+//   &adc_cali_handle); ret = adc_cali_create_scheme_line_fitting(&cali_config,
+//   &adc_cali_handle); if (ret != ESP_OK) {
+//     ESP_LOGW(TAG, "Failed to create ADC calibration scheme: %s",
+//              esp_err_to_name(ret));
+//     // Continue without calibration - the measure_voltage function can handle
+//     // this case
+//   } else {
+//     ESP_LOGI(TAG, "ADC calibration scheme created successfully");
+//   }
+//
+//   ESP_LOGD(TAG, "Voltage monitor initialized successfully");
+//   return ESP_OK;
+// }
 
 // Initialization Functions
 void sensors_init(void) {

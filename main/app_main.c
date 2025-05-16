@@ -130,12 +130,12 @@ esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
                               .max_files = 5,
                               .format_if_mount_failed = true};
 void init_semaphores(void) {
-
   Valve_A_AckSemaphore = xSemaphoreCreateBinary();
   Valve_B_AckSemaphore = xSemaphoreCreateBinary();
   Pump_AckSemaphore = xSemaphoreCreateBinary();
   Soil_AckSemaphore = xSemaphoreCreateBinary();
   i2c_mutex = xSemaphoreCreateMutex();
+  readings_mutex = xSemaphoreCreateMutex();
 }
 
 void pump_button_task(void *arg) {
@@ -250,6 +250,12 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
+
+  xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
+  vTaskDelay(pdMS_TO_TICKS(10000));
   xTaskCreatePinnedToCore(updateValveState, "updateValveState",
                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
                           VALVE_TASK_PRIORITY, &valveTaskHandle,
@@ -261,15 +267,10 @@ void app_main(void) {
   //                         &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   // vTaskDelay(pdMS_TO_TICKS(100));
 
-  xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
-
   xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
       WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
-                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
-                          COMM_TASK_CORE_ID);
 
   // if (lcd_device_ready) {
   //     xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW",

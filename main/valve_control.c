@@ -294,7 +294,7 @@ void updateValveState(void *pvParameters) {
 
 ValveState getCurrentState() {
   ValveState state;
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+  if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     state = currentState;
     xSemaphoreGive(stateMutex);
   } else {
@@ -305,7 +305,7 @@ ValveState getCurrentState() {
 }
 
 void setCurrentState(ValveState newState) {
-  if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+  if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     ValveState oldState = currentState;
     if (currentState != newState) {
       currentState = newState;

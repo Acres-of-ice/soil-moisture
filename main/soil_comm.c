@@ -103,20 +103,20 @@ bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
   return false;
 }
 
-// ESP-NOW send callback
-static void espnow_send_cb(const uint8_t *mac_addr,
-                           esp_now_send_status_t status) {
-  if (mac_addr == NULL) {
-    ESP_LOGE(TAG, "Send callback with NULL MAC address");
-    return;
-  }
-
-  if (status == ESP_NOW_SEND_SUCCESS) {
-    ESP_LOGD(TAG, "Message delivered to " MACSTR, MAC2STR(mac_addr));
-  } else {
-    ESP_LOGW(TAG, "Message failed to deliver to " MACSTR, MAC2STR(mac_addr));
-  }
-}
+// // ESP-NOW send callback
+// static void espnow_send_cb(const uint8_t *mac_addr,
+//                            esp_now_send_status_t status) {
+//   if (mac_addr == NULL) {
+//     ESP_LOGE(TAG, "Send callback with NULL MAC address");
+//     return;
+//   }
+//
+//   if (status == ESP_NOW_SEND_SUCCESS) {
+//     ESP_LOGD(TAG, "Message delivered to " MACSTR, MAC2STR(mac_addr));
+//   } else {
+//     ESP_LOGW(TAG, "Message failed to deliver to " MACSTR, MAC2STR(mac_addr));
+//   }
+// }
 
 bool ESPNOW_isQueueEmpty() {
   return (message_queue == NULL || uxQueueMessagesWaiting(message_queue) == 0);
@@ -160,48 +160,48 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
     ESP_LOGI(TAG, "Queued command 0x%02X to address 0x%02X", command, address);
   }
 }
-// ESP-NOW receive callback
-static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
-                           const uint8_t *data, int len) {
-  if (recv_info == NULL || data == NULL || len <= 0) {
-    ESP_LOGE(TAG, "Invalid receive callback parameters");
-    return;
-  }
-
-  int8_t rssi = 0;
-  if (recv_info->rx_ctrl) {
-    rssi = recv_info->rx_ctrl->rssi;
-  }
-
-  // ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len,
-  // MAC2STR(recv_info->src_addr));
-  ESP_LOGI(TAG, "Received %d bytes from " MACSTR " (RSSI: %d dBm)", len,
-           MAC2STR(recv_info->src_addr), rssi);
-
-  // Parse the received data
-  // espnow_recv_data_t recv_data;
-  // memcpy(recv_data.mac, recv_info->src_addr, 6);
-  recv_data.rssi = rssi; // Store the RSSI value
-
-  // Convert data to string for parsing
-  char recv_str[ESPNOW_MAX_PAYLOAD_SIZE + 1] = {0};
-  memcpy(recv_str, data,
-         len > ESPNOW_MAX_PAYLOAD_SIZE ? ESPNOW_MAX_PAYLOAD_SIZE : len);
-
-  // Parse the sensor data (format: ID[MAC]S[soil]B[batt]T[temp]D[timestamp])
-  if (sscanf(recv_str, "N[%hhX]S[%d]B[%f]", &recv_data.node_address,
-             &recv_data.soil_moisture, &recv_data.battery_level) == 3) {
-
-    // Send to receive queue
-    if (espnow_recv_queue != NULL) {
-      if (xQueueSend(espnow_recv_queue, &recv_data, 0) != pdTRUE) {
-        ESP_LOGE(TAG, "Receive queue full");
-      }
-    }
-  } else {
-    ESP_LOGE(TAG, "Failed to parse received data");
-  }
-}
+// // ESP-NOW receive callback
+// static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
+//                            const uint8_t *data, int len) {
+//   if (recv_info == NULL || data == NULL || len <= 0) {
+//     ESP_LOGE(TAG, "Invalid receive callback parameters");
+//     return;
+//   }
+//
+//   int8_t rssi = 0;
+//   if (recv_info->rx_ctrl) {
+//     rssi = recv_info->rx_ctrl->rssi;
+//   }
+//
+//   // ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len,
+//   // MAC2STR(recv_info->src_addr));
+//   ESP_LOGI(TAG, "Received %d bytes from " MACSTR " (RSSI: %d dBm)", len,
+//            MAC2STR(recv_info->src_addr), rssi);
+//
+//   // Parse the received data
+//   // espnow_recv_data_t recv_data;
+//   // memcpy(recv_data.mac, recv_info->src_addr, 6);
+//   recv_data.rssi = rssi; // Store the RSSI value
+//
+//   // Convert data to string for parsing
+//   char recv_str[ESPNOW_MAX_PAYLOAD_SIZE + 1] = {0};
+//   memcpy(recv_str, data,
+//          len > ESPNOW_MAX_PAYLOAD_SIZE ? ESPNOW_MAX_PAYLOAD_SIZE : len);
+//
+//   // Parse the sensor data (format: ID[MAC]S[soil]B[batt]T[temp]D[timestamp])
+//   if (sscanf(recv_str, "N[%hhX]S[%d]B[%f]", &recv_data.node_address,
+//              &recv_data.soil_moisture, &recv_data.battery_level) == 3) {
+//
+//     // Send to receive queue
+//     if (espnow_recv_queue != NULL) {
+//       if (xQueueSend(espnow_recv_queue, &recv_data, 0) != pdTRUE) {
+//         ESP_LOGE(TAG, "Receive queue full");
+//       }
+//     }
+//   } else {
+//     ESP_LOGE(TAG, "Failed to parse received data");
+//   }
+// }
 
 void espnow_recv_init(void) {
   if (espnow_recv_queue == NULL) {
@@ -578,6 +578,7 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
         ESP_LOGD(TAG, "Soil PCB A semaphore");
       }
       break;
+
     case SOIL_B_ADDRESS:
       if (!Soil_pcb_Acknowledged) {
         Soil_pcb_Acknowledged = true;
@@ -585,6 +586,7 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
         ESP_LOGD(TAG, "Soil PCB B semaphore");
       }
       break;
+
     case MASTER_ADDRESS:
       ESP_LOGD(TAG, "Master ACK");
       break;
