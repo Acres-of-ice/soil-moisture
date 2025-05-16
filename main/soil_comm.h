@@ -6,6 +6,7 @@
 #include "valve_control.h"
 
 #define SENSOR_DATA_QUEUE_SIZE 10
+#define ESPNOW_MAX_PAYLOAD_SIZE 250
 
 // Initialize ESP-NOW communication
 esp_err_t espnow_init();

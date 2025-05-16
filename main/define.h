@@ -131,6 +131,10 @@ extern TaskHandle_t simulationTaskHandle;
 
 #define SPIFFS_SAFE_USAGE 0.65
 
+#define SD_FREQ_HZ 25000000 // 4 MHz for SD card
+#define HOST_ID SPI2_HOST
+#define SD_SPI_HOST SPI3_HOST
+
 extern char *log_path;
 extern char *data_path;
 extern char *backup_log_path;
@@ -191,15 +195,13 @@ extern sensor_readings_t readings;
 extern float mean_fountain_pressure;
 extern float tpipe_normal;
 extern float tpipe_hot;
-extern float soil_dry;
-extern float soil_moist;
 
 // ==================== Miscellaneous Definitions ====================
 #define MAX_QUEUE_SIZE 8
 #define MAX_RETRIES 10
 
 // Global variables
-extern int on_off_counter;
+extern int counter;
 extern bool calibration_done;
 extern bool wifi_enabled, sta_enabled;
 extern bool SPRAY_mode, DRAIN_mode, AUTO_mode;

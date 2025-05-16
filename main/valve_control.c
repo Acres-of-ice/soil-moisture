@@ -34,7 +34,7 @@ extern char last_sender_pcb_name[20];
 extern int soil_A;
 extern int soil_B;
 
-extern int on_off_counter;
+extern int counter;
 
 bool errorConditionMet = false;
 
@@ -97,39 +97,6 @@ const char *valveStateToString(ValveState state) {
   }
 }
 
-void set_simulated_values(int soil_A_value, int soil_B_value) {
-  soil_A = soil_A_value;
-  soil_B = soil_B_value;
-}
-
-void simulation_task(void *pvParameters) {
-  const char *TAG = "Simulation";
-  size_t test_index = 0;
-
-  ESP_LOGI(TAG, "Starting automated test sequence with %d test cases",
-           NUM_TEST_CASES);
-
-  while (1) {
-    // Get current test case
-    test_case_t current_test = test_cases[test_index];
-
-    // Set test values
-    set_simulated_values(current_test.soil_A, current_test.soil_B);
-
-    // Run and log test results
-    ESP_LOGI(TAG, "Test case %d: %s", test_index + 1, current_test.description);
-    ESP_LOGI(TAG, "Values: Soil A=%d%%, Soil B=%d%%", current_test.soil_A,
-             current_test.soil_B);
-    // Move to next test case
-    test_index = (test_index + 1) % NUM_TEST_CASES;
-
-    // Delay before next test
-    vTaskDelay(pdMS_TO_TICKS(TEST_DELAY_MS));
-  }
-
-  vTaskDelete(NULL);
-}
-
 // Helper function to convert nodeAddress to PCB name
 const char *get_pcb_name(uint8_t nodeAddress) {
   switch (nodeAddress) {
@@ -169,7 +136,6 @@ static bool isStateTimedOut(ValveState state) {
 
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
-  // ESP_LOGI(TAG, "inside LOGI");
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
@@ -185,14 +151,12 @@ void updateValveState(void *pvParameters) {
       ESP_LOGI(TAG, "IDLE");
       vTaskDelay(1000);
 
-      // if (soil_A < CONFIG_SOIL_DRY && isWithinDrainTimeRange()) {
-      if (soil_A < CONFIG_SOIL_DRY) {
+      if (soil_A < CONFIG_SOIL_DRY && isWithinTimeRange()) {
         newState = STATE_VALVE_A_OPEN;
-        on_off_counter++;
-        // } else if (soil_B < CONFIG_SOIL_DRY && isWithinDrainTimeRange()) {
-      } else if (soil_B < CONFIG_SOIL_DRY) {
+        counter++;
+      } else if (soil_B < CONFIG_SOIL_DRY && isWithinTimeRange()) {
         newState = STATE_VALVE_B_OPEN;
-        on_off_counter++;
+        counter++;
       } else {
         newState = STATE_IDLE;
       }
@@ -253,7 +217,7 @@ void updateValveState(void *pvParameters) {
       break;
     case STATE_IRR_DONE_A:
       ESP_LOGI(TAG, "IRR A done");
-      on_off_counter++;
+      counter++;
       newState = STATE_IDLE;
       break;
     case STATE_VALVE_B_OPEN:
@@ -309,7 +273,7 @@ void updateValveState(void *pvParameters) {
       break;
     case STATE_IRR_DONE_B:
       ESP_LOGI(TAG, "Irrigation for sector B done");
-      on_off_counter++;
+      counter++;
       newState = STATE_IDLE;
       break;
     default:
@@ -359,7 +323,7 @@ bool isTimeoutReached(TickType_t timeout) {
   return (xTaskGetTickCount() - stateEntryTime) >= pdMS_TO_TICKS(timeout);
 }
 
-bool isWithinDrainTimeRange(void) {
+bool isWithinTimeRange(void) {
 #ifdef CONFIG_ENABLE_DRAIN_TIME_CONFIG
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
@@ -516,7 +480,7 @@ bool isWithinDrainTimeRange(void) {
 //   return true;
 // }
 // bool doDrain(void) {
-//   if (!AUTO_mode || (on_off_counter % 2 != 0)) {
+//   if (!AUTO_mode || (counter % 2 != 0)) {
 //     return false; // Early exit if conditions not met
 //   }
 

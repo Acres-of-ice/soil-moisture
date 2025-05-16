@@ -4,15 +4,12 @@
 #include "driver/sdspi_host.h"
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
-// #include "tasks_common.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-// #include "define.h"
 // #include "gsm.h"
 #include "esp_spiffs.h"
 #include "http_server.h"
@@ -20,14 +17,6 @@
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "valve_control.h"
-
-#define SPIFFS_SAFE_USAGE 0.65
-#define SD_FREQ_HZ 25000000 // 4 MHz for SD card
-#define HOST_ID SPI2_HOST
-#define SD_PIN_NUM_MISO 19
-#define SD_PIN_NUM_MOSI 23
-#define SD_PIN_NUM_CLK 18
-#define SD_PIN_NUM_CS 14
 
 extern SemaphoreHandle_t spi_mutex;
 #define SHORT_SMS_BUFFER_SIZE 20
@@ -38,11 +27,9 @@ size_t totalBytes = 0;
 size_t usedBytes = 0;
 #define BUFFER_SIZE 1024 // Fixed buffer size for file operations
 static FILE *logFile = NULL;
-#define SD_SPI_HOST SPI3_HOST
 spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
 
-BackupInfo backup_info[2] = {{"data.csv", 0, 0}, {"log.csv", 0, 0}};
 const char *DATA_FILE_HEADER =
     CONFIG_SITE_NAME " Time, Counter, Soil A, Soil B, Temp, Humidity, Voltage,"
                      "Pressure, Water temp, Discharge\n";
@@ -51,134 +38,6 @@ const char *DATA_FILE_HEADER =
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
 
-// Function to list SD card contents
-void list_sd_card_contents() {
-  ESP_LOGI(TAG, "Listing SD card contents:");
-  DIR *dir = opendir("/sdcard/webapp");
-  if (dir == NULL) {
-    ESP_LOGE(TAG, "Failed to open SD card directory");
-    return;
-  }
-
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != NULL) {
-    ESP_LOGI(TAG, "  %s", entry->d_name);
-  }
-
-  closedir(dir);
-}
-
-bool is_file_updated(const char *spiffs_path, const BackupInfo *info) {
-  struct stat st;
-  if (stat(spiffs_path, &st) != 0) {
-    ESP_LOGE(TAG, "Failed to get file stats: %s", spiffs_path);
-    return false;
-  }
-  return (st.st_mtime > info->last_backup_time) ||
-         (st.st_size > info->last_backup_size);
-}
-
-bool is_sd_card_mounted(void) {
-  // First, check if the mount point directory exists
-  DIR *dir = opendir(SD_MOUNT_POINT);
-  if (dir) {
-    closedir(dir);
-  } else {
-    ESP_LOGW(TAG, "SD card mount point does not exist");
-    return false;
-  }
-
-  // Then, try to create a small test file
-  FILE *test_file = fopen(SD_MOUNT_POINT "/test.txt", "w");
-  if (test_file) {
-    fprintf(test_file, "Test");
-    fclose(test_file);
-    // Clean up the test file
-    remove(SD_MOUNT_POINT "/test.txt");
-    ESP_LOGI(TAG, "SD card is mounted and writable");
-    return true;
-  } else {
-    ESP_LOGW(TAG, "Cannot write to SD card");
-    return false;
-  }
-}
-//
-// Add this helper function to check if SPIFFS file has new data compared to SD
-bool has_new_data(const char *spiffs_path, const char *sd_path,
-                  BackupInfo *info) {
-  struct stat spiffs_stat, sd_stat;
-
-  // Get SPIFFS file stats
-  if (stat(spiffs_path, &spiffs_stat) != 0) {
-    ESP_LOGE(TAG, "Failed to get SPIFFS file stats: %s", spiffs_path);
-    return false;
-  }
-
-  // Get SD file stats
-  if (stat(sd_path, &sd_stat) != 0) {
-    // If SD file doesn't exist, then we have new data
-    if (errno == ENOENT) {
-      info->last_backup_size = 0;
-      info->last_backup_time = 0;
-      return true;
-    }
-    ESP_LOGE(TAG, "Failed to get SD file stats: %s", sd_path);
-    return false;
-  }
-
-  // If SPIFFS file is larger or newer than the last backup, we have new data
-  return (spiffs_stat.st_size > info->last_backup_size) ||
-         (spiffs_stat.st_mtime > info->last_backup_time);
-}
-
-// Modified append_to_sd_file function
-esp_err_t append_to_sd_file(const char *sd_path, const char *spiffs_path,
-                            BackupInfo *info) {
-  FILE *spiffs_file = fopen(spiffs_path, "r");
-  if (!spiffs_file) {
-    ESP_LOGE(TAG, "Failed to open SPIFFS file");
-    return ESP_FAIL;
-  }
-
-  // Seek to the last backup position
-  if (fseek(spiffs_file, info->last_backup_size, SEEK_SET) != 0) {
-    ESP_LOGE(TAG, "Failed to seek in SPIFFS file");
-    fclose(spiffs_file);
-    return ESP_FAIL;
-  }
-
-  FILE *sd_file = fopen(sd_path, "a");
-  if (!sd_file) {
-    ESP_LOGE(TAG, "Failed to open SD file");
-    fclose(spiffs_file);
-    return ESP_FAIL;
-  }
-
-  // Copy only new data
-  char buffer[1024];
-  size_t bytes_read;
-  while ((bytes_read = fread(buffer, 1, sizeof(buffer), spiffs_file)) > 0) {
-    if (fwrite(buffer, 1, bytes_read, sd_file) != bytes_read) {
-      ESP_LOGE(TAG, "Failed to write to SD file");
-      fclose(spiffs_file);
-      fclose(sd_file);
-      return ESP_FAIL;
-    }
-  }
-
-  // Update backup info
-  struct stat spiffs_stat;
-  if (stat(spiffs_path, &spiffs_stat) == 0) {
-    info->last_backup_time = spiffs_stat.st_mtime;
-    info->last_backup_size = spiffs_stat.st_size;
-  }
-
-  fclose(spiffs_file);
-  fclose(sd_file);
-  return ESP_OK;
-}
-
-#define SHORT_SMS_BUFFER_SIZE 20
 static int custom_log_function(const char *fmt, va_list args) {
   char buffer[512];
   char short_msg[SHORT_SMS_BUFFER_SIZE + 1]; // 20 chars + null terminator
@@ -256,17 +115,20 @@ static int custom_log_function(const char *fmt, va_list args) {
     fflush(logFile);
 
     // Added: Print to LCD if it's an ERROR level log
-    // if (level == ESP_LOG_ERROR) {
-    //   // Use a mutex to ensure thread-safe access to the LCD
-    //   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-    //     lcd_put_cur(0, 8);
-    //     lcd_send_data(ERROR_SYMBOL_ADDRESS);
-    //     xSemaphoreGive(i2c_mutex);
-    //   }
+    if (level == ESP_LOG_ERROR) {
+      // Use a mutex to ensure thread-safe access to the LCD
+      if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+        lcd_put_cur(0, 8);
+        lcd_send_data(ERROR_SYMBOL_ADDRESS);
+        xSemaphoreGive(i2c_mutex);
+      }
+    }
     //   if (gsm_init_success) {
     //     snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag,
-    //     short_msg); sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-    //   } else if ((site_config.has_relay) && (g_nodeAddress != GSM_ADDRESS)) {
+    //     short_msg); sms_queue_message(CONFIG_SMS_ERROR_NUMBER,
+    //     sms_message);
+    //   } else if ((site_config.has_relay) && (g_nodeAddress != GSM_ADDRESS))
+    //   {
     //     // LoRa error message handling
     //     comm_t error_msg = {
     //         .address = GSM_ADDRESS,
@@ -289,6 +151,7 @@ static int custom_log_function(const char *fmt, va_list args) {
     //     }
     //   }
     // }
+    //
   }
 
   // Check if this log level should be printed based on ESP log level
@@ -338,52 +201,6 @@ esp_err_t init_data_module(void) {
     return ret;
 
   return ESP_OK;
-}
-
-bool init_SD_Card(void) {
-  esp_err_t ret;
-
-  // SD Card SPI device configuration
-  spi_device_interface_config_t sd_dev_cfg = {.clock_speed_hz = SD_FREQ_HZ,
-                                              .mode = 0,
-                                              .spics_io_num = SD_PIN_NUM_CS,
-                                              .queue_size = 7,
-                                              .flags = 0,
-                                              // Added for better timing control
-                                              .cs_ena_pretrans = 3,
-                                              .cs_ena_posttrans = 3};
-
-  ret = spi_bus_add_device(HOST_ID, &sd_dev_cfg, &sd_spi);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to add SD card device: %s", esp_err_to_name(ret));
-    return false;
-  }
-
-  // Configure the SD card host
-  sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-  host.slot = HOST_ID;
-
-  sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-  slot_config.gpio_cs = SD_PIN_NUM_CS;
-  slot_config.host_id = host.slot;
-
-  // Mount configuration
-  esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-      .format_if_mount_failed = false,
-      .max_files = 20,
-      .allocation_unit_size = 16 * 1024};
-
-  sdmmc_card_t *card;
-  ret = esp_vfs_fat_sdspi_mount(SD_MOUNT_POINT, &host, &slot_config,
-                                &mount_config, &card);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to mount SD card: %s", esp_err_to_name(ret));
-    update_status_message("Error SD");
-    return false;
-  }
-
-  ESP_LOGI(TAG, "SD Card mounted successfully");
-  return true;
 }
 
 // Initialize SPIFFS
@@ -456,133 +273,104 @@ esp_err_t init_spiffs(void) {
   return ESP_OK;
 }
 
-// void dataLoggingTask(void *pvParameters) {
-//   char data_entry[256];
-//   static sensor_readings_t data_readings;
+void dataLoggingTask(void *pvParameters) {
+  char data_entry[256];
+  static sensor_readings_t data_readings;
 
-//   while (1) {
-//     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-//       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
-//     }
-
-//     get_sensor_readings(&data_readings);
-
-//     snprintf(data_entry, sizeof(data_entry),
-//              "%s,%.2f,%.2f\n", fetchTime(),
-//              data_readings.temperature, data_readings.humidity);
-
-//     // Added error handling for file append operation
-//     if (!appendFile(data_path, data_entry)) {
-//       ESP_LOGE(TAG, "Failed to append to data file: %s", data_entry);
-//       // Consider adding error recovery logic here
-//     } else {
-//       ESP_LOGI(TAG, "%s", data_entry);
-//     }
-
-//     // Changed to vTaskDelay for simplicity and to handle task suspension
-//     better vTaskDelay(pdMS_TO_TICKS(DATA_TIME_MS));
-//   }
-// }
-
-esp_err_t copy_file(const char *src_path, const char *dest_path) {
-  FILE *f_src = NULL, *f_dest = NULL;
-  char buffer[COPY_BUFFER_SIZE];
-  size_t bytes_read, bytes_written;
-  esp_err_t ret = ESP_OK;
-
-  f_src = fopen(src_path, "rb");
-  if (f_src == NULL) {
-    ESP_LOGE(TAG, "Failed to open source file: %s", src_path);
-    return ESP_FAIL;
-  }
-
-  f_dest = fopen(dest_path, "wb");
-  if (f_dest == NULL) {
-    ESP_LOGE(TAG, "Failed to open destination file: %s", dest_path);
-    fclose(f_src);
-    return ESP_FAIL;
-  }
-
-  while ((bytes_read = fread(buffer, 1, COPY_BUFFER_SIZE, f_src)) > 0) {
-    bytes_written = fwrite(buffer, 1, bytes_read, f_dest);
-    if (bytes_written != bytes_read) {
-      ESP_LOGE(TAG, "Failed to write to destination file");
-      ret = ESP_FAIL;
-      break;
+  while (1) {
+    if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
     }
-    vTaskDelay(1); // Yield to other tasks
-  }
 
-  fclose(f_src);
-  fclose(f_dest);
-  return ret;
+    get_sensor_readings(&data_readings);
+
+    snprintf(data_entry, sizeof(data_entry),
+             "%s,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", fetchTime(),
+             counter, data_readings.soil_A, data_readings.soil_B,
+             data_readings.temperature, data_readings.humidity,
+             data_readings.voltage, data_readings.fountain_pressure,
+             data_readings.water_temp, data_readings.discharge);
+
+    // Added error handling for file append operation
+    if (!appendFile(data_path, data_entry)) {
+      ESP_LOGE(TAG, "Failed to append to data file: %s", data_entry);
+      // Consider adding error recovery logic here
+    } else {
+      ESP_LOGI(TAG, "%s", data_entry);
+    }
+
+    // Changed to vTaskDelay for simplicity and to handle task suspension better
+    vTaskDelay(pdMS_TO_TICKS(DATA_TIME_MS));
+  }
 }
 
-// void get_spiffs_usage(size_t *total, size_t *used) {
-//    esp_err_t ret = esp_spiffs_info("storage", total, used);
-//    if (ret != ESP_OK) {
-//      ESP_LOGE(TAG, "Failed to get SPIFFS partition information");
-//      *total = 0;
-//      *used = 0;
-//    }
-//  }
+void get_spiffs_usage(size_t *total, size_t *used) {
+  esp_err_t ret = esp_spiffs_info("storage", total, used);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get SPIFFS partition information");
+    *total = 0;
+    *used = 0;
+  }
+}
 
-// esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove) {
-//   FILE *file = fopen(path, "r+");
-//   if (!file) {
-//     ESP_LOGE(TAG, "Failed to open file for modification: %s", path);
-//     return ESP_FAIL;
-//   }
+esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove) {
+  FILE *file = fopen(path, "r+");
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for modification: %s", path);
+    return ESP_FAIL;
+  }
 
-//   // Get file size
-//   fseek(file, 0, SEEK_END);
-//   long file_size = ftell(file);
+  // Get file size
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
 
-//   if (file_size <= bytes_to_remove) {
-//     // If we need to remove more bytes than the file size, just clear the
-//     file fclose(file); file = fopen(path, "w"); if (!file) {
-//       ESP_LOGE(TAG, "Failed to clear file: %s", path);
-//       return ESP_FAIL;
-//     }
-//     fclose(file);
-//     return ESP_OK;
-//   }
+  if (file_size <= bytes_to_remove) {
+    // If we need to remove more bytes than the file size, just clear the
+    fclose(file);
+    file = fopen(path, "w");
+    if (!file) {
+      ESP_LOGE(TAG, "Failed to clear file: %s", path);
+      return ESP_FAIL;
+    }
+    fclose(file);
+    return ESP_OK;
+  }
 
-//   char buffer[BUFFER_SIZE];
-//   size_t bytes_read, bytes_written;
-//   long read_pos = floor(bytes_to_remove);
-//   long write_pos = 0;
+  char buffer[BUFFER_SIZE];
+  size_t bytes_read, bytes_written;
+  long read_pos = floor(bytes_to_remove);
+  long write_pos = 0;
 
-//   while (read_pos < file_size) {
-//     fseek(file, read_pos, SEEK_SET);
-//     bytes_read = fread(buffer, 1, BUFFER_SIZE, file);
-//     if (bytes_read == 0) {
-//       break; // End of file or error
-//     }
+  while (read_pos < file_size) {
+    fseek(file, read_pos, SEEK_SET);
+    bytes_read = fread(buffer, 1, BUFFER_SIZE, file);
+    if (bytes_read == 0) {
+      break; // End of file or error
+    }
 
-//     fseek(file, write_pos, SEEK_SET);
-//     bytes_written = fwrite(buffer, 1, bytes_read, file);
-//     if (bytes_written != bytes_read) {
-//       ESP_LOGE(TAG, "Failed to write data while removing oldest entries");
-//       fclose(file);
-//       return ESP_FAIL;
-//     }
+    fseek(file, write_pos, SEEK_SET);
+    bytes_written = fwrite(buffer, 1, bytes_read, file);
+    if (bytes_written != bytes_read) {
+      ESP_LOGE(TAG, "Failed to write data while removing oldest entries");
+      fclose(file);
+      return ESP_FAIL;
+    }
 
-//     read_pos += bytes_read;
-//     write_pos += bytes_written;
-//   }
+    read_pos += bytes_read;
+    write_pos += bytes_written;
+  }
 
-//   // Truncate the file
-//   int fd = fileno(file);
-//   if (ftruncate(fd, write_pos) != 0) {
-//     ESP_LOGE(TAG, "Failed to truncate file");
-//     fclose(file);
-//     return ESP_FAIL;
-//   }
+  // Truncate the file
+  int fd = fileno(file);
+  if (ftruncate(fd, write_pos) != 0) {
+    ESP_LOGE(TAG, "Failed to truncate file");
+    fclose(file);
+    return ESP_FAIL;
+  }
 
-//   fclose(file);
-//   return ESP_OK;
-// }
+  fclose(file);
+  return ESP_OK;
+}
 
 // Function to truncate file from the start
 esp_err_t truncate_file_start(const char *path, size_t new_size) {
@@ -628,191 +416,70 @@ esp_err_t truncate_file_start(const char *path, size_t new_size) {
 }
 
 // Function to check if a path is in SPIFFS
-// bool is_path_in_spiffs(const char *path) {
-//   return strncmp(path, SPIFFS_MOUNT_POINT, strlen(SPIFFS_MOUNT_POINT)) == 0;
-// }
+bool is_path_in_spiffs(const char *path) {
+  return strncmp(path, SPIFFS_MOUNT_POINT, strlen(SPIFFS_MOUNT_POINT)) == 0;
+}
 
-// bool appendFile(const char *path, const char *message) {
-//   ESP_LOGV(TAG, "Appending to file: %s", path);
-//   bool success = false;
+bool appendFile(const char *path, const char *message) {
+  ESP_LOGV(TAG, "Appending to file: %s", path);
+  bool success = false;
 
-//   // Take mutex with timeout
-//   if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
-//     ESP_LOGE(TAG, "Failed to acquire file mutex");
-//     return false;
-//   }
+  // Take mutex with timeout
+  if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+    ESP_LOGE(TAG, "Failed to acquire file mutex");
+    return false;
+  }
 
-//   // Check SPIFFS space
-//   if (is_path_in_spiffs(path)) {
-//     size_t message_size = strlen(message);
-//     size_t total, used, free_space;
-//     get_spiffs_usage(&total, &used);
-//     free_space = total - used;
+  // Check SPIFFS space
+  if (is_path_in_spiffs(path)) {
+    size_t message_size = strlen(message);
+    size_t total, used, free_space;
+    get_spiffs_usage(&total, &used);
+    free_space = total - used;
 
-//     if (free_space < message_size ||
-//         (used + message_size > total * SPIFFS_SAFE_USAGE)) {
-//       ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest entries");
-//       double space_to_free = (total * 0.1) + message_size;
-//       esp_err_t data_remove_result =
-//           remove_oldest_entries(data_path, space_to_free / 2);
-//       esp_err_t log_remove_result =
-//           remove_oldest_entries(log_path, space_to_free / 2);
+    if (free_space < message_size ||
+        (used + message_size > total * SPIFFS_SAFE_USAGE)) {
+      ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest entries");
+      double space_to_free = (total * 0.1) + message_size;
+      esp_err_t data_remove_result =
+          remove_oldest_entries(data_path, space_to_free / 2);
+      esp_err_t log_remove_result =
+          remove_oldest_entries(log_path, space_to_free / 2);
 
-//       if (data_remove_result != ESP_OK && log_remove_result != ESP_OK) {
-//         ESP_LOGE(
-//             TAG,
-//             "Failed to remove oldest entries from both data and log files");
-//         xSemaphoreGive(file_mutex);
-//         return false;
-//       }
-//     }
-//   }
+      if (data_remove_result != ESP_OK && log_remove_result != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "Failed to remove oldest entries from both data and log files");
+        xSemaphoreGive(file_mutex);
+        return false;
+      }
+    }
+  }
 
-//   FILE *file = fopen(path, "a");
-//   if (!file) {
-//     ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
-//     xSemaphoreGive(file_mutex);
-//     return false;
-//   }
+  FILE *file = fopen(path, "a");
+  if (!file) {
+    ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
+    xSemaphoreGive(file_mutex);
+    return false;
+  }
 
-//   // Write to file
-//   if (fputs(message, file) == EOF) {
-//     ESP_LOGE(TAG, "Failed to append to file: %s", path);
-//   } else {
-//     fflush(file);
-//     success = true;
-//   }
+  // Write to file
+  if (fputs(message, file) == EOF) {
+    ESP_LOGE(TAG, "Failed to append to file: %s", path);
+  } else {
+    fflush(file);
+    success = true;
+  }
 
-//   if (fclose(file) != 0) {
-//     ESP_LOGE(TAG, "Failed to close file properly: %s", path);
-//     success = false;
-//   }
+  if (fclose(file) != 0) {
+    ESP_LOGE(TAG, "Failed to close file properly: %s", path);
+    success = false;
+  }
 
-//   // Release mutex
-//   xSemaphoreGive(file_mutex);
-//   return success;
-// }
-
-// bool appendFile(const char *path, const char *message) {
-//   ESP_LOGV(TAG, "Appending to file: %s", path);
-//   bool success = false;
-
-//   // Take mutex with timeout
-//   if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
-//     ESP_LOGE(TAG, "Failed to acquire file mutex");
-//     return false;
-//   }
-
-//   // Check SPIFFS space
-//   if (is_path_in_spiffs(path)) {
-//     size_t message_size = strlen(message);
-//     size_t total, used, free_space;
-//     get_spiffs_usage(&total, &used);
-//     free_space = total - used;
-
-//     if (free_space < message_size ||
-//         (used + message_size > total * SPIFFS_SAFE_USAGE)) {
-//       ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest entries");
-//       double space_to_free = (total * 0.1) + message_size;
-//       esp_err_t data_remove_result =
-//           remove_oldest_entries(data_path, space_to_free / 2);
-//       esp_err_t log_remove_result =
-//           remove_oldest_entries(log_path, space_to_free / 2);
-
-//       if (data_remove_result != ESP_OK && log_remove_result != ESP_OK) {
-//         ESP_LOGE(
-//             TAG,
-//             "Failed to remove oldest entries from both data and log files");
-//         xSemaphoreGive(file_mutex);
-//         return false;
-//       }
-//     }
-//   }
-
-//   FILE *file = fopen(path, "a");
-//   if (!file) {
-//     ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
-//     xSemaphoreGive(file_mutex);
-//     return false;
-//   }
-
-//   // Write to file
-//   if (fputs(message, file) == EOF) {
-//     ESP_LOGE(TAG, "Failed to append to file: %s", path);
-//   } else {
-//     fflush(file);
-//     success = true;
-//   }
-
-//   if (fclose(file) != 0) {
-//     ESP_LOGE(TAG, "Failed to close file properly: %s", path);
-//     success = false;
-//   }
-
-//   // Release mutex
-//   xSemaphoreGive(file_mutex);
-//   return success;
-// }
-
-// bool appendFile(const char *path, const char *message)
-// {
-//     ESP_LOGV(TAG, "Appending to file: %s", path);
-//
-//     // Check if the path is in SPIFFS and manage space if necessary
-//     if (is_path_in_spiffs(path)) {
-//         size_t message_size = strlen(message);
-//         size_t total, used, free_space;
-//         get_spiffs_usage(&total, &used);
-//         free_space = total - used;
-
-//         // Check if we need to free up space
-//         if (free_space < message_size || (used + message_size > total *
-//         SPIFFS_SAFE_USAGE)) {
-//             ESP_LOGW(TAG, "Space not enough in SPIFFS, removing oldest
-//             entries"); double space_to_free = (total * 0.1) + message_size;
-//             // Extra 10% buffer
-
-//             // Remove oldest entries from data and log files
-//             esp_err_t data_remove_result = remove_oldest_entries(data_path,
-//             space_to_free / 2); esp_err_t log_remove_result =
-//             remove_oldest_entries(log_path, space_to_free / 2);
-//
-//             if (data_remove_result != ESP_OK && log_remove_result != ESP_OK)
-//             {
-//                 ESP_LOGE(TAG, "Failed to remove oldest entries from both data
-//                 and log files"); return false;
-//             } else if (data_remove_result != ESP_OK) {
-//                 ESP_LOGW(TAG, "Failed to remove oldest entries from data
-//                 file");
-//             } else if (log_remove_result != ESP_OK) {
-//                 ESP_LOGW(TAG, "Failed to remove oldest entries from log
-//                 file");
-//             }
-//         }
-//     }
-//
-//     // Append to file (common for both SPIFFS and non-SPIFFS paths)
-//     FILE *file = fopen(path, "a");
-//     if (!file) {
-//         ESP_LOGE(TAG, "Failed to open file for appending: %s", path);
-//         return false;
-//     }
-
-//     bool success = true;
-//     if (fputs(message, file) == EOF) {
-//         ESP_LOGE(TAG, "Failed to append to file: %s", path);
-//         success = false;
-//     } else {
-//         fflush(file);  // Ensure data is written to the file
-//     }
-
-//     if (fclose(file) != 0) {
-//         ESP_LOGE(TAG, "Failed to close file properly: %s", path);
-//         success = false;
-//     }
-
-//     return success;
-// }
+  // Release mutex
+  xSemaphoreGive(file_mutex);
+  return success;
+}
 
 // Function to get file size
 size_t get_file_size(const char *path) {
@@ -918,125 +585,3 @@ void display_data(const char *file_path) {
   }
   printf("+\n");
 }
-
-/*******************************************************
- * UNCOMMENT FOR FLASH TEST
- */
-// static struct {
-//     const char* TAG;
-//     const size_t STRING_SIZE;
-//     const uint32_t INTERVAL_MS;
-// } storage_test = {
-//     .TAG = "SPIFFS_TEST",
-//     .STRING_SIZE = 16 * 1024,  // 16KB
-//     .INTERVAL_MS = 1000        // 1 second between writes
-// };
-
-// // Helper function to create a test string of specified size
-// char* create_test_string(size_t size) {
-//     char* test_string = heap_caps_malloc(size, MALLOC_CAP_8BIT);
-//     if (test_string == NULL) {
-//         ESP_LOGE(storage_test.TAG, "Failed to allocate memory for test
-//         string"); return NULL;
-//     }
-
-//     // Fill with repeating pattern
-//     for (size_t i = 0; i < size - 1; i++) {
-//         test_string[i] = 'A' + (i % 26);  // Cycles through alphabet
-//     }
-//     test_string[size - 1] = '\0';  // Null terminate
-
-//     return test_string;
-// }
-
-// // Helper function to print storage stats
-// void print_storage_stats(void) {
-//     size_t total_bytes, used_bytes;
-//     get_spiffs_usage(&total_bytes, &used_bytes);
-
-//     float usage_percentage = (used_bytes * 100.0f) / total_bytes;
-//     ESP_LOGI(storage_test.TAG, "Storage Stats - Total: %zu bytes, Used: %zu
-//     bytes (%.2f%%)",
-//              total_bytes, used_bytes, usage_percentage);
-
-//     // Get individual file sizes
-//     size_t data_size = get_file_size(data_path);
-//     size_t log_size = get_file_size(log_path);
-//     ESP_LOGI(storage_test.TAG, "File Sizes - Data: %zu bytes, Log: %zu
-//     bytes",
-//              data_size, log_size);
-// }
-
-// void test_storage_management(void) {
-//     ESP_LOGI(storage_test.TAG, "Starting storage management test...");
-
-//     // Create test string
-//     char* test_string = create_test_string(storage_test.STRING_SIZE);
-//     if (test_string == NULL) {
-//         ESP_LOGE(storage_test.TAG, "Test aborted - couldn't create test
-//         string"); return;
-//     }
-
-//     // Allocate entry buffer on heap
-//     char* entry = heap_caps_malloc(storage_test.STRING_SIZE + 64,
-//     MALLOC_CAP_8BIT); if (entry == NULL) {
-//         ESP_LOGE(storage_test.TAG, "Failed to allocate entry buffer");
-//         free(test_string);
-//         return;
-//     }
-
-//     // Counter for writes
-//     uint32_t write_count = 0;
-//     uint32_t failed_writes = 0;
-
-//     // Print initial storage state
-//     ESP_LOGI(storage_test.TAG, "Initial storage state:");
-//     print_storage_stats();
-
-//     while (1) {
-//         write_count++;
-
-//         // Construct entry with timestamp and counter
-//         snprintf(entry, storage_test.STRING_SIZE + 64, "[%s][%lu] %s\n",
-//                 fetchTime(), write_count, test_string);
-
-//         // Try to append to both files
-//         bool data_success = appendFile(data_path, entry);
-//         bool log_success = appendFile(log_path, entry);
-
-//         if (!data_success || !log_success) {
-//             failed_writes++;
-//             ESP_LOGW(storage_test.TAG, "Write %lu failed - Data: %s, Log:
-//             %s",
-//                     write_count,
-//                     data_success ? "OK" : "FAIL",
-//                     log_success ? "OK" : "FAIL");
-//         }
-
-//         // Print storage stats every 5 writes
-//         if (write_count % 5 == 0) {
-//             ESP_LOGI(storage_test.TAG, "After write %lu (failed: %lu):",
-//                     write_count, failed_writes);
-//             print_storage_stats();
-//         }
-
-//         // Optional: Stop test after certain number of writes
-//         if (write_count >= 200) {  // Adjust as needed
-//             ESP_LOGI(storage_test.TAG, "Test completed after %lu writes (%lu
-//             failed)",
-//                     write_count, failed_writes);
-//             break;
-//         }
-
-//         // Delay between writes
-//         vTaskDelay(pdMS_TO_TICKS(storage_test.INTERVAL_MS));
-//     }
-
-//     // Final storage state
-//     ESP_LOGI(storage_test.TAG, "Final storage state:");
-//     print_storage_stats();
-
-//     // Cleanup
-//     free(test_string);
-//     free(entry);
-// }

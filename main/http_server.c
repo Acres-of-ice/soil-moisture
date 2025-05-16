@@ -20,7 +20,7 @@
 #include "sensor.h"
 #include "wifi_app.h"
 
-extern int on_off_counter;
+extern int counter;
 static const char TAG[] = "SERVER";
 
 // HTTP server task handle
@@ -525,8 +525,7 @@ static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req) {
   snprintf(resp, sizeof(resp),
            "{\"time\": %s,  \"counter\": %d,  \"Soil A\": %d, \"Soil "
            "B\": %d }",
-           fetchTime(), on_off_counter, http_readings.soil_A,
-           http_readings.soil_B);
+           fetchTime(), counter, http_readings.soil_A, http_readings.soil_B);
 
   ESP_LOGD(TAG, "Sending sensor readings: %s", resp);
 

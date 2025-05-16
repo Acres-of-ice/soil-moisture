@@ -25,7 +25,7 @@
 
 const site_config_t site_config = {.simulate = CONFIG_ENABLE_SIMULATION_MODE};
 
-int on_off_counter = 1;
+int counter = 1;
 bool lcd_device_ready = false;
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
@@ -210,6 +210,10 @@ void app_main(void) {
   ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
 
+  if (init_data_module() != ESP_OK) {
+    ESP_LOGE(TAG, "data module Failed to initialize ");
+  }
+
   espnow_init2();
 
   if (site_config.simulate) {
@@ -274,10 +278,10 @@ void app_main(void) {
   //       vTaskDelay(pdMS_TO_TICKS(100));
   //     }
 
-  // xTaskCreatePinnedToCore(
-  //     dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
-  //     DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
-  // vTaskDelay(pdMS_TO_TICKS(10000));
+  xTaskCreatePinnedToCore(
+      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
+      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(10000));
 #endif
 
 #if CONFIG_SOIL_A

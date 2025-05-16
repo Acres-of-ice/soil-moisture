@@ -15,7 +15,7 @@ static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
 extern bool sta_enabled;  // WiFi status flag
 static char response_sms[32];
-extern int on_off_counter;
+extern int counter;
 extern SemaphoreHandle_t i2c_mutex;
 extern TaskHandle_t wifiTaskHandle;
 extern char *log_path;
@@ -45,7 +45,7 @@ void a_btn_short_press(void) {
 
     // ESP_LOGI(TAG, "Counter: %d", on_off_counter);
 
-    if (on_off_counter % 2 == 0) {
+    if (counter % 2 == 0) {
       newState = STATE_VALVE_B_OPEN;
       // Create compact response message with new counter value
       // Using static buffer defined at the top
@@ -68,7 +68,7 @@ void a_btn_short_press(void) {
     }
     setCurrentState(newState);
   } else {
-    ESP_LOGW(TAG, "Wait until state change %d", on_off_counter);
+    ESP_LOGW(TAG, "Wait until state change %d", counter);
   }
 }
 
