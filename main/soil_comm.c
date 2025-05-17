@@ -1525,10 +1525,10 @@ bool verify_device_mappings(void) {
 
 // Check for critical devices first
 #if CONFIG_MASTER
-  // const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
-  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS,
-  //                                     SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
-  const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_B_ADDRESS};
+  const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
+                                      VALVE_B_ADDRESS, PUMP_ADDRESS,
+                                      SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
+  //const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_B_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \

@@ -303,11 +303,11 @@ void update_lcd_row_one(const char *uptime_str,
   // snprintf(press_str, sizeof(press_str), "%3.1f", press);
 
   int soilA = (int)(lcd_readings->soil_A);
-  char soilA_str;
+  char soilA_str[5];
   snprintf(soilA_str, sizeof(soilA_str), "%3u", soilA);
 
   int soilB = (int)(lcd_readings->soil_B);
-  char soilB_str;
+  char soilB_str[5];
   snprintf(soilB_str, sizeof(soilB_str), "%3u", soilB);
 
   // Counter formatting
