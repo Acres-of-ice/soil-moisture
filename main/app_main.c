@@ -249,13 +249,13 @@ void app_main(void) {
       WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
 
-  // if (lcd_device_ready) {
-  //     xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW",
-  //     LCD_TASK_STACK_SIZE,
-  //                               NULL, LCD_TASK_PRIORITY, NULL,
-  //                               LCD_TASK_CORE_ID);
-  //       vTaskDelay(pdMS_TO_TICKS(100));
-  //     }
+  if (lcd_device_ready) {
+      xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW",
+      LCD_TASK_STACK_SIZE,
+                                NULL, LCD_TASK_PRIORITY, NULL,
+                                LCD_TASK_CORE_ID);
+        vTaskDelay(pdMS_TO_TICKS(100));
+      }
 
   xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
