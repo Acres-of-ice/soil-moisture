@@ -69,55 +69,6 @@ menu "App Configuration"
         default "partitions/master.csv" if MASTER
         default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
-config ENABLE_RTC
-	bool "Enable RTC Configuration"
-	default false
-	help
-		Enable to customize RTC settings. If disabled, site defaults will be used.
-
-menu "RTC Configuration"
-	visible if ENABLE_RTC
-
-	config RTC_YEAR
-		int "Year"
-		range 2000 2099
-		default 2025
-		# depends on HAS_RTC_SET
-		help
-			Year to set (2000-2099)
-
-	config RTC_MONTH
-		int "Month"
-		range 1 12
-		default 1
-		# depends on HAS_RTC_SET
-		help
-			Month to set (1-12)
-
-	config RTC_DAY
-		int "Day"
-		range 1 31
-		default 1
-		# depends on HAS_RTC_SET
-		help
-			Day to set (1-31)
-
-	config RTC_HOUR
-		int "Hour"
-		range 0 23
-		default 0
-		# depends on HAS_RTC_SET
-		help
-			Hour to set (0-23)
-
-	config RTC_MINUTE
-		int "Minute"
-		range 0 59
-		default 0
-		# depends on HAS_RTC_SET
-		help
-			Minute to set (0-59)
-endmenu
 
 config ENABLE_HW
     bool "Enable Hardware Configuration"
@@ -133,6 +84,67 @@ menu "Hardware Configuration"
 		default y
 		help
 			Enable this for sites using LCD with I2C address 0x3F.
+
+        config HAS_VALVE
+            bool "Use Valves"
+            default y
+            help
+                Enable valve for sites
+        config ENABLE_VALVE
+            int
+            default 1 if HAS_VALVE
+            default 0
+
+        config HAS_GSM
+            bool "Use GSM"
+            default n if SITE_TEST
+            default y
+            help
+                Enable GSM for sites
+        config ENABLE_GSM
+            int
+            default 1 if HAS_GSM
+            default 0
+
+        config HAS_TEMP_HUMIDITY
+            bool "Enable Temperature Sensor"
+            default y
+            help
+                Enable if site has a temp sensor.
+        config ENABLE_TEMP_HUMIDITY
+            int
+            default 1 if HAS_TEMP_HUMIDITY
+            default 0
+
+        config HAS_FLOWMETER
+            bool "Enable Flowmeter"
+            default y
+            help
+                Enable if site has a flowmeter.
+        config ENABLE_FLOWMETER
+            int
+            default 1 if HAS_FLOWMETER
+            default 0
+
+        config HAS_PRESSURE
+            bool "Enable pressure sensor"
+            default y
+            help
+                Enable if site has a pressure sensor.
+        config ENABLE_PRESSURE
+            int
+            default 1 if HAS_PRESSURE
+            default 0
+
+        config HAS_VOLTAGE_CUTOFF
+            bool "Enable Low Voltage Auto Cutoff"
+            default n
+            help
+                Enable low voltage auto cutoff for sites
+        config ENABLE_VOLTAGE_CUTOFF
+            int
+            default 1 if HAS_VOLTAGE_CUTOFF
+            default 0
 endmenu
 
 config ENABLE_OFF_TIME_CONFIG
@@ -287,6 +299,56 @@ menu "Soil Moisture Thresholds"
             Set the soil moisture threshold at which irrigation will stop.
             Value is a percentage (0-100). Higher values mean wetter soil.
             Example: 70 means irrigation stops when moisture reaches 70%.
+endmenu
+
+config ENABLE_RTC
+	bool "Enable RTC Configuration"
+	default false
+	help
+		Enable to customize RTC settings. If disabled, site defaults will be used.
+
+menu "RTC Configuration"
+	visible if ENABLE_RTC
+
+	config RTC_YEAR
+		int "Year"
+		range 2000 2099
+		default 2025
+		# depends on HAS_RTC_SET
+		help
+			Year to set (2000-2099)
+
+	config RTC_MONTH
+		int "Month"
+		range 1 12
+		default 1
+		# depends on HAS_RTC_SET
+		help
+			Month to set (1-12)
+
+	config RTC_DAY
+		int "Day"
+		range 1 31
+		default 1
+		# depends on HAS_RTC_SET
+		help
+			Day to set (1-31)
+
+	config RTC_HOUR
+		int "Hour"
+		range 0 23
+		default 0
+		# depends on HAS_RTC_SET
+		help
+			Hour to set (0-23)
+
+	config RTC_MINUTE
+		int "Minute"
+		range 0 59
+		default 0
+		# depends on HAS_RTC_SET
+		help
+			Minute to set (0-59)
 endmenu
 
 menu "WiFi Configuration"

@@ -23,10 +23,6 @@ QueueHandle_t sensor_data_queue = NULL;
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 
-// Global node address (will be set to SOIL_A_ADDRESS or SOIL_B_ADDRESS based on
-// configuration)
-static uint8_t g_node_address = 0;
-
 // External variables from soil_comm.c we need access to
 extern uint8_t g_nodeAddress;
 extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
@@ -39,11 +35,11 @@ void soil_sensor_init(void) {
 
 // Set node address based on build configuration
 #if defined(CONFIG_SOIL_A)
-  g_node_address = SOIL_A_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil A sensor (0x%02X)", g_node_address);
+  g_nodeAddress = SOIL_A_ADDRESS;
+  ESP_LOGI(TAG, "Configured as Soil A sensor (0x%02X)", g_nodeAddress);
 #elif defined(CONFIG_SOIL_B)
-  g_node_address = SOIL_B_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil B sensor (0x%02X)", g_node_address);
+  g_nodeAddress = SOIL_B_ADDRESS;
+  ESP_LOGI(TAG, "Configured as Soil B sensor (0x%02X)", g_nodeAddress);
 #else
   ESP_LOGE(TAG, "Invalid soil sensor configuration!");
   return;
@@ -359,7 +355,7 @@ void soil_sensor_task(void *pvParameters) {
     soil_sensor_init();
   }
 
-  if (g_node_address == 0) {
+  if (g_nodeAddress == 0) {
     ESP_LOGE(TAG, "Node address not set, exiting task");
     vTaskDelete(NULL);
     return;
@@ -376,7 +372,7 @@ void soil_sensor_task(void *pvParameters) {
     }
   }
 
-  ESP_LOGI(TAG, "Soil sensor task started for node 0x%02X", g_node_address);
+  ESP_LOGI(TAG, "Soil sensor task started for node 0x%02X", g_nodeAddress);
 
   while (1) {
     // Read soil moisture
@@ -386,7 +382,7 @@ void soil_sensor_task(void *pvParameters) {
     if (moisture >= 0) {
       // Prepare ESP-NOW data structure for transmission
       espnow_recv_data_t espnow_data;
-      espnow_data.node_address = g_node_address;
+      espnow_data.node_address = g_nodeAddress;
       espnow_data.soil_moisture = moisture;
       espnow_data.battery_level = battery;
       espnow_data.rssi = get_current_rssi();

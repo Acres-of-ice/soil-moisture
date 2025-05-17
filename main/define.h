@@ -164,13 +164,10 @@ typedef struct {
   bool has_temp_humidity;
   bool has_flowmeter;
   bool has_pressure;
-  bool has_adc_water_temp;
-  bool has_wind_sensor;
   bool has_gsm;
-  bool has_relay;
-  bool has_camera;
   bool has_valve;
   bool simulate;
+  bool has_voltage_cutoff;
   // Add more sensor flags as needed
 } site_config_t;
 

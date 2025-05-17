@@ -226,21 +226,18 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   // Determine which semaphore we're waiting on (keep your existing logic)
   SemaphoreHandle_t ackSemaphore = NULL;
   if (valveAddress == VALVE_A_ADDRESS) {
-    // ESP_LOGI(TAG,"inside A Valve address");
     if (!Valve_A_Acknowledged) {
-      // ESP_LOGI(TAG,"acksemaphore = valve A ack");
+      ESP_LOGD(TAG, "acksemaphore = valve A ack");
       ackSemaphore = Valve_A_AckSemaphore;
     }
   } else if (valveAddress == VALVE_B_ADDRESS) {
-    // ESP_LOGI(TAG,"inside B Valve address");
     if (!Valve_B_Acknowledged) {
-      // ESP_LOGI(TAG,"acksemaphore = valve B ack");
+      ESP_LOGD(TAG, "acksemaphore = valve B ack");
       ackSemaphore = Valve_B_AckSemaphore;
     }
   } else if (valveAddress == PUMP_ADDRESS) {
-    // ESP_LOGI(TAG,"inside Pump address");
     if (!Pump_Acknowledged) {
-      // ESP_LOGI(TAG,"acksemaphore = Pump ack");
+      ESP_LOGD(TAG, "acksemaphore = Pump ack");
       ackSemaphore = Pump_AckSemaphore;
     }
   } else if (valveAddress == SOIL_A_ADDRESS) {
@@ -325,36 +322,6 @@ void clearMessageQueue() {
   } else {
     ESP_LOGD(TAG, "Message queue cleared, processed %d messages", count);
   }
-}
-
-void on_data_received(const uint8_t *mac_addr, const uint8_t *data,
-                      int data_len, int rssi) {
-  // Copy data to process it safely
-  if (data_len > 0 && data_len < sizeof(last_message)) {
-    memcpy(last_message, data, data_len);
-    last_message[data_len] = '\0'; // Ensure null termination
-    memcpy(last_sender_mac, mac_addr, ESP_NOW_ETH_ALEN);
-    last_rssi = rssi;
-    message_received = true;
-
-    // Get the PCB name of the sender
-    const char *pcb_name = espnow_get_peer_name(mac_addr);
-    strncpy(last_sender_pcb_name, pcb_name, ESPNOW_MAX_PCB_NAME_LENGTH - 1);
-    last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH - 1] = '\0';
-
-    // Log the received message with PCB name
-    ESP_LOGI(TAG, "Message from %s (" MACSTR ", RSSI: %d): %s", pcb_name,
-             MAC2STR(mac_addr), rssi, last_message);
-  }
-}
-
-void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  // Get PCB name for logging
-  const char *pcb_name = espnow_get_peer_name(mac_addr);
-
-  ESP_LOGI(TAG, "Message to %s (" MACSTR ") sent: %s", pcb_name,
-           MAC2STR(mac_addr),
-           status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failed");
 }
 
 /**

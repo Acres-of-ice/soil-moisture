@@ -23,8 +23,6 @@
 #include "valve_control.h"
 #include "wifi_app.h"
 
-const site_config_t site_config = {.simulate = CONFIG_ENABLE_SIMULATION_MODE};
-
 int counter = 1;
 bool lcd_device_ready = false;
 i2c_master_bus_handle_t i2c0bus = NULL;
@@ -46,6 +44,16 @@ TaskHandle_t smsTaskHandle = NULL;
 TaskHandle_t simulationTaskHandle = NULL;
 
 static const char *TAG = "APP";
+
+const site_config_t site_config = {
+    .has_temp_humidity = CONFIG_ENABLE_TEMP_HUMIDITY,
+    .has_flowmeter = CONFIG_ENABLE_FLOWMETER,
+    .has_pressure = CONFIG_ENABLE_PRESSURE,
+    .has_gsm = CONFIG_ENABLE_GSM,
+    .has_valve = CONFIG_ENABLE_VALVE,
+    .simulate = CONFIG_ENABLE_SIMULATION_MODE,
+    .has_voltage_cutoff = CONFIG_ENABLE_VOLTAGE_CUTOFF};
+
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
 int last_rssi = 0;
@@ -194,6 +202,28 @@ void app_main(void) {
 
   espnow_init2();
 
+  // Check if waking up from deep sleep
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+    ESP_LOGI(TAG, "Woke up from deep sleep, checking voltage...");
+
+    esp_err_t voltage_init_result = voltage_monitor_init();
+    if (voltage_init_result != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to initialize voltage monitor %s ",
+               esp_err_to_name(voltage_init_result));
+    }
+
+    float voltage = measure_voltage();
+    ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
+    if (voltage < LOW_CUTOFF_VOLTAGE) {
+      ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_deep_sleep_start();
+    }
+    ESP_LOGI(TAG, "Voltage is sufficient, resuming normal operation...");
+  }
+
   if (site_config.simulate) {
     ESP_LOGW(TAG, "Simulation ON");
     update_status_message("Simulation ON");
@@ -227,17 +257,18 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
-                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
-                          COMM_TASK_CORE_ID);
+  if (site_config.has_valve) {
+    xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
+                            &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                            COMM_TASK_CORE_ID);
 
-  // xTaskCreate(vTaskESPNOW_RX, "RX", 1024 * 4, NULL, 3, NULL);
-  vTaskDelay(pdMS_TO_TICKS(10000));
-  xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-                          VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-                          VALVE_TASK_PRIORITY, &valveTaskHandle,
-                          VALVE_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+                            VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+                            VALVE_TASK_PRIORITY, &valveTaskHandle,
+                            VALVE_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
 
   // xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
   //                         &g_nodeAddress, BUTTON_TASK_PRIORITY,
@@ -261,6 +292,29 @@ void app_main(void) {
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(10000));
+
+  if (site_config.has_voltage_cutoff) {
+    // Measure voltage and handle low voltage cutoff
+    float voltage = measure_voltage();
+    ESP_LOGI(TAG, "Measured voltage: %.2fV", voltage);
+
+    if (voltage < LOW_CUTOFF_VOLTAGE) {
+      ESP_LOGE(TAG,
+               "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+               LOW_CUTOFF_VOLTAGE);
+
+      // Disable SIM pin
+      esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+      gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
+      gpio_set_level(SIM_GPIO, 1);
+
+      // Enter deep sleep
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_deep_sleep_start();
+    }
+  }
 #endif
 
 #if CONFIG_SOIL_A

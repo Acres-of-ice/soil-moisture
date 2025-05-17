@@ -1,18 +1,10 @@
 #include "define.h"
-#include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "i2cdev.h"
 #include <stdio.h>
 #include <string.h>
 
-// Modern ADC calibration API
-#include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h"
-
-// #include "ads1x1x.h"
 #include "sensor.h"
 
 static const char *TAG = "SENSOR";
@@ -21,6 +13,11 @@ SemaphoreHandle_t readings_mutex;
 sensor_readings_t readings = {.soil_A = 99.0f, .soil_B = 99.0f};
 sensor_readings_t simulated_readings = {.soil_A = 15.0f, .soil_B = 25.0f};
 sensor_readings_t data_readings;
+
+// Voltage monitoring variables
+static adc_oneshot_unit_handle_t adc_handle = NULL;
+static adc_cali_handle_t adc_cali_handle = NULL;
+static bool adc_cali_initialized = false;
 
 // Initialization Functions
 void sensors_init(void) {
@@ -39,6 +36,219 @@ void sensors_init(void) {
   ESP_ERROR_CHECK(uart_set_pin(MB_PORT_NUM, MB_TXD_PIN, MB_RXD_PIN,
                                UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
   ESP_ERROR_CHECK(uart_driver_install(MB_PORT_NUM, 256, 256, 0, NULL, 0));
+}
+
+// Voltage monitoring function implementations
+float get_voltage(void) {
+  float voltage = 0.0f;
+
+  if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    voltage = readings.voltage; // Access from the existing structure
+    xSemaphoreGive(readings_mutex);
+  } else {
+    ESP_LOGW(TAG, "Failed to take readings mutex");
+  }
+
+  return voltage;
+}
+
+float measure_voltage(void) {
+  int adc_reading = 0;
+
+  // Take multiple readings and average
+  for (int i = 0; i < VOLTAGE_NUM_SAMPLES; i++) {
+    int raw_value;
+    esp_err_t ret =
+        adc_oneshot_read(adc_handle, VOLTAGE_ADC_CHANNEL, &raw_value);
+    if (ret != ESP_OK) {
+      ESP_LOGW(TAG, "Error reading ADC: %s", esp_err_to_name(ret));
+      continue;
+    }
+    adc_reading += raw_value;
+    vTaskDelay(pdMS_TO_TICKS(5)); // Small delay between readings
+  }
+
+  adc_reading /= VOLTAGE_NUM_SAMPLES;
+
+  // Convert ADC reading to voltage in millivolts
+  int voltage_mv = 0;
+
+  if (adc_cali_initialized) {
+    esp_err_t ret =
+        adc_cali_raw_to_voltage(adc_cali_handle, adc_reading, &voltage_mv);
+    if (ret != ESP_OK) {
+      ESP_LOGW(TAG, "ADC calibration failed: %s", esp_err_to_name(ret));
+      // Fallback to approximate conversion
+      voltage_mv = (int)((float)adc_reading * 3300.0f / 4095.0f);
+    }
+  } else {
+    // Fallback to approximate conversion if calibration isn't available
+    voltage_mv = (int)((float)adc_reading * 3300.0f / 4095.0f);
+  }
+
+  // Convert millivolts to volts
+  float vout = voltage_mv / 1000.0f;
+
+  // Calculate the input voltage using the voltage divider ratio
+  float vin = vout * VOLTAGE_DIVIDER_RATIO * VOLTAGE_CALIBRATION_FACTOR;
+
+  // Log ADC raw value, Vout, and Vin
+  ESP_LOGD(TAG, "ADC Reading: %d, Vout: %.2f V, Vin: %.2f V", adc_reading, vout,
+           vin);
+
+  return vin;
+}
+
+esp_err_t voltage_monitor_init(void) {
+  esp_err_t ret;
+
+  // Initialize ADC
+  adc_oneshot_unit_init_cfg_t init_config = {
+      .unit_id = VOLTAGE_ADC_UNIT,
+  };
+
+  ret = adc_oneshot_new_unit(&init_config, &adc_handle);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize ADC: %s", esp_err_to_name(ret));
+    return ret;
+  }
+
+  // Configure ADC channel
+  adc_oneshot_chan_cfg_t channel_config = {.atten = VOLTAGE_ADC_ATTEN,
+                                           .bitwidth = VOLTAGE_ADC_WIDTH};
+
+  ret = adc_oneshot_config_channel(adc_handle, VOLTAGE_ADC_CHANNEL,
+                                   &channel_config);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to configure ADC channel: %s", esp_err_to_name(ret));
+    return ret;
+  }
+
+  // Initialize ADC calibration
+  adc_cali_handle = NULL;
+
+  // Try to use factory calibration scheme first
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+  adc_cali_curve_fitting_config_t cali_config = {
+      .unit_id = VOLTAGE_ADC_UNIT,
+      .atten = VOLTAGE_ADC_ATTEN,
+      .bitwidth = VOLTAGE_ADC_WIDTH,
+  };
+  ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
+  if (ret == ESP_OK) {
+    adc_cali_initialized = true;
+    ESP_LOGI(TAG, "Using curve fitting calibration scheme");
+  }
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+  adc_cali_line_fitting_config_t cali_config = {
+      .unit_id = VOLTAGE_ADC_UNIT,
+      .atten = VOLTAGE_ADC_ATTEN,
+      .bitwidth = VOLTAGE_ADC_WIDTH,
+      .default_vref = 1100,
+  };
+  ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle);
+  if (ret == ESP_OK) {
+    adc_cali_initialized = true;
+    ESP_LOGI(TAG, "Using line fitting calibration scheme");
+  }
+#endif
+
+  // If calibration schemes are not supported or initialization failed
+  if (!adc_cali_initialized) {
+    ESP_LOGW(
+        TAG,
+        "ADC calibration failed or not supported, using default conversion");
+  }
+
+  ESP_LOGD(TAG, "Voltage monitor initialized successfully");
+  return ESP_OK;
+}
+
+// Add cleanup function for ADC calibration
+void voltage_monitor_deinit(void) {
+  if (adc_cali_handle != NULL) {
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    adc_cali_delete_scheme_curve_fitting(adc_cali_handle);
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    adc_cali_delete_scheme_line_fitting(adc_cali_handle);
+#endif
+    adc_cali_handle = NULL;
+  }
+
+  if (adc_handle != NULL) {
+    adc_oneshot_del_unit(adc_handle);
+    adc_handle = NULL;
+  }
+
+  adc_cali_initialized = false;
+}
+
+// ADC Functions
+float F_map(float x, float in_min, float in_max, float out_min, float out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+float convert_raw_to_voltage(int16_t raw_value) {
+  const float V_REF = 4.096;
+  const int RESOLUTION = 32768;
+  return (float)(raw_value * V_REF) / RESOLUTION;
+}
+
+float read_channel(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config, uint8_t ch) {
+  float value = 99.0f;
+  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    switch (ch) {
+    case 0:
+      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_0);
+      value = convertToUnit(adc_i2c, p_config, 30);
+      break;
+    case 1:
+      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_1);
+      value = convertToUnit(adc_i2c, p_config,
+                            IS_SITE("Igoo") ? (10.2 * 10) : (10.2 * 4));
+      break;
+    case 2:
+      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_2);
+      value = convertToUnit(adc_i2c, p_config, 100);
+      break;
+    case 3:
+      ADS1x1x_set_multiplexer(p_config, MUX_SINGLE_3);
+      value = convertToUnit(adc_i2c, p_config, 10.2);
+      break;
+    }
+    xSemaphoreGive(i2c_mutex);
+  }
+  return value;
+}
+
+double convertToUnit(i2c_dev_t *adc_i2c, ADS1x1x_config_t *p_config,
+                     double maxUnit) {
+  if (maxUnit == 0) {
+    ESP_LOGE(
+        TAG,
+        "Sensor not connected or convertTOUnit Function not called properly");
+    return 0.0;
+  }
+
+  int16_t raw_value;
+  double Volt, Amp, unit;
+
+  ADS1x1x_start_conversion(adc_i2c, p_config);
+  vTaskDelay(pdMS_TO_TICKS(20));
+
+  raw_value = ADS1x1x_read(adc_i2c);
+  Volt = convert_raw_to_voltage(raw_value);
+  Amp = F_map(Volt, 0, 4.096, 0, 27.293);
+  Amp = (Amp < 4) ? 4 : (Amp > 20) ? 20 : Amp;
+
+  const double minCurrent = 4.0;
+  const double maxCurrent = 20.0;
+  const double minUnit = 0.0;
+
+  unit =
+      ((Amp - minCurrent) / (maxCurrent - minCurrent)) * (maxUnit - minUnit) +
+      minUnit;
+  return (double)((int)(unit * 10000 + 0.5)) / 10000;
 }
 
 // Modbus Functions
@@ -169,11 +379,123 @@ void modbus_init(void) {
   ESP_ERROR_CHECK(uart_driver_install(MB_PORT_NUM, 256, 256, 0, NULL, 0));
 }
 
+void sensor_task(void *pvParameters) {
+  static i2c_dev_t i2c_dev_ads = {0};
+  static ADS1x1x_config_t ch1 = {0};
+  static float adc_readings_arr[4];
+  static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
+  static float discharge = 99.0f, dummy = 99.0f;
+  static sensor_readings_t local_readings = {0}; // Local buffer
+  TickType_t last_wake_time;
+
+  // Initialize ADC if needed
+  if (i2c0bus != NULL) {
+    i2c_device_add(&i2c0bus, &i2c_dev_ads, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
+                   I2C_ADC_FREQ_HZ);
+    if (ADS1x1x_init(&ch1, ADS1115, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
+                     MUX_SINGLE_3, PGA_4096) == 0) {
+      ESP_LOGE(TAG, "Failed to initialize ADS1115");
+    }
+  }
+
+  // After other initializations but before the main loop
+  esp_err_t voltage_init_result = voltage_monitor_init();
+  if (voltage_init_result != ESP_OK) {
+    ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
+             esp_err_to_name(voltage_init_result));
+  }
+
+  last_wake_time = xTaskGetTickCount();
+
+  while (1) {
+    // Do all sensor readings first without mutex
+    if (i2c0bus != NULL) {
+      for (int i = 0; i < 4; i++) {
+        adc_readings_arr[i] = read_channel(&i2c_dev_ads, &ch1, i);
+        if (i == 2) {
+          adc_readings_arr[i] -= 50;
+          if (IS_SITE("Likir"))
+            adc_readings_arr[i] -= 1.10;
+          else if (IS_SITE("Ursi"))
+            adc_readings_arr[i] -= 0.53;
+          else if (IS_SITE("Tuna"))
+            adc_readings_arr[i] -= 0.14;
+          else if (IS_SITE("Kuri"))
+            adc_readings_arr[i] -= 0.1;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+      }
+
+      local_readings.fountain_pressure = adc_readings_arr[1];
+    }
+
+    // Handle Modbus readings without mutex
+    if (site_config.has_temp_humidity) {
+      int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+      if (result == 0) {
+        local_readings.temperature = temp1;
+        local_readings.humidity = humidity;
+      } else {
+        local_readings.temperature = 99.0f;
+        local_readings.humidity = 99.0f;
+      }
+      vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    if (site_config.has_flowmeter) {
+      int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+      if (result == 0) {
+        local_readings.water_temp = temp2;
+      }
+
+      result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+      if (result == 0) {
+        local_readings.discharge = discharge;
+      }
+    }
+
+    if (site_config.has_voltage_cutoff && adc_handle != NULL) {
+      local_readings.voltage = measure_voltage();
+
+      if (local_readings.voltage < LOW_CUTOFF_VOLTAGE) {
+        ESP_LOGE(
+            TAG,
+            "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+            LOW_CUTOFF_VOLTAGE);
+
+        // Disable SIM pin
+        esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+        gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
+        gpio_set_level(SIM_GPIO, 1);
+
+        // Enter deep sleep
+        esp_sleep_enable_timer_wakeup(
+            (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+            1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+        esp_deep_sleep_start();
+      }
+    } else if (!site_config.has_voltage_cutoff) {
+      // Default value if voltage cutoff is disabled
+      local_readings.voltage = 0.0f;
+    }
+
+    // Now take mutex only for the quick copy operation
+    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+      // Quick memcpy to update the shared readings
+      memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+      xSemaphoreGive(readings_mutex);
+    }
+
+    vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
+  }
+}
+
 void set_simulated_values(int soil_A, int soil_B) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
     simulated_readings.soil_A = soil_A;
     simulated_readings.soil_B = soil_B;
     // simulated_readings.temperature = temp;
+    // simulated_readings.discharge = discharge;
     // simulated_readings.water_temp = water_temp;
     // simulated_readings.fountain_pressure = pressure;
     // simulated_readings.voltage = 12.6f; // Add a default simulated voltage
