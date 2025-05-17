@@ -142,6 +142,7 @@ void updateValveState(void *pvParameters) {
     ValveState newState = getCurrentState(); // Start with current state
 
     switch (newState) {
+
     case STATE_IDLE:
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
@@ -163,6 +164,7 @@ void updateValveState(void *pvParameters) {
         newState = STATE_IDLE;
       }
       break;
+
     case STATE_VALVE_A_OPEN:
       ESP_LOGI(TAG, "A VALVE OPEN");
       if (!sendCommandWithRetry(VALVE_A_ADDRESS, 0x11, nodeAddress)) {
@@ -187,30 +189,25 @@ void updateValveState(void *pvParameters) {
       break;
 
     case STATE_IRR_START_A:
-        while (1) {
+      stateEntryTime = xTaskGetTickCount();
+      if (current_readings.soil_A >= CONFIG_SOIL_WET) {
+        ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%",
+                 current_readings.soil_A);
+        reset_acknowledgements();
+        newState = STATE_PUMP_OFF_A;
+      } else if (xTaskGetTickCount() - stateEntryTime >
+                 pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
+        ESP_LOGW(TAG, "Irrigation timeout for Sensor A: %d%%",
+                 current_readings.soil_A);
+        reset_acknowledgements();
+        newState = STATE_PUMP_OFF_A;
+      } else {
         // Update the sensor readings inside the loop
         get_sensor_readings(&current_readings);
-        
-        ESP_LOGD(TAG, "Current Sensor A: %d%% (Threshold: %d%%)", 
-                current_readings.soil_A, CONFIG_SOIL_WET);
-        
-        if (current_readings.soil_A >= CONFIG_SOIL_WET) {
-            break; // Exit when threshold reached
-        }
-        
-        // Add timeout check to prevent infinite loop
-        // if (xTaskGetTickCount() - stateEntryTime > pdMS_TO_TICKS(MAX_IRRIGATION_TIME_MS)) {
-        //     ESP_LOGW(TAG, "Irrigation timeout reached for Valve A");
-        //     break;
-        // }
-        
-        vTaskDelay(pdMS_TO_TICKS(5000)); // Delay between checks
-       }
-
-       ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%", current_readings.soil_A);
-       reset_acknowledgements();
-       newState = STATE_PUMP_OFF_A;
-       break;
+        ESP_LOGD(TAG, "Waiting for Sensor A: %d%%", current_readings.soil_A);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+      }
+      break;
 
     case STATE_PUMP_OFF_A:
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
@@ -232,11 +229,13 @@ void updateValveState(void *pvParameters) {
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
+
     case STATE_IRR_DONE_A:
       ESP_LOGI(TAG, "IRR A done");
       counter++;
       newState = STATE_IDLE;
       break;
+
     case STATE_VALVE_B_OPEN:
       if (!sendCommandWithRetry(VALVE_B_ADDRESS, 0x11, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
@@ -257,28 +256,26 @@ void updateValveState(void *pvParameters) {
       }
       newState = STATE_IRR_START_B;
       break;
+
     case STATE_IRR_START_B:
-      while (1) {
+      stateEntryTime = xTaskGetTickCount();
+      if (current_readings.soil_B >= CONFIG_SOIL_WET) {
+        ESP_LOGI(TAG, "Soil B moisture reached threshold: %d%%",
+                 current_readings.soil_B);
+        reset_acknowledgements();
+        newState = STATE_PUMP_OFF_B;
+      } else if (xTaskGetTickCount() - stateEntryTime >
+                 pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
+        ESP_LOGW(TAG, "Irrigation timeout for Soil B: %d%%",
+                 current_readings.soil_B);
+        reset_acknowledgements();
+        newState = STATE_PUMP_OFF_B;
+      } else {
+        // Update the sensor readings inside the loop
         get_sensor_readings(&current_readings);
-        
-        ESP_LOGD(TAG, "Current Sensor B: %d%% (Threshold: %d%%)", 
-                current_readings.soil_B, CONFIG_SOIL_WET);
-        
-        if (current_readings.soil_B >= CONFIG_SOIL_WET) {
-            break;
-        }
-        
-        // if (xTaskGetTickCount() - stateEntryTime > pdMS_TO_TICKS(MAX_IRRIGATION_TIME_MS)) {
-        //     ESP_LOGW(TAG, "Irrigation timeout reached for Valve B");
-        //     break;
-        // }
-        
+        ESP_LOGD(TAG, "Waiting for Soil B: %d%%", current_readings.soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
-
-      ESP_LOGI(TAG, "Sensor B moisture reached threshold: %d%%", current_readings.soil_B);
-      reset_acknowledgements();
-      newState = STATE_PUMP_OFF_B;
       break;
 
     case STATE_PUMP_OFF_B:
@@ -291,6 +288,7 @@ void updateValveState(void *pvParameters) {
       ESP_LOGI(TAG, "Closing Pump");
       newState = STATE_VALVE_B_CLOSE;
       break;
+
     case STATE_VALVE_B_CLOSE:
       if (!sendCommandWithRetry(VALVE_B_ADDRESS, 0x10, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));

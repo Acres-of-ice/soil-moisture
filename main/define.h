@@ -96,6 +96,7 @@ extern QueueHandle_t message_queue;
 #define RETRY_DELAY_MS (CONFIG_RETRY_DELAY_S * 1000)
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
+#define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
 
 // ==================== Logging Definitions ====================
 #define CUSTOM_LOG_LEVEL_NONE 0

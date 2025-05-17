@@ -194,6 +194,35 @@ config ENABLE_TIME_CONFIG
 menu "Time Configuration"
     visible if ENABLE_TIME_CONFIG
 
+    config STATE_TIMEOUT_M
+        int "State machine timeout (minutes)"
+        default 5
+        range 1 60
+        help
+            Timeout for state machine in minutes.
+
+    config IRRIGATION_TIMEOUT_M
+        int "Irrigation timeout (minutes)"
+        default 5
+        range 1 60
+        help
+            Timeout for state machine in minutes.
+
+    config VALVE_TIMEOUT_S
+        int "Valve operation timeout (seconds)"
+        default 6 if SITE_TEST
+        default 90
+        range 1 3600
+        help
+            Timeout for valve operations in seconds.
+
+    config SERVER_TIMEOUT_M
+        int "Server timeout (minutes)"
+        default 2 if SITE_TEST
+        default 5
+        range 1 60
+        help
+            Interval for keeping server on
     config SMS_INTERVAL_M
         int "Hex data and sms send interval (minutes)"
         default 10 if SITE_TEST
@@ -249,29 +278,6 @@ menu "Time Configuration"
         range 1 60
         help
             Set the interval in minutes to check for new data to send via SMS.
-
-    config STATE_TIMEOUT_M
-        int "State machine timeout (minutes)"
-        default 5
-        range 1 60
-        help
-            Timeout for state machine in minutes.
-
-    config VALVE_TIMEOUT_S
-        int "Valve operation timeout (seconds)"
-        default 6 if SITE_TEST
-        default 90
-        range 1 3600
-        help
-            Timeout for valve operations in seconds.
-
-    config SERVER_TIMEOUT_M
-        int "Server timeout (minutes)"
-        default 2 if SITE_TEST
-        default 5
-        range 1 60
-        help
-            Interval for keeping server on
 endmenu
 
 config ENABLE_SIMULATION_MODE
