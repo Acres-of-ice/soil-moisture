@@ -117,14 +117,6 @@ int read_soil_moisture(void) {
 }
 
 /**
- * @brief Wrapper function for read_soil_moisture to match the name used in the
- * TX task
- *
- * @return int Moisture percentage (0-100) or -1 on error
- */
-int read_soil_moisture_sensor(void) { return read_soil_moisture(); }
-
-/**
  * @brief Get current RSSI value
  *
  * This function retrieves the current RSSI (signal strength) value.
@@ -149,31 +141,6 @@ int8_t get_current_rssi(void) {
  * @return float Battery level percentage (0-100)
  */
 float read_battery_level(void) { return 100.0f; }
-
-/**
- * @brief Update sensor readings from hardware
- *
- * This function is kept for backward compatibility, but in the new design,
- * the soil_sensor_task directly reads the sensors and queues the data.
- *
- * @param sensor_data Pointer to sensor data structure to update
- * @return true if readings were updated successfully, false otherwise
- */
-bool update_sensor_readings(espnow_recv_data_t *sensor_data) {
-  // Read soil moisture
-  int new_moisture = read_soil_moisture_sensor();
-  if (new_moisture >= 0) {
-    sensor_data->soil_moisture = new_moisture;
-  }
-
-  // Add RSSI information if available
-  sensor_data->rssi = get_current_rssi();
-
-  ESP_LOGD(TAG, "Updated sensor readings - Moisture: %d%%, RSSI: %d",
-           sensor_data->soil_moisture, sensor_data->rssi);
-
-  return true;
-}
 
 /**
  * @brief Send sensor data to master device with retry mechanism

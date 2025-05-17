@@ -460,14 +460,6 @@ CONFIG_RTC_MONTH=1
 CONFIG_RTC_DAY=1
 CONFIG_RTC_HOUR=0
 CONFIG_RTC_MINUTE=0
-
-#
-# WiFi Configuration
-#
-CONFIG_WIFI_SSID="YourSSID"
-CONFIG_WIFI_PASSWORD="YourPassword"
-CONFIG_MAX_WIFI_RETRY=3
-# end of WiFi Configuration
 # end of App Configuration
 
 #

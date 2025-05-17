@@ -191,20 +191,20 @@ void updateValveState(void *pvParameters) {
     case STATE_IRR_START_A:
       stateEntryTime = xTaskGetTickCount();
       if (current_readings.soil_A >= CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Sensor A moisture reached threshold: %d%%",
+        ESP_LOGI(TAG, "Soil A moisture reached threshold: %d",
                  current_readings.soil_A);
         reset_acknowledgements();
         newState = STATE_PUMP_OFF_A;
       } else if (xTaskGetTickCount() - stateEntryTime >
                  pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
-        ESP_LOGW(TAG, "Irrigation timeout for Sensor A: %d%%",
+        ESP_LOGW(TAG, "Irrigation timeout for Soil A: %d",
                  current_readings.soil_A);
         reset_acknowledgements();
         newState = STATE_PUMP_OFF_A;
       } else {
         // Update the sensor readings inside the loop
         get_sensor_readings(&current_readings);
-        ESP_LOGD(TAG, "Waiting for Sensor A: %d%%", current_readings.soil_A);
+        ESP_LOGD(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
       break;
@@ -260,20 +260,20 @@ void updateValveState(void *pvParameters) {
     case STATE_IRR_START_B:
       stateEntryTime = xTaskGetTickCount();
       if (current_readings.soil_B >= CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Soil B moisture reached threshold: %d%%",
+        ESP_LOGI(TAG, "Soil B moisture reached threshold: %d",
                  current_readings.soil_B);
         reset_acknowledgements();
         newState = STATE_PUMP_OFF_B;
       } else if (xTaskGetTickCount() - stateEntryTime >
                  pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
-        ESP_LOGW(TAG, "Irrigation timeout for Soil B: %d%%",
+        ESP_LOGW(TAG, "Irrigation timeout for Soil B: %d",
                  current_readings.soil_B);
         reset_acknowledgements();
         newState = STATE_PUMP_OFF_B;
       } else {
         // Update the sensor readings inside the loop
         get_sensor_readings(&current_readings);
-        ESP_LOGD(TAG, "Waiting for Soil B: %d%%", current_readings.soil_B);
+        ESP_LOGD(TAG, "Waiting for Soil B: %d", current_readings.soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
       break;

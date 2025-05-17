@@ -90,12 +90,4 @@ typedef struct {
   char password[64];
 } wifi_network_t;
 
-static const wifi_network_t known_networks[MAX_NETWORKS] = {
-    {CONFIG_SITE_NAME, (CONFIG_SITE_NAME "1234")},
-    {CONFIG_WIFI_SSID, CONFIG_WIFI_PASSWORD}, // Primary network from menuconfig
-    {"AOI", "123456!!"},
-    {"Surya12", "Icestupa"},
-    {"AOI_Guests", "Acresofice@2024"},
-};
-
 #endif /* MAIN_WIFI_APP_H_ */

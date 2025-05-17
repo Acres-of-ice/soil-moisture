@@ -36,7 +36,6 @@ void soil_sensor_task(void *pvParameters);
 
 // ESP-NOW transmission functions
 void vTaskESPNOW_TX(void *pvParameters);
-bool update_sensor_readings(espnow_recv_data_t *sensor_data);
 bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
                                 const uint8_t *master_mac, uint8_t max_retries);
 
