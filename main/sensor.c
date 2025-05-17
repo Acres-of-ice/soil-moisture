@@ -18,6 +18,8 @@ sensor_readings_t data_readings;
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
 static bool adc_cali_initialized = false;
+static float current_voltage = 0.0f;
+
 
 // Initialization Functions
 void sensors_init(void) {
@@ -53,6 +55,11 @@ float get_voltage(void) {
 }
 
 float measure_voltage(void) {
+  
+  if (adc_handle == NULL) {
+    ESP_LOGE(TAG, "ADC handle is not initialized");
+    return 0.0f; // Return a default value
+}
   int adc_reading = 0;
 
   // Take multiple readings and average
@@ -355,7 +362,7 @@ void parse_flow_temp(const uint8_t *response, int len, float *temp,
 
 void parse_flow_discharge(const uint8_t *response, int len, float *discharge,
                           float *unused) {
-  if (len >= 7) {
+  if (len >= 7) { 
     int16_t raw_discharge = (response[3] << 8) | response[4];
     *discharge = raw_discharge / 100.0f;
     // ESP_LOGD(TAG, "Discharge: %.1f°C", *discharge);
@@ -398,12 +405,12 @@ void sensor_task(void *pvParameters) {
     }
   }
 
-  // After other initializations but before the main loop
-  esp_err_t voltage_init_result = voltage_monitor_init();
-  if (voltage_init_result != ESP_OK) {
-    ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
-             esp_err_to_name(voltage_init_result));
-  }
+  // // After other initializations but before the main loop
+  // esp_err_t voltage_init_result = voltage_monitor_init();
+  // if (voltage_init_result != ESP_OK) {
+  //   ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
+  //            esp_err_to_name(voltage_init_result));
+  // }
 
   last_wake_time = xTaskGetTickCount();
 
@@ -467,6 +474,8 @@ void sensor_task(void *pvParameters) {
         esp_rom_gpio_pad_select_gpio(SIM_GPIO);
         gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
         gpio_set_level(SIM_GPIO, 1);
+        gpio_hold_en(SIM_GPIO); // Hold the GPIO level
+
 
         // Enter deep sleep
         esp_sleep_enable_timer_wakeup(
@@ -529,7 +538,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       // output_readings->wind = readings.wind;
       // output_readings->fountain_pressure = readings.fountain_pressure;
       // output_readings->discharge = readings.discharge;
-      // output_readings->voltage = readings.voltage;
+       output_readings->voltage = readings.voltage;
     }
 
     ESP_LOGD(TAG, "Sensor Readings - Soil A: %d, Soil B: %d",
