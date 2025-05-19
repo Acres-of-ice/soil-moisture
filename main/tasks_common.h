@@ -7,9 +7,9 @@
 #define COMM_TASK_PRIORITY 12 // Highest priority
 #define COMM_TASK_CORE_ID 0
 
-// #define SMS_TASK_STACK_SIZE (1024 * 8)
-// #define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
-// #define SMS_TASK_CORE_ID 0
+#define SMS_TASK_STACK_SIZE (1024 * 8)
+#define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
+#define SMS_TASK_CORE_ID 0
 
 // Critical Control Tasks - Core 0
 #define VALVE_TASK_STACK_SIZE (1024 * 6)

@@ -15,6 +15,7 @@ set(SRCS_LIST
 if(CONFIG_MASTER)
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
+    # list(APPEND SRCS_LIST "hex_data.c")
 endif()
 
 idf_component_register(SRCS ${SRCS_LIST}

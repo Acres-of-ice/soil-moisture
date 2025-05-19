@@ -65,6 +65,23 @@ extern uint8_t sequence_number;
 #define PUMP_START 2
 #define PUMP_STOP 3
 
+
+#define MAX_SITES 11
+
+typedef struct {
+  uint32_t total_data_points;
+  uint32_t
+      site_data_points[MAX_SITES]; // Assuming you define MAX_SITES in define.h
+  char last_data_time[32];
+} data_statistics_t;
+extern data_statistics_t data_stats;
+
+#define SMS_BUFFER_SIZE 60
+typedef struct {
+  char phone_number[20];
+  char message[SMS_BUFFER_SIZE];
+} sms_message_t;
+
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
 #define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
@@ -97,6 +114,7 @@ extern QueueHandle_t message_queue;
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 #define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
+#define SMS_CHECK_MS (CONFIG_SMS_CHECK_M * 60000)
 
 // ==================== Logging Definitions ====================
 #define CUSTOM_LOG_LEVEL_NONE 0
@@ -241,6 +259,42 @@ typedef struct wifi_app_queue_message {
 
 extern QueueHandle_t wifi_app_queue_handle;
 extern bool http_server_active;
+
+#define MAX_PAYLOAD_SIZE 256
+#define CIRCULAR_BUFFER_SIZE 10
+
+typedef struct {
+  char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
+  char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
+  uint16_t counter;                 // On/off counter
+  int16_t temperature;        // Temperature * 10 to preserve one decimal place
+  uint16_t wind;              // Wind speed * 10
+  uint16_t fountain_pressure; // Fountain pressure * 10
+  int16_t MoistureA;         // Water temperature * 10
+  int16_t MoistureB;          // Discharge * 10
+} hex_data_t;
+
+typedef struct {
+  char buffer[CIRCULAR_BUFFER_SIZE][MAX_PAYLOAD_SIZE];
+  int head;
+  int tail;
+  int count;
+  SemaphoreHandle_t mutex;
+} CircularBuffer;
+extern CircularBuffer payload_buffer;
+
+#define HEX_BUFFER_SIZE 8
+#define MAX_HEX_SIZE (HEX_SIZE * 2 + 1)
+
+typedef struct {
+  char buffer[HEX_BUFFER_SIZE][MAX_HEX_SIZE];
+  int head;
+  int tail;
+  int count;
+  SemaphoreHandle_t mutex;
+} HexCircularBuffer;
+
+extern HexCircularBuffer hex_buffer;
 
 // ==================== Simulation mode ====================
 // Test case data structure

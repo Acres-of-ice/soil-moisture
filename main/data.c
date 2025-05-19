@@ -37,6 +37,63 @@ const char *DATA_FILE_HEADER =
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
+data_statistics_t data_stats = {0};
+
+// Initialize moving average structure
+void init_data_statistics(void) {
+  memset(&data_stats, 0, sizeof(data_statistics_t));
+  strncpy(data_stats.last_data_time, fetchTime(),
+          sizeof(data_stats.last_data_time) - 1);
+  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
+
+  // Try to load previous statistics from SPIFFS if you want persistence
+  // This is optional but useful to maintain counts across reboots
+  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "rb");
+  if (stats_file != NULL) {
+    fread(&data_stats, sizeof(data_statistics_t), 1, stats_file);
+    fclose(stats_file);
+    ESP_LOGI(TAG, "Loaded existing statistics: %lu total data points",
+             data_stats.total_data_points);
+  }
+}
+
+void save_data_statistics(void) {
+  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "wb");
+  if (stats_file != NULL) {
+    fwrite(&data_stats, sizeof(data_statistics_t), 1, stats_file);
+    fclose(stats_file);
+  }
+}
+
+void update_data_statistics(const char *site_name) {
+  data_stats.total_data_points++;
+  strncpy(data_stats.last_data_time, fetchTime(),
+          sizeof(data_stats.last_data_time) - 1);
+  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
+
+  // Update site-specific counter
+  if (strcmp(site_name, "Sk") == 0) {
+    data_stats.site_data_points[0]++;
+  } 
+  // Save statistics periodically (e.g., every 10 data points)
+  if (data_stats.total_data_points % 10 == 0) {
+    save_data_statistics();
+  }
+}
+
+void print_data_statistics(void) {
+  ESP_LOGI(TAG, "Data Collection Statistics:");
+  ESP_LOGI(TAG, "------------------------");
+  ESP_LOGI(TAG, "Total data points: %lu", data_stats.total_data_points);
+  ESP_LOGI(TAG, "Last data received: %s", data_stats.last_data_time);
+  ESP_LOGI(TAG, "Distribution by site:");
+  ESP_LOGI(TAG, "  Skuast: %lu (%.1f%%)", data_stats.site_data_points[0],
+           (data_stats.total_data_points > 0)
+               ? (float)data_stats.site_data_points[0] * 100.0f /
+                     data_stats.total_data_points
+               : 0.0f);
+}
+
 
 static int custom_log_function(const char *fmt, va_list args) {
   char buffer[512];

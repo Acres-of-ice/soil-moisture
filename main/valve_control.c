@@ -173,7 +173,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-
+      vTaskDelay(pdMS_TO_TICKS(100000));  // 100 seconds
       newState = STATE_PUMP_ON_A;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -226,6 +226,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(pdMS_TO_TICKS(100000));  // 100,000 milliseconds = 100 seconds
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
@@ -243,6 +244,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      //ESPNOW_queueMessage(VALVE_B_ADDRESS, 0x11, nodeAddress, 1);
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;

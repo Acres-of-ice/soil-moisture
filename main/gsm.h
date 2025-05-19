@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "button_control.h"
 
 
 // Constants
@@ -64,17 +65,17 @@ static sms_state_t sms_state = {
 
 
 // Mapping button functions to SMS commands (all lowercase)
-// static const sms_command_t sms_commands[] = {
-//     {"demo", a_btn_short_press},      // Triggers spray mode
-//     {"calibrate", a_btn_long_press},   // Resets calibration
-//     {"wifi", b_btn_short_press},    // Toggles WiFi on
-//     {"backup", b_btn_long_press},      // Forces backup
-//     {"status", c_btn_short_press},     // Sends status SMS
-//     {"clear", c_btn_long_press},       // Clears files or reboots based on site
-//     {"reboot", d_btn_short_press},     // Triggers reboot
-//     {"ota", d_btn_long_press},         // Switches OTA partition
-//     {"temps", handle_get_temps},         // Switches OTA partition
-//     {NULL, NULL}                       // Terminator
-// };
+static const sms_command_t sms_commands[] = {
+    {"demo", a_btn_short_press},      // Triggers spray mode
+    {"calibrate", a_btn_long_press},   // Resets calibration
+    {"wifi", b_btn_short_press},    // Toggles WiFi on
+    {"backup", b_btn_long_press},      // Forces backup
+    {"status", c_btn_short_press},     // Sends status SMS
+    {"clear", c_btn_long_press},       // Clears files or reboots based on site
+    {"reboot", d_btn_short_press},     // Triggers reboot
+    {"ota", d_btn_long_press},         // Switches OTA partition
+    {"temps", handle_get_temps},         // Switches OTA partition
+    {NULL, NULL}                       // Terminator
+};
 
 #endif // GSM_SMS_HANDLER_H

@@ -22,6 +22,8 @@
 #include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
+// #include "gsm.h"
+
 
 int counter = 1;
 bool lcd_device_ready = false;
@@ -63,6 +65,8 @@ char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 
 QueueHandle_t message_queue = NULL;
 #define MAX_QUEUE_SIZE 8
+#define SMS_BUFFER_SIZE 60
+char sms_message[SMS_BUFFER_SIZE] = "Reboot";
 
 typedef enum {
   BUTTON_IDLE,
@@ -252,6 +256,57 @@ void app_main(void) {
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
+
+  // if (site_config.has_gsm) {
+  //   esp_err_t gsm_init_result = gsm_init();
+  //   if (gsm_init_result != ESP_OK) {
+  //     ESP_LOGW(TAG, "Failed to initialize GSM module");
+  //     // Disable SIM pin
+  //     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+  //     gpio_set_level(SIM_GPIO, 1);
+  //   } else {
+  //     ESP_LOGI(TAG, "GSM module initialized successfully");
+  //     xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
+  //                             NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
+  //                             SMS_TASK_CORE_ID);
+  //     vTaskDelay(pdMS_TO_TICKS(500));
+
+  //     // Add version info to reboot message
+  //     const esp_app_desc_t *app_desc = esp_app_get_description();
+  //     snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", app_desc->version,
+  //              CONFIG_SITE_NAME);
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+  //     vTaskDelay(pdMS_TO_TICKS(5000));
+  //   }
+  // } else {
+  //   ESP_LOGW(TAG, "GSM module disabled");
+  //   // Disable SIM pin
+  //   esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+  //   gpio_set_level(SIM_GPIO, 1);
+  // }
+
+// #ifdef CONFIG_GSM
+//   esp_err_t gsm_init_result = gsm_init();
+//   if (gsm_init_result != ESP_OK) {
+//     ESP_LOGE(TAG, "Failed to initialize GSM module");
+//     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+//     gpio_set_level(SIM_GPIO, 1);
+//   } else {
+//     ESP_LOGI(TAG, "GSM module initialized successfully");
+//     xTaskCreatePinnedToCore(sms_manager_task, "SMS Manager",
+//                             SMS_MANAGER_STACK_SIZE, &smsManagerTaskHandle,
+//                             SMS_MANAGER_PRIORITY, NULL, SMS_MANAGER_CORE_ID);
+//     xTaskCreatePinnedToCore(sms_receive_task, "SMS_receive",
+//                             RECEIVE_SMS_TASK_STACK_SIZE, &smsReceiveTaskHandle,
+//                             RECEIVE_SMS_TASK_PRIORITY, NULL,
+//                             RECEIVE_SMS_TASK_CORE_ID);
+//     xTaskCreatePinnedToCore(sms_task, "SMS", SMS_TASK_STACK_SIZE, NULL,
+//                             SMS_TASK_PRIORITY, &smsTaskHandle,
+//                             SMS_TASK_CORE_ID);
+//     vTaskSuspend(smsTaskHandle);
+//   }
+
+// #endif
   lcd_init();
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
@@ -432,9 +487,18 @@ void app_main(void) {
 #if CONFIG_VALVE_B
   g_nodeAddress = VALVE_B_ADDRESS;
   // Set all LOW initially
-  gpio_set_level(RELAY_POSITIVE, 0);
-  gpio_set_level(RELAY_NEGATIVE, 0);
-  gpio_set_level(OE_PIN, 0);
+  // gpio_set_level(RELAY_POSITIVE, 0);
+  // gpio_set_level(RELAY_NEGATIVE, 0);
+  // gpio_set_level(OE_PIN, 0);
+    gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+                                           (1ULL << RELAY_NEGATIVE) |
+                                           (1ULL << OE_PIN),
+                           .mode = GPIO_MODE_OUTPUT,
+                           .pull_up_en = GPIO_PULLUP_DISABLE,
+                           .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                           .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&io_conf);
+  //init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
 
