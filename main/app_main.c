@@ -246,6 +246,8 @@ void app_main(void) {
   vTaskDelay(100);
   init_semaphores();
   vTaskDelay(100);
+  modbus_init();
+  vTaskDelay(100);
   init_logging();
   vTaskDelay(100);
 
