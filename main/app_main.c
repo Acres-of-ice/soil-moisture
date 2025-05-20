@@ -45,6 +45,7 @@ TaskHandle_t valveTaskHandle = NULL;
 TaskHandle_t discoveryTaskHandle = NULL;
 TaskHandle_t smsTaskHandle = NULL;
 TaskHandle_t simulationTaskHandle = NULL;
+TaskHandle_t sensorTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
@@ -315,6 +316,11 @@ void app_main(void) {
   //                         &g_nodeAddress, BUTTON_TASK_PRIORITY,
   //                         &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   // vTaskDelay(pdMS_TO_TICKS(100));
+
+  xTaskCreatePinnedToCore(sensor_task, "Sensor task", SENSOR_TASK_STACK_SIZE,
+                          NULL, SENSOR_TASK_PRIORITY, &sensorTaskHandle,
+                          SENSOR_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(100));
 
   xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,

@@ -430,29 +430,29 @@ void sensor_task(void *pvParameters) {
     }
 
     // Handle Modbus readings without mutex
-    if (site_config.has_temp_humidity) {
-      int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
-      if (result == 0) {
-        local_readings.temperature = temp1;
-        local_readings.humidity = humidity;
-      } else {
-        local_readings.temperature = 99.0f;
-        local_readings.humidity = 99.0f;
-      }
-      vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    // if (site_config.has_temp_humidity) {
+    //   int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+    //   if (result == 0) {
+    //     local_readings.temperature = temp1;
+    //     local_readings.humidity = humidity;
+    //   } else {
+    //     local_readings.temperature = 99.0f;
+    //     local_readings.humidity = 99.0f;
+    //   }
+    //   vTaskDelay(pdMS_TO_TICKS(50));
+    // }
 
-    if (site_config.has_flowmeter) {
-      int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
-      if (result == 0) {
-        local_readings.water_temp = temp2;
-      }
+    // if (site_config.has_flowmeter) {
+    //   int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+    //   if (result == 0) {
+    //     local_readings.water_temp = temp2;
+    //   }
 
-      result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
-      if (result == 0) {
-        local_readings.discharge = discharge;
-      }
-    }
+    //   result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+    //   if (result == 0) {
+    //     local_readings.discharge = discharge;
+    //   }
+    // }
 
     if (site_config.has_voltage_cutoff && adc_handle != NULL) {
       local_readings.voltage = measure_voltage();
@@ -511,38 +511,38 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       // Copy simulated readings to output
       output_readings->soil_A = simulated_readings.soil_A;
       output_readings->soil_B = simulated_readings.soil_B;
-      // output_readings->temperature = simulated_readings.temperature;
-      // output_readings->humidity = simulated_readings.humidity;
-      // output_readings->water_temp = simulated_readings.water_temp;
-      // output_readings->wind = simulated_readings.wind;
-      // output_readings->fountain_pressure =
-      // simulated_readings.fountain_pressure; output_readings->discharge =
-      // simulated_readings.discharge; output_readings->voltage =
-      // simulated_readings.voltage;
+      output_readings->temperature = simulated_readings.temperature;
+      output_readings->humidity = simulated_readings.humidity;
+      output_readings->water_temp = simulated_readings.water_temp;
+      //output_readings->wind = simulated_readings.wind;
+      output_readings->pressure =
+      simulated_readings.pressure; output_readings->discharge =
+      simulated_readings.discharge; output_readings->voltage =
+      simulated_readings.voltage;
     } else {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;
       output_readings->soil_B = readings.soil_B;
-      // output_readings->temperature = readings.temperature;
-      // output_readings->humidity = readings.humidity;
-      // output_readings->water_temp = readings.water_temp;
-      // output_readings->wind = readings.wind;
-      // output_readings->fountain_pressure = readings.fountain_pressure;
-      // output_readings->discharge = readings.discharge;
-      // output_readings->voltage = readings.voltage;
+      output_readings->temperature = readings.temperature;
+      output_readings->humidity = readings.humidity;
+      output_readings->water_temp = readings.water_temp;
+      //output_readings->wind = readings.wind;
+      output_readings->pressure = readings.pressure;
+      output_readings->discharge = readings.discharge;
+      output_readings->voltage = readings.voltage;
     }
 
     ESP_LOGD(TAG, "Sensor Readings - Soil A: %d, Soil B: %d",
              output_readings->soil_A, output_readings->soil_B);
 
-    // ESP_LOGD(
-    //     TAG,
-    //     "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
-    //     "Wind: %.2f m/s, Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f
-    //     V", output_readings->temperature, output_readings->humidity,
-    //     output_readings->water_temp, output_readings->wind,
-    //     output_readings->fountain_pressure, output_readings->discharge,
-    //     output_readings->voltage);
+    ESP_LOGI(
+        TAG,
+        "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
+        "Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
+         output_readings->temperature, output_readings->humidity,
+        output_readings->water_temp, 
+        output_readings->pressure, output_readings->discharge,
+        output_readings->voltage);
 
     xSemaphoreGive(readings_mutex);
   } else {
