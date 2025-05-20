@@ -979,9 +979,10 @@ static char last_queued_message[SMS_BUFFER_SIZE] = {0};
 
 void handle_get_temps(void) {
   static char temps_msg[100];
-  snprintf(temps_msg, sizeof(temps_msg), "Hot:%.1f Normal:%.1f", tpipe_hot,
-           tpipe_normal);
-  sms_queue_message(CONFIG_SMS_ERROR_NUMBER, temps_msg);
+  // snprintf(temps_msg, sizeof(temps_msg), "Hot:%.1f Normal:%.1f", tpipe_hot,
+  //          tpipe_normal);
+  //sms_queue_message(CONFIG_SMS_ERROR_NUMBER, temps_msg);
+  ESP_LOGD(TAG,"temp test");
 }
 
 // Helper function to convert string to lowercase
@@ -1146,28 +1147,28 @@ bool process_sms_command(const char *message) {
   }
 
   // Check for temperature setting commands
-  if (sscanf(cmd, "hot:%f", &temp_value) == 1) {
-    if (temp_value > 0 && temp_value < 50) {
-      tpipe_hot = temp_value;
-      char response[50];
-      snprintf(response, sizeof(response), "Hot pipe set to %.1f", tpipe_hot);
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
-    } else {
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
-    }
-    return true;
-  } else if (sscanf(cmd, "nor:%f", &temp_value) == 1) {
-    if (temp_value > 0 && temp_value < 50) {
-      tpipe_normal = temp_value;
-      char response[50];
-      snprintf(response, sizeof(response), "Normal pipe set to %.1f",
-               tpipe_normal);
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
-    } else {
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
-    }
-    return true;
-  }
+  // if (sscanf(cmd, "hot:%f", &temp_value) == 1) {
+  //   if (temp_value > 0 && temp_value < 50) {
+  //     tpipe_hot = temp_value;
+  //     char response[50];
+  //     snprintf(response, sizeof(response), "Hot pipe set to %.1f", tpipe_hot);
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
+  //   } else {
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
+  //   }
+  //   return true;
+  // } else if (sscanf(cmd, "nor:%f", &temp_value) == 1) {
+  //   if (temp_value > 0 && temp_value < 50) {
+  //     tpipe_normal = temp_value;
+  //     char response[50];
+  //     snprintf(response, sizeof(response), "Normal pipe set to %.1f",
+  //              tpipe_normal);
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
+  //   } else {
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
+  //   }
+  //   return true;
+  // }
   // Look up command in mapping and execute if found
   for (const sms_command_t *command = sms_commands; command->command != NULL;
        command++) {

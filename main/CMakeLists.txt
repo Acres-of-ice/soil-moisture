@@ -5,7 +5,7 @@ set(SRCS_LIST
     "button_control.c"
     "data.c"
     "lcd.c"
-    # "gsm.c"
+    "gsm.c"
     "soil_comm.c"
     "soil_sensor.c"
     "sensor.c"
@@ -15,7 +15,7 @@ set(SRCS_LIST
 if(CONFIG_MASTER)
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
-    # list(APPEND SRCS_LIST "hex_data.c")
+    list(APPEND SRCS_LIST "hex_data.c")
 endif()
 
 idf_component_register(SRCS ${SRCS_LIST}

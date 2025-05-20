@@ -158,8 +158,8 @@ char *decode_hex_to_json(const char *hex_string) {
       "\"counter\":%u,"
       "\"wind\":%.1f,"
       "\"fountain_pressure\":%.1f,"
-      "\"MoistureA\":%.1f,"
-      "\"MoistureB\":%.1f,"
+      "\"MoistureA\":%u,"
+      "\"MoistureB\":%u,"
       "\"timestamp\":\"%s\","
       "\"time\":%" PRIu64 "" // Added time in milliseconds
       "}",
@@ -337,8 +337,8 @@ void hex_data_task(void *pvParameters) {
     hex_data.wind = (uint16_t)(hex_readings.wind * 10);
     hex_data.fountain_pressure =
         (uint16_t)(hex_readings.fountain_pressure * 10);
-    hex_data.soil_A = (int16_t)(hex_readings.soil_A);
-    hex_data.soil_B = (int16_t)(hex_readings.soil_B);
+    hex_data.MoistureA = (int16_t)(hex_readings.soil_A);
+    hex_data.MoistureB = (int16_t)(hex_readings.soil_B);
 
     encode_data(&hex_data, binary_buffer);
     binary_to_hex(binary_buffer, hex_output, HEX_SIZE);

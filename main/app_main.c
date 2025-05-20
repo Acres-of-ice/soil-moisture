@@ -22,13 +22,14 @@
 #include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
-// #include "gsm.h"
+ #include "gsm.h"
 
 
 int counter = 1;
 bool lcd_device_ready = false;
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
+bool gsm_init_success = false;
 
 SemaphoreHandle_t Valve_A_AckSemaphore = NULL;
 SemaphoreHandle_t Valve_B_AckSemaphore = NULL;
@@ -257,33 +258,33 @@ void app_main(void) {
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
 
-  // if (site_config.has_gsm) {
-  //   esp_err_t gsm_init_result = gsm_init();
-  //   if (gsm_init_result != ESP_OK) {
-  //     ESP_LOGW(TAG, "Failed to initialize GSM module");
-  //     // Disable SIM pin
-  //     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-  //     gpio_set_level(SIM_GPIO, 1);
-  //   } else {
-  //     ESP_LOGI(TAG, "GSM module initialized successfully");
-  //     xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
-  //                             NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
-  //                             SMS_TASK_CORE_ID);
-  //     vTaskDelay(pdMS_TO_TICKS(500));
+  if (site_config.has_gsm) {
+    esp_err_t gsm_init_result = gsm_init();
+    if (gsm_init_result != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to initialize GSM module");
+      // Disable SIM pin
+      esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+      gpio_set_level(SIM_GPIO, 1);
+    } else {
+      ESP_LOGI(TAG, "GSM module initialized successfully");
+      xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
+                              NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
+                              SMS_TASK_CORE_ID);
+      vTaskDelay(pdMS_TO_TICKS(500));
 
-  //     // Add version info to reboot message
-  //     const esp_app_desc_t *app_desc = esp_app_get_description();
-  //     snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", app_desc->version,
-  //              CONFIG_SITE_NAME);
-  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  //     vTaskDelay(pdMS_TO_TICKS(5000));
-  //   }
-  // } else {
-  //   ESP_LOGW(TAG, "GSM module disabled");
-  //   // Disable SIM pin
-  //   esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-  //   gpio_set_level(SIM_GPIO, 1);
-  // }
+      // Add version info to reboot message
+      const esp_app_desc_t *app_desc = esp_app_get_description();
+      snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", app_desc->version,
+               CONFIG_SITE_NAME);
+      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+  } else {
+    ESP_LOGW(TAG, "GSM module disabled");
+    // Disable SIM pin
+    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    gpio_set_level(SIM_GPIO, 1);
+  }
 
 // #ifdef CONFIG_GSM
 //   esp_err_t gsm_init_result = gsm_init();
