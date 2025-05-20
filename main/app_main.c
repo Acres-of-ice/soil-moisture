@@ -14,6 +14,8 @@
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
+#include "gsm.h"
+#include "hex_data.h"
 #include "i2cdev.h"
 #include "lcd.h"
 #include "rtc_operations.h"
@@ -22,8 +24,6 @@
 #include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
- #include "gsm.h"
-
 
 int counter = 1;
 bool lcd_device_ready = false;
@@ -120,6 +120,8 @@ esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
                               .max_files = 5,
                               .format_if_mount_failed = true};
 void init_semaphores(void) {
+  stateMutex = xSemaphoreCreateMutex();
+  message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
   Valve_A_AckSemaphore = xSemaphoreCreateBinary();
   Valve_B_AckSemaphore = xSemaphoreCreateBinary();
   Pump_AckSemaphore = xSemaphoreCreateBinary();
@@ -237,23 +239,25 @@ void app_main(void) {
                             SIMULATION_TASK_PRIORITY, &simulationTaskHandle,
                             SIMULATION_TASK_CORE_ID);
     vTaskDelay(pdMS_TO_TICKS(100));
-  } else {
-    xTaskCreatePinnedToCore(
-        espnow_discovery_task, "ESP-NOW Discovery",
-        COMM_TASK_STACK_SIZE,     // Stack size
-        NULL,                     // Parameters
-        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-        &discoveryTaskHandle,
-        COMM_TASK_CORE_ID // Core ID
-    );
   }
-
   vTaskDelay(pdMS_TO_TICKS(2000));
-  stateMutex = xSemaphoreCreateMutex();
-  message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
   init_semaphores();
+  vTaskDelay(100);
+  init_logging();
+  vTaskDelay(100);
+
+  if (init_hex_buffer() != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to initialize hex buffer");
+    vTaskDelete(NULL);
+  }
+  init_payload_buffer();
+  lcd_init();
+  lcd_clear();
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  update_status_message("  %s", get_pcb_name(g_nodeAddress));
+
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
@@ -286,34 +290,15 @@ void app_main(void) {
     gpio_set_level(SIM_GPIO, 1);
   }
 
-// #ifdef CONFIG_GSM
-//   esp_err_t gsm_init_result = gsm_init();
-//   if (gsm_init_result != ESP_OK) {
-//     ESP_LOGE(TAG, "Failed to initialize GSM module");
-//     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-//     gpio_set_level(SIM_GPIO, 1);
-//   } else {
-//     ESP_LOGI(TAG, "GSM module initialized successfully");
-//     xTaskCreatePinnedToCore(sms_manager_task, "SMS Manager",
-//                             SMS_MANAGER_STACK_SIZE, &smsManagerTaskHandle,
-//                             SMS_MANAGER_PRIORITY, NULL, SMS_MANAGER_CORE_ID);
-//     xTaskCreatePinnedToCore(sms_receive_task, "SMS_receive",
-//                             RECEIVE_SMS_TASK_STACK_SIZE, &smsReceiveTaskHandle,
-//                             RECEIVE_SMS_TASK_PRIORITY, NULL,
-//                             RECEIVE_SMS_TASK_CORE_ID);
-//     xTaskCreatePinnedToCore(sms_task, "SMS", SMS_TASK_STACK_SIZE, NULL,
-//                             SMS_TASK_PRIORITY, &smsTaskHandle,
-//                             SMS_TASK_CORE_ID);
-//     vTaskSuspend(smsTaskHandle);
-//   }
-
-// #endif
-  lcd_init();
-  lcd_clear();
-  vTaskDelay(pdMS_TO_TICKS(2000));
-  update_status_message("  %s", get_pcb_name(g_nodeAddress));
-
   if (site_config.has_valve) {
+    xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery",
+        COMM_TASK_STACK_SIZE,     // Stack size
+        NULL,                     // Parameters
+        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+        &discoveryTaskHandle,
+        COMM_TASK_CORE_ID // Core ID
+    );
     xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
                             &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                             COMM_TASK_CORE_ID);
@@ -337,12 +322,10 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
 
   if (lcd_device_ready) {
-      xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW",
-      LCD_TASK_STACK_SIZE,
-                                NULL, LCD_TASK_PRIORITY, NULL,
-                                LCD_TASK_CORE_ID);
-        vTaskDelay(pdMS_TO_TICKS(100));
-      }
+    xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW", LCD_TASK_STACK_SIZE,
+                            NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
 
   xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
@@ -491,7 +474,7 @@ void app_main(void) {
   // gpio_set_level(RELAY_POSITIVE, 0);
   // gpio_set_level(RELAY_NEGATIVE, 0);
   // gpio_set_level(OE_PIN, 0);
-    gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+  gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
                                            (1ULL << RELAY_NEGATIVE) |
                                            (1ULL << OE_PIN),
                            .mode = GPIO_MODE_OUTPUT,
@@ -499,7 +482,7 @@ void app_main(void) {
                            .pull_down_en = GPIO_PULLDOWN_DISABLE,
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
-  //init_gpio();
+  // init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
 

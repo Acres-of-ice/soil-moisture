@@ -65,7 +65,6 @@ extern uint8_t sequence_number;
 #define PUMP_START 2
 #define PUMP_STOP 3
 
-
 #define MAX_SITES 11
 
 typedef struct {
@@ -88,7 +87,7 @@ typedef struct {
 #define HEX_SIZE                                                               \
   (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
    sizeof(uint16_t) *                                                          \
-       6) // 2 bytes site name + timestamp + counter + sensor data
+       7) // 2 bytes site name + timestamp + counter + sensor data
 typedef struct {
   uint8_t address;
   uint8_t command;
@@ -195,8 +194,7 @@ extern const site_config_t site_config;
 typedef struct {
   float temperature;
   float humidity;
-  float wind;
-  float fountain_pressure;
+  float pressure;
   float water_temp;
   float discharge;
   float voltage;
@@ -208,7 +206,7 @@ typedef struct {
 extern sensor_readings_t simulated_readings;
 extern sensor_readings_t readings;
 
-extern float mean_fountain_pressure;
+extern float mean_pressure;
 extern float tpipe_normal;
 extern float tpipe_hot;
 
@@ -267,11 +265,12 @@ typedef struct {
   char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
   char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
   uint16_t counter;                 // On/off counter
-  int16_t temperature;        // Temperature * 10 to preserve one decimal place
-  uint16_t wind;              // Wind speed * 10
-  uint16_t fountain_pressure; // Fountain pressure * 10
-  int16_t MoistureA;         // Water temperature * 10
-  int16_t MoistureB;          // Discharge * 10
+  uint16_t soil_A;                  // Water temperature * 10
+  uint16_t soil_B;                  // Discharge * 10
+  int16_t temperature; // Temperature * 10 to preserve one decimal place
+  uint16_t pressure;   // Fountain pressure * 10
+  int16_t water_temp;  // Fountain pressure * 10
+  uint16_t discharge;  // Fountain pressure * 10
 } hex_data_t;
 
 typedef struct {

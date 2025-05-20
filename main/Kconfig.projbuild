@@ -357,74 +357,74 @@ menu "RTC Configuration"
 			Minute to set (0-59)
 endmenu
 
-    config SMS_RECIPIENT_DATA
-      visible if HAS_GSM
-      choice
-        prompt "Select Data SMS Recipient"
-        default SMS_RECIPIENT_DATA_AWS
-        help
-            Select the recipient who will receive data messages.
+  config SMS_RECIPIENT_DATA
+    visible if HAS_GSM
+    choice
+      prompt "Select Data SMS Recipient"
+      default SMS_RECIPIENT_DATA_AWS
+      help
+          Select the recipient who will receive data messages.
 
-        config SMS_RECIPIENT_DATA_AWS
-            bool "AWS Server"
-            
-        config SMS_RECIPIENT_DATA_NIDHIN
-            bool "Nidhin"
-            
-        config SMS_RECIPIENT_DATA_SURYA
-            bool "Surya"
-    endchoice
+      config SMS_RECIPIENT_DATA_AWS
+          bool "AWS Server"
+          
+      config SMS_RECIPIENT_DATA_NIDHIN
+          bool "Nidhin"
+          
+      config SMS_RECIPIENT_DATA_SURYA
+          bool "Surya"
+  endchoice
 
-    config SMS_RECIPIENT_ERROR
-      visible if HAS_GSM
-      choice
-        prompt "Select Error SMS Recipient"
-        default SMS_RECIPIENT_ERROR_NIDHIN
-        help
-            Select the recipient who will receive error messages and logs.
+  config SMS_RECIPIENT_ERROR
+    visible if HAS_GSM
+    choice
+      prompt "Select Error SMS Recipient"
+      default SMS_RECIPIENT_ERROR_NIDHIN
+      help
+          Select the recipient who will receive error messages and logs.
 
-        config SMS_RECIPIENT_ERROR_AWS
-            bool "AWS Server"
-            
-        config SMS_RECIPIENT_ERROR_NIDHIN
-            bool "Nidhin"
-            
-        config SMS_RECIPIENT_ERROR_SURYA
-            bool "Surya"
-    endchoice
+      config SMS_RECIPIENT_ERROR_AWS
+          bool "AWS Server"
+          
+      config SMS_RECIPIENT_ERROR_NIDHIN
+          bool "Nidhin"
+          
+      config SMS_RECIPIENT_ERROR_SURYA
+          bool "Surya"
+  endchoice
 
 # Hidden configs to store the actual phone numbers
-    config SMS_DATA_NUMBER
-        string
-        default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-        default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-        default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
+  config SMS_DATA_NUMBER
+      string
+      default "+918082748893" if SMS_RECIPIENT_DATA_AWS
+      default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
+      default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
 
-    config SMS_ERROR_NUMBER
-        string
-        default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-        default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-        default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
+  config SMS_ERROR_NUMBER
+      string
+      default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
+      default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
+      default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
 
-    choice LOG_SAVE_LEVEL
-        prompt "Minimum log level to save"
-        default LOG_SAVE_LEVEL_ERROR
-        help
-            Specify the minimum level of log messages to save to file.
+  choice LOG_SAVE_LEVEL
+      prompt "Minimum log level to save"
+      default LOG_SAVE_LEVEL_ERROR
+      help
+          Specify the minimum level of log messages to save to file.
 
-        config LOG_SAVE_LEVEL_NONE
-            bool "No logs saved"
-        config LOG_SAVE_LEVEL_ERROR
-            bool "Error"
-        config LOG_SAVE_LEVEL_WARN
-            bool "Warning"
-    endchoice
+      config LOG_SAVE_LEVEL_NONE
+          bool "No logs saved"
+      config LOG_SAVE_LEVEL_ERROR
+          bool "Error"
+      config LOG_SAVE_LEVEL_WARN
+          bool "Warning"
+  endchoice
 
-    config LOG_SAVE_LEVEL
-        int
-        default 0 if LOG_SAVE_LEVEL_NONE
-        default 1 if LOG_SAVE_LEVEL_ERROR
-        default 2 if LOG_SAVE_LEVEL_WARN
+  config LOG_SAVE_LEVEL
+      int
+      default 0 if LOG_SAVE_LEVEL_NONE
+      default 1 if LOG_SAVE_LEVEL_ERROR
+      default 2 if LOG_SAVE_LEVEL_WARN
 
 
 endmenu

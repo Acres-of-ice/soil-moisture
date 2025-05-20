@@ -21,7 +21,7 @@ function updateSensorReadings(data) {
     updateSensorValue('moisture_a', data.moisture_a, '%');
     updateSensorValue('moisture_b', data.moisture_b, '%');  
     updateSensorValue('wind', data.wind, 'm/s');
-    updateSensorValue('fountain_pressure', data.fountain_pressure, 'cm');
+    updateSensorValue('pressure', data.pressure, 'm');
     updateSensorValue('water_temp', data.water_temp, '°C');
     updateSensorValue('discharge', data.discharge, 'l/min');
 }

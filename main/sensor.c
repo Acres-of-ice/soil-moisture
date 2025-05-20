@@ -426,7 +426,7 @@ void sensor_task(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(10));
       }
 
-      local_readings.fountain_pressure = adc_readings_arr[1];
+      local_readings.pressure = adc_readings_arr[1];
     }
 
     // Handle Modbus readings without mutex

@@ -1,8 +1,8 @@
 #include "hex_data.h"
 #include "define.h"
-#include "soil_comm.h"
 #include "rtc_operations.h"
 #include "sensor.h"
+#include "soil_comm.h"
 #include "valve_control.h"
 #include <inttypes.h>
 #include <stdint.h>
@@ -32,8 +32,8 @@ bool is_data_available(void) {
 }
 
 // New order: [Site Name (2 bytes)][timestamp (17 bytes)][counter (2
-// bytes)][temperature (2 bytes)][wind (2 bytes)][pressure (2 bytes)][water_temp
-// (2 bytes)]
+// bytes)][soil_A (2 bytes)][soil_B (2 bytes)][temperature (2 bytes)][pressure
+// (2 bytes)][water_temp (2 bytes)][discharge (2 bytes)]
 void encode_data(hex_data_t *data, uint8_t *buffer) {
   size_t offset = 0;
 
@@ -50,19 +50,22 @@ void encode_data(hex_data_t *data, uint8_t *buffer) {
   offset += sizeof(uint16_t);
 
   // Copy sensor data
+  memcpy(buffer + offset, &data->soil_A, sizeof(int16_t));
+  offset += sizeof(int16_t);
+
+  memcpy(buffer + offset, &data->soil_B, sizeof(int16_t));
+  offset += sizeof(int16_t);
+
   memcpy(buffer + offset, &data->temperature, sizeof(int16_t));
   offset += sizeof(int16_t);
 
-  memcpy(buffer + offset, &data->wind, sizeof(uint16_t));
+  memcpy(buffer + offset, &data->pressure, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  memcpy(buffer + offset, &data->fountain_pressure, sizeof(uint16_t));
+  memcpy(buffer + offset, &data->water_temp, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  memcpy(buffer + offset, &data->MoistureA, sizeof(int16_t));
-  offset += sizeof(int16_t);
-
-  memcpy(buffer + offset, &data->MoistureB, sizeof(int16_t));
+  memcpy(buffer + offset, &data->discharge, sizeof(int16_t));
   offset += sizeof(int16_t);
 }
 
@@ -98,20 +101,23 @@ esp_err_t decode_hex_data(const char *hex_string, hex_data_t *data) {
   offset += sizeof(uint16_t);
 
   // Copy sensor data
+  memcpy(&data->soil_A, binary_buffer + offset, sizeof(int16_t));
+  offset += sizeof(int16_t);
+
+  memcpy(&data->soil_B, binary_buffer + offset, sizeof(int16_t));
+  offset += sizeof(int16_t);
+
   memcpy(&data->temperature, binary_buffer + offset, sizeof(int16_t));
   offset += sizeof(int16_t);
 
-  memcpy(&data->wind, binary_buffer + offset, sizeof(uint16_t));
+  memcpy(&data->pressure, binary_buffer + offset, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  memcpy(&data->fountain_pressure, binary_buffer + offset, sizeof(uint16_t));
+  memcpy(&data->water_temp, binary_buffer + offset, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  memcpy(&data->MoistureA, binary_buffer + offset, sizeof(int16_t));
-  offset += sizeof(int16_t);
-
-  memcpy(&data->MoistureB, binary_buffer + offset, sizeof(int16_t));
-  offset += sizeof(int16_t);
+  memcpy(&data->discharge, binary_buffer + offset, sizeof(uint16_t));
+  offset += sizeof(uint16_t);
 
   return ESP_OK;
 }
@@ -154,20 +160,20 @@ char *decode_hex_to_json(const char *hex_string) {
       json_string, 512,
       "{"
       "\"site_name\":\"%.*s\","
-      "\"temperature\":%.1f,"
-      "\"counter\":%u,"
-      "\"wind\":%.1f,"
-      "\"fountain_pressure\":%.1f,"
-      "\"MoistureA\":%u,"
-      "\"MoistureB\":%u,"
       "\"timestamp\":\"%s\","
+      "\"counter\":%u,"
+      "\"Soil A\":%u,"
+      "\"Soil B\":%u,"
+      "\"temperature\":%.1f,"
+      "\"pressure\":%.1f,"
+      "\"water_temp\":%.1f,"
+      "\"discharge\":%.1f,"
       "\"time\":%" PRIu64 "" // Added time in milliseconds
       "}",
-      SITE_NAME_LENGTH, decoded_data.site_name,
-      decoded_data.temperature / 10.0f, decoded_data.counter,
-      decoded_data.wind / 10.0f, decoded_data.fountain_pressure / 10.0f,
-      decoded_data.MoistureA, decoded_data.MoistureB,
-      decoded_data.timestamp, time_ms);
+      SITE_NAME_LENGTH, decoded_data.site_name, decoded_data.timestamp,
+      decoded_data.counter, decoded_data.soil_A, decoded_data.soil_B,
+      decoded_data.temperature / 10.0f, decoded_data.pressure / 10.0f,
+      decoded_data.water_temp / 10.0f, decoded_data.discharge / 10.0f, time_ms);
 
   if (written >= 512) {
     ESP_LOGE(TAG, "JSON string truncated. Increase buffer size.");
@@ -332,13 +338,13 @@ void hex_data_task(void *pvParameters) {
       ESP_LOGE(TAG, "Failed to fetch timestamp");
     }
 
-    hex_data.temperature = (int16_t)(hex_readings.temperature * 10);
     hex_data.counter = (uint16_t)counter;
-    hex_data.wind = (uint16_t)(hex_readings.wind * 10);
-    hex_data.fountain_pressure =
-        (uint16_t)(hex_readings.fountain_pressure * 10);
-    hex_data.MoistureA = (int16_t)(hex_readings.soil_A);
-    hex_data.MoistureB = (int16_t)(hex_readings.soil_B);
+    hex_data.soil_A = (uint16_t)(hex_readings.soil_A);
+    hex_data.soil_B = (uint16_t)(hex_readings.soil_B);
+    hex_data.temperature = (int16_t)(hex_readings.temperature * 10);
+    hex_data.pressure = (uint16_t)(hex_readings.pressure * 10);
+    hex_data.water_temp = (uint16_t)(hex_readings.water_temp * 10);
+    hex_data.discharge = (uint16_t)(hex_readings.discharge * 10);
 
     encode_data(&hex_data, binary_buffer);
     binary_to_hex(binary_buffer, hex_output, HEX_SIZE);
@@ -346,12 +352,6 @@ void hex_data_task(void *pvParameters) {
     if (add_hex_to_buffer(hex_output) != ESP_OK) {
       ESP_LOGE(TAG, "Failed to add hex to buffer");
     }
-
-    // if (site_config.has_relay && !gsm_init_success && is_hex_available()) {
-    //   // Send to GSM PCB via LoRa
-    //   ESPNOW_queueMessage(GSM_ADDRESS, 0xA3, g_nodeAddress, 0);
-    //   ESP_LOGI(TAG, "Queued hex data to GSM_ADDRESS");
-    // }
 
     ESP_LOGI(TAG, "Sending data hex to buffer");
 

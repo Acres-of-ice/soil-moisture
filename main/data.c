@@ -74,7 +74,7 @@ void update_data_statistics(const char *site_name) {
   // Update site-specific counter
   if (strcmp(site_name, "Sk") == 0) {
     data_stats.site_data_points[0]++;
-  } 
+  }
   // Save statistics periodically (e.g., every 10 data points)
   if (data_stats.total_data_points % 10 == 0) {
     save_data_statistics();
@@ -93,7 +93,6 @@ void print_data_statistics(void) {
                      data_stats.total_data_points
                : 0.0f);
 }
-
 
 static int custom_log_function(const char *fmt, va_list args) {
   char buffer[512];
@@ -345,7 +344,7 @@ void dataLoggingTask(void *pvParameters) {
              "%s,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", fetchTime(),
              counter, data_readings.soil_A, data_readings.soil_B,
              data_readings.temperature, data_readings.humidity,
-             data_readings.voltage, data_readings.fountain_pressure,
+             data_readings.voltage, data_readings.pressure,
              data_readings.water_temp, data_readings.discharge);
 
     // Added error handling for file append operation

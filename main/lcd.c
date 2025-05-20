@@ -295,7 +295,7 @@ void update_lcd_row_one(const char *uptime_str,
   strncat(temp_str, "C", sizeof(temp_str) - strlen(temp_str) - 1);
 
   // Pressure formatting with validation and float display
-  int press = (int)(lcd_readings->fountain_pressure + 0.5); // Added: Rounding
+  int press = (int)(lcd_readings->pressure + 0.5); // Added: Rounding
   press = (press < 0) ? 0 : (press > 10) ? 10 : press;
   char press_str[5];
   // Display pressure with one decimal place
@@ -376,8 +376,8 @@ void lcd_row_one_task(void *pvParameters) {
 
     // Check for day change
     int current_day = (int)current_uptime;
-    if ((first_run || current_day > last_day) ) {
-      //send_daily_status_sms(current_uptime);
+    if ((first_run || current_day > last_day)) {
+      // send_daily_status_sms(current_uptime);
       last_day = current_day;
       first_run = false;
     }
