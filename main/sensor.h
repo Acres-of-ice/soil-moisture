@@ -54,7 +54,8 @@ typedef struct {
 // Initialization functions
 void sensors_init(void);
 void modbus_init(void);
-void set_simulated_values(int soil_A, int soil_B);
+void set_simulated_values(int soil_A, int soil_B, float temp, float water_temp,
+                          float pressure, float discharge);
 
 // Main task
 void sensor_task(void *pvParameters);

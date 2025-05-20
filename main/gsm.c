@@ -595,17 +595,17 @@ void unified_sms_task(void *pvParameters) {
       continue;
     }
 
-    // HTTP server check
-    if (http_server_active) {
-      ESP_LOGD(TAG, "HTTP server active, suspending SMS operations");
-      vTaskSuspend(NULL);
-      continue;
-    }
+    // // HTTP server check
+    // if (http_server_active) {
+    //   ESP_LOGD(TAG, "HTTP server active, suspending SMS operations");
+    //   vTaskSuspend(NULL);
+    //   continue;
+    // }
 
     // Regular signal strength check
     if (xTaskGetTickCount() - last_check_time >= signal_check_period) {
       int8_t signal = check_gsm_signal();
-      ESP_LOGD(TAG, "Signal strength check: %d", signal);
+      // ESP_LOGD(TAG, "Signal strength check: %d", signal);
 
       if (signal <= 1 && !sms_state.tasks_deleted) {
         ESP_LOGW(TAG, "Poor signal strength (%d)", signal);

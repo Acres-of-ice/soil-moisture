@@ -160,15 +160,15 @@ void pump_button_task(void *arg) {
 void app_main(void) {
 
   // Set log level for all components
-  // esp_log_level_set("*", ESP_LOG_INFO);
+  esp_log_level_set("*", ESP_LOG_INFO);
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
   // esp_log_level_set("ESPNOW", ESP_LOG_INFO);
   // esp_log_level_set("espnow_lib", ESP_LOG_INFO);
-  // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+  esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
-  // esp_log_level_set("GSM", ESP_LOG_DEBUG);
+  esp_log_level_set("GSM", ESP_LOG_DEBUG);
   // esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
   // esp_log_level_set("DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("LoRa", ESP_LOG_DEBUG);
@@ -185,6 +185,10 @@ void app_main(void) {
   esp_log_level_set("coreMQTT", ESP_LOG_NONE);
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
+
+  if (site_config.simulate) {
+    esp_log_level_set("ESPNOW", ESP_LOG_NONE);
+  }
 
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
@@ -232,15 +236,6 @@ void app_main(void) {
     ESP_LOGI(TAG, "Voltage is sufficient, resuming normal operation...");
   }
 
-  if (site_config.simulate) {
-    ESP_LOGW(TAG, "Simulation ON");
-    update_status_message("Simulation ON");
-    xTaskCreatePinnedToCore(simulation_task, "simulation_task",
-                            SIMULATION_TASK_STACK_SIZE, NULL,
-                            SIMULATION_TASK_PRIORITY, &simulationTaskHandle,
-                            SIMULATION_TASK_CORE_ID);
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
   vTaskDelay(pdMS_TO_TICKS(2000));
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
@@ -293,27 +288,6 @@ void app_main(void) {
     gpio_set_level(SIM_GPIO, 1);
   }
 
-  if (site_config.has_valve) {
-    xTaskCreatePinnedToCore(
-        espnow_discovery_task, "ESP-NOW Discovery",
-        COMM_TASK_STACK_SIZE,     // Stack size
-        NULL,                     // Parameters
-        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-        &discoveryTaskHandle,
-        COMM_TASK_CORE_ID // Core ID
-    );
-    xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
-                            &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
-                            COMM_TASK_CORE_ID);
-
-    vTaskDelay(pdMS_TO_TICKS(10000));
-    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-                            VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-                            VALVE_TASK_PRIORITY, &valveTaskHandle,
-                            VALVE_TASK_CORE_ID);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-  }
-
   // xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
   //                         &g_nodeAddress, BUTTON_TASK_PRIORITY,
   //                         &buttonTaskHandle, BUTTON_TASK_CORE_ID);
@@ -335,10 +309,45 @@ void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 
+  if (site_config.has_valve) {
+    xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery",
+        COMM_TASK_STACK_SIZE,     // Stack size
+        NULL,                     // Parameters
+        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+        &discoveryTaskHandle,
+        COMM_TASK_CORE_ID // Core ID
+    );
+    xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
+                            &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                            COMM_TASK_CORE_ID);
+
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+                            VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+                            VALVE_TASK_PRIORITY, &valveTaskHandle,
+                            VALVE_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+
+  if (site_config.simulate) {
+    ESP_LOGW(TAG, "Simulation ON");
+    update_status_message("Simulation ON");
+    xTaskCreatePinnedToCore(simulation_task, "simulation_task",
+                            SIMULATION_TASK_STACK_SIZE, NULL,
+                            SIMULATION_TASK_PRIORITY, &simulationTaskHandle,
+                            SIMULATION_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+
   xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(10000));
+  xTaskCreatePinnedToCore(hex_data_task, "HEXDataTask",
+                          HEX_DATA_TASK_STACK_SIZE, NULL,
+                          HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(100));
 
   if (site_config.has_voltage_cutoff) {
     // Measure voltage and handle low voltage cutoff

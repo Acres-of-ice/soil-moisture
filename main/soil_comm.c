@@ -222,7 +222,7 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
                           uint8_t source) {
   clearMessageQueue();
-   ESP_LOGI(TAG,"inside sendcommandwithretry");
+  ESP_LOGI(TAG, "inside sendcommandwithretry");
   // Determine which semaphore we're waiting on (keep your existing logic)
   SemaphoreHandle_t ackSemaphore = NULL;
   if (valveAddress == VALVE_A_ADDRESS) {
@@ -267,7 +267,7 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
              valveAddress, command, source, retry);
 
     ESPNOW_queueMessage(valveAddress, command, source, retry);
-   //ESPNOW_queueMessage(valveAddress, command, source, 1);
+    // ESPNOW_queueMessage(valveAddress, command, source, 1);
 
     // Wait for the message to be sent from queue
     while (!ESPNOW_isQueueEmpty()) {
@@ -614,7 +614,7 @@ void processMasterMessage(comm_t *message) {
 //   } else if (state == 0) {
 //     ESP_LOGI(TAG, "Turning OFF pump (PUMP_START OFF, pulse OUT_STOP)");
 //     gpio_set_level(PUMP_START, 0); // Turn OFF
-//     gpio_set_level(PUMP_STOP, 1);  
+//     gpio_set_level(PUMP_STOP, 1);
 //     vTaskDelay(pdMS_TO_TICKS(100));
 //     gpio_set_level(PUMP_STOP, 0);
 //   } else {
@@ -635,64 +635,70 @@ void processMasterMessage(comm_t *message) {
 // }
 
 // Global variable to track current pump state
-static uint8_t current_pump_state = 0;  // 0 = off, 1 = on
+static uint8_t current_pump_state = 0; // 0 = off, 1 = on
 
 void processPumpMessage(comm_t *message) {
-    ESP_LOGD(TAG, "Pump received command: 0x%02X from 0x%02X after %d retries (Current state: %d)",
-             message->command, message->source, message->retries, current_pump_state);
+  ESP_LOGD(TAG,
+           "Pump received command: 0x%02X from 0x%02X after %d retries "
+           "(Current state: %d)",
+           message->command, message->source, message->retries,
+           current_pump_state);
 
-    if (message->source != MASTER_ADDRESS) {
-        ESP_LOGW(TAG, "Unexpected source for Pump message: 0x%02X", message->source);
-        return;
-    }
+  if (message->source != MASTER_ADDRESS) {
+    ESP_LOGW(TAG, "Unexpected source for Pump message: 0x%02X",
+             message->source);
+    return;
+  }
 
-    uint8_t relay = (message->command >> 4) & 0x0F;
-    uint8_t state = message->command & 0x0F;
+  uint8_t relay = (message->command >> 4) & 0x0F;
+  uint8_t state = message->command & 0x0F;
 
-    if (relay != 1) {
-        ESP_LOGE(TAG, "Invalid relay for pump: %d", relay);
-        return;
-    }
+  if (relay != 1) {
+    ESP_LOGE(TAG, "Invalid relay for pump: %d", relay);
+    return;
+  }
 
-    // Check if we're already in the requested state
-    if ((state == 1 && current_pump_state == 1) || (state == 0 && current_pump_state == 0)) {
-        ESP_LOGI(TAG, "Pump already in requested state (%s), ignoring command",
-                state ? "ON" : "OFF");
-        
-        // Still send acknowledgment
-        ESPNOW_queueMessage(MASTER_ADDRESS, 0xB1, message->address, message->retries);
-        return;
-    }
+  // Check if we're already in the requested state
+  if ((state == 1 && current_pump_state == 1) ||
+      (state == 0 && current_pump_state == 0)) {
+    ESP_LOGI(TAG, "Pump already in requested state (%s), ignoring command",
+             state ? "ON" : "OFF");
 
-    if (state == 1) {
-        ESP_LOGI(TAG, "Turning ON pump (OUT_START ON)");
-        gpio_set_level(PUMP_STOP, 0);  // Ensure STOP is off
-        gpio_set_level(PUMP_START, 1); // Turn ON
-        vTaskDelay(pdMS_TO_TICKS(100));
-        gpio_set_level(PUMP_START, 0);
-        current_pump_state = 1;  // Update state
-    } else if (state == 0) {
-        ESP_LOGI(TAG, "Turning OFF pump (PUMP_START OFF, pulse OUT_STOP)");
-        gpio_set_level(PUMP_START, 0); // Turn OFF
-        gpio_set_level(PUMP_STOP, 1);  
-        vTaskDelay(pdMS_TO_TICKS(100));
-        gpio_set_level(PUMP_STOP, 0);
-        current_pump_state = 0;  // Update state
-    } else {
-        ESP_LOGE(TAG, "Unknown state for pump: %d", state);
-        return;
-    }
+    // Still send acknowledgment
+    ESPNOW_queueMessage(MASTER_ADDRESS, 0xB1, message->address,
+                        message->retries);
+    return;
+  }
 
-    // Send ACK back
-    uint8_t ack_cmd = 0xB1;
-    for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
-        ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
-                          message->retries);
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-
-    ESP_LOGI(TAG, "Pump ACK sent for seq %d", message->seq_num);
+  if (state == 1) {
+    ESP_LOGI(TAG, "Turning ON pump (OUT_START ON)");
+    gpio_set_level(PUMP_STOP, 0);  // Ensure STOP is off
+    gpio_set_level(PUMP_START, 1); // Turn ON
     vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level(PUMP_START, 0);
+    current_pump_state = 1; // Update state
+  } else if (state == 0) {
+    ESP_LOGI(TAG, "Turning OFF pump (PUMP_START OFF, pulse OUT_STOP)");
+    gpio_set_level(PUMP_START, 0); // Turn OFF
+    gpio_set_level(PUMP_STOP, 1);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_set_level(PUMP_STOP, 0);
+    current_pump_state = 0; // Update state
+  } else {
+    ESP_LOGE(TAG, "Unknown state for pump: %d", state);
+    return;
+  }
+
+  // Send ACK back
+  uint8_t ack_cmd = 0xB1;
+  for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+    ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
+                        message->retries);
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+
+  ESP_LOGI(TAG, "Pump ACK sent for seq %d", message->seq_num);
+  vTaskDelay(pdMS_TO_TICKS(100));
 }
 
 // void processValveMessage(comm_t *message) {
@@ -762,89 +768,97 @@ void processPumpMessage(comm_t *message) {
 
 //     ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
 //   } else {
-//     ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X", message->command);
+//     ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X",
+//     message->command);
 //   }
 
 //   vTaskDelay(pdMS_TO_TICKS(100));
 // }
 
 // Global variables to track current valve state
-static uint8_t current_valve_state = 0;  // 0 = off, 0x10 = negative, 0x11 = positive
+static uint8_t current_valve_state =
+    0; // 0 = off, 0x10 = negative, 0x11 = positive
 
 void processValveMessage(comm_t *message) {
-    ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries (Current state: 0x%02X)",
-             message->address, message->command, message->retries, current_valve_state);
+  ESP_LOGD(
+      TAG,
+      "V%d received command: 0x%02X after %d retries (Current state: 0x%02X)",
+      message->address, message->command, message->retries,
+      current_valve_state);
 
-    if (message->source != MASTER_ADDRESS) {
-        ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X", message->source);
-        return;
-    }
+  if (message->source != MASTER_ADDRESS) {
+    ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X",
+             message->source);
+    return;
+  }
 
-    // Check if we're already in the requested state
-    if (message->command == current_valve_state) {
-        ESP_LOGI(TAG, "Already in requested state (0x%02X), ignoring command", current_valve_state);
-        
-        // Still send acknowledgment for the received command
-        uint8_t ack_cmd = (message->command == 0x11) ? 0xA1 : 0xA2;
-        ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address, message->retries);
-        return;
-    }
+  // Check if we're already in the requested state
+  if (message->command == current_valve_state) {
+    ESP_LOGI(TAG, "Already in requested state (0x%02X), ignoring command",
+             current_valve_state);
 
-    last_conductor_message_time = time(NULL);
+    // Still send acknowledgment for the received command
+    uint8_t ack_cmd = (message->command == 0x11) ? 0xA1 : 0xA2;
+    ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
+                        message->retries);
+    return;
+  }
 
-    // Handle command based on its value
-    if (message->command == 0x11) {
-        // POSITIVE RELAY ON + OE Pulse
-        ESP_LOGI(TAG, "Turning ON valve (POSITIVE)");
+  last_conductor_message_time = time(NULL);
 
-        gpio_set_level(RELAY_POSITIVE, 1);
-        gpio_set_level(RELAY_NEGATIVE, 0);
-        vTaskDelay(pdMS_TO_TICKS(100));  // settle time
+  // Handle command based on its value
+  if (message->command == 0x11) {
+    // POSITIVE RELAY ON + OE Pulse
+    ESP_LOGI(TAG, "Turning ON valve (POSITIVE)");
 
-        gpio_set_level(OE_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(30));    // OE pulse
-        gpio_set_level(OE_PIN, 0);
-
-        current_valve_state = 0x11;  // Update state
-        ESP_LOGI(TAG, "Valve ON (POSITIVE) complete");
-
-    } else if (message->command == 0x10) {
-        // NEGATIVE RELAY ON + OE Pulse
-        ESP_LOGI(TAG, "Turning OFF valve (NEGATIVE)");
-
-        gpio_set_level(RELAY_POSITIVE, 0);
-        gpio_set_level(RELAY_NEGATIVE, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));  // settle time
-
-        gpio_set_level(OE_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(30));    // OE pulse
-        gpio_set_level(OE_PIN, 0);
-
-        current_valve_state = 0x10;  // Update state
-        ESP_LOGI(TAG, "Valve OFF (NEGATIVE) complete");
-
-    } else {
-        ESP_LOGE(TAG, "Unknown command: 0x%02X", message->command);
-        return;
-    }
-
-    // Cleanup all relays after OE pulse
-    vTaskDelay(pdMS_TO_TICKS(20));
-    gpio_set_level(RELAY_POSITIVE, 0);
+    gpio_set_level(RELAY_POSITIVE, 1);
     gpio_set_level(RELAY_NEGATIVE, 0);
+    vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+
+    gpio_set_level(OE_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
     gpio_set_level(OE_PIN, 0);
 
-    // Acknowledge back to MASTER
-    uint8_t ack_cmd = (message->command == 0x11) ? 0xA1 : 0xA2;
-    for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
-        ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address, message->retries);
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
+    current_valve_state = 0x11; // Update state
+    ESP_LOGI(TAG, "Valve ON (POSITIVE) complete");
 
-    ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
-    vTaskDelay(pdMS_TO_TICKS(100));
+  } else if (message->command == 0x10) {
+    // NEGATIVE RELAY ON + OE Pulse
+    ESP_LOGI(TAG, "Turning OFF valve (NEGATIVE)");
+
+    gpio_set_level(RELAY_POSITIVE, 0);
+    gpio_set_level(RELAY_NEGATIVE, 1);
+    vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+
+    gpio_set_level(OE_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
+    gpio_set_level(OE_PIN, 0);
+
+    current_valve_state = 0x10; // Update state
+    ESP_LOGI(TAG, "Valve OFF (NEGATIVE) complete");
+
+  } else {
+    ESP_LOGE(TAG, "Unknown command: 0x%02X", message->command);
+    return;
+  }
+
+  // Cleanup all relays after OE pulse
+  vTaskDelay(pdMS_TO_TICKS(20));
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 0);
+  gpio_set_level(OE_PIN, 0);
+
+  // Acknowledge back to MASTER
+  uint8_t ack_cmd = (message->command == 0x11) ? 0xA1 : 0xA2;
+  for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
+    ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
+                        message->retries);
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+
+  ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
+  vTaskDelay(pdMS_TO_TICKS(100));
 }
-
 
 // Process messages for valve control
 void processSprayMessage(comm_t *message) {
@@ -1098,7 +1112,7 @@ bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
   message->retries = buffer[3];
   message->seq_num = buffer[4];
 
-  ESP_LOGI(TAG,
+  ESP_LOGD(TAG,
            "Parsed message - Address: 0x%02X, Command: 0x%02X, Source: 0x%02X, "
            "Retries: %d, Seq: %d",
            message->address, message->command, message->source,
@@ -1669,7 +1683,7 @@ bool verify_device_mappings(void) {
   const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
                                       VALVE_B_ADDRESS, PUMP_ADDRESS,
                                       SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
-  //const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_B_ADDRESS};
+  // const uint8_t critical_devices[] = {MASTER_ADDRESS, SOIL_B_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \

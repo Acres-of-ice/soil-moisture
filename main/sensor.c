@@ -490,16 +490,47 @@ void sensor_task(void *pvParameters) {
   }
 }
 
-void set_simulated_values(int soil_A, int soil_B) {
+// Full function with optional parameters
+// When calling, use -999.0f for any parameter you don't want to change
+void set_simulated_values(int soil_A, int soil_B, float temp, float water_temp,
+                          float pressure, float discharge) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+    // Always update the required soil parameters
     simulated_readings.soil_A = soil_A;
     simulated_readings.soil_B = soil_B;
-    // simulated_readings.temperature = temp;
-    // simulated_readings.discharge = discharge;
-    // simulated_readings.water_temp = water_temp;
-    // simulated_readings.fountain_pressure = pressure;
-    // simulated_readings.voltage = 12.6f; // Add a default simulated voltage
+
+    // Only update optional parameters if they're not the sentinel value
+    if (temp != -999.0f) {
+      simulated_readings.temperature = temp;
+    }
+
+    if (water_temp != -999.0f) {
+      simulated_readings.water_temp = water_temp;
+    }
+
+    if (pressure != -999.0f) {
+      simulated_readings.pressure = pressure;
+    }
+
+    if (discharge != -999.0f) {
+      simulated_readings.discharge = discharge;
+    }
+
+    // Make sure we have a sane voltage value for simulation
+    if (simulated_readings.voltage <= 0.0f) {
+      simulated_readings.voltage = 12.6f; // Default simulated voltage
+    }
+
     xSemaphoreGive(readings_mutex);
+
+    ESP_LOGD(
+        TAG,
+        "Set simulated values - Soil A: %d, Soil B: %d, Temp: %.2f°C, "
+        "Water: %.2f°C, Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
+        simulated_readings.soil_A, simulated_readings.soil_B,
+        simulated_readings.temperature, simulated_readings.water_temp,
+        simulated_readings.pressure, simulated_readings.discharge,
+        simulated_readings.voltage);
   } else {
     ESP_LOGW(TAG, "Failed to get mutex for setting simulated values");
   }
@@ -529,10 +560,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->voltage = readings.voltage;
     }
 
-    ESP_LOGD(TAG, "Sensor Readings - Soil A: %d, Soil B: %d",
-             output_readings->soil_A, output_readings->soil_B);
-
-    ESP_LOGI(TAG,
+    ESP_LOGD(TAG,
              "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
              "Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
              output_readings->temperature, output_readings->humidity,
@@ -563,7 +591,8 @@ void simulation_task(void *pvParameters) {
     test_case_t current_test = test_cases[test_index];
 
     // Set test values
-    set_simulated_values(current_test.soil_A, current_test.soil_B);
+    set_simulated_values(current_test.soil_A, current_test.soil_B, -999.0f,
+                         -999.0f, -999.0f, -999.0f);
 
     // Run and log test results
     ESP_LOGI(TAG, "Test case %d: %s", test_index + 1, current_test.description);
