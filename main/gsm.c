@@ -99,7 +99,7 @@ int sim800c_read_response(char *buffer, int len) {
       uart_read_bytes(GSM_UART_NUM, buffer, len - 1, pdMS_TO_TICKS(1000));
   if (rxBytes > 0) {
     buffer[rxBytes] = 0; // Null-terminate the string
-    ESP_LOGD(TAG, "Bytes read: %d", rxBytes);
+    // ESP_LOGD(TAG, "Bytes read: %d", rxBytes);
     ESP_LOGD(TAG, "Response: %s", buffer);
   }
   return rxBytes;
@@ -594,13 +594,6 @@ void unified_sms_task(void *pvParameters) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
-
-    // // HTTP server check
-    // if (http_server_active) {
-    //   ESP_LOGD(TAG, "HTTP server active, suspending SMS operations");
-    //   vTaskSuspend(NULL);
-    //   continue;
-    // }
 
     // Regular signal strength check
     if (xTaskGetTickCount() - last_check_time >= signal_check_period) {

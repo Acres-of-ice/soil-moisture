@@ -560,12 +560,14 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->voltage = readings.voltage;
     }
 
-    ESP_LOGD(TAG,
-             "Sensor Readings - Temp: %.2f°C, Humidity: %.2f%%, Water: %.2f°C, "
-             "Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
-             output_readings->temperature, output_readings->humidity,
-             output_readings->water_temp, output_readings->pressure,
-             output_readings->discharge, output_readings->voltage);
+    ESP_LOGD(
+        TAG,
+        "Sensor Readings - Soil A: %d, Soil B: %d, Temp: %.2f°C,Water: %.2f°C, "
+        "Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
+        output_readings->soil_A, output_readings->soil_B,
+        output_readings->temperature, output_readings->water_temp,
+        output_readings->pressure, output_readings->discharge,
+        output_readings->voltage);
 
     xSemaphoreGive(readings_mutex);
   } else {
