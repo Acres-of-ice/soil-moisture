@@ -390,7 +390,7 @@ bool isResetTime(void) {
   #ifndef CONFIG_RESET_MINUTE
   #define CONFIG_RESET_MINUTE 0
   #endif
-  sscanf(timeStr, "%d-%d-%d %d:%d", &hour, &minute);
+  sscanf(timeStr, "%d-%d", &hour, &minute);
   if (hour == CONFIG_RESET_HOUR && minute == CONFIG_RESET_MINUTE) 
   {
     return true;
