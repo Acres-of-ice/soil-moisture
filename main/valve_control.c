@@ -150,6 +150,8 @@ void updateValveState(void *pvParameters) {
       // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
+      ESP_LOGD(TAG, "Drip Timer %s",
+               !isWithinOFFTimeRange() ? "enabled" : "disabled");
       vTaskDelay(1000);
 
       if (current_readings.soil_A < CONFIG_SOIL_DRY &&
