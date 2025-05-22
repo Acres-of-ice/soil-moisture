@@ -146,7 +146,12 @@ void updateValveState(void *pvParameters) {
     case STATE_IDLE:
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
+      if(isResetTime())
+      {
+        current_readings.soil_A =0;
+        current_readings.soil_B =0;
 
+      }
       // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
@@ -276,7 +281,7 @@ void updateValveState(void *pvParameters) {
                  current_readings.soil_B);
         reset_acknowledgements();
         current_readings.soil_B = 90;
-        current_readings.soil_A = 0;
+        current_readings.soil_A = 90;
         newState = STATE_PUMP_OFF_B;
       } else {
         // // Update the sensor readings inside the loop
@@ -372,4 +377,24 @@ bool isWithinOFFTimeRange(void) {
 #else
   return false;
 #endif
+}
+
+bool isResetTime(void) {
+
+  char *timeStr = fetchTime();
+  int  hour, minute;
+    #ifndef CONFIG_RESET_HOUR
+  #define CONFIG_RESET_HOUR 8
+  #endif
+  
+  #ifndef CONFIG_RESET_MINUTE
+  #define CONFIG_RESET_MINUTE 0
+  #endif
+  sscanf(timeStr, "%d-%d-%d %d:%d", &hour, &minute);
+  if (hour == CONFIG_RESET_HOUR && minute == CONFIG_RESET_MINUTE) 
+  {
+    return true;
+  }else{
+  return false;
+  }
 }
