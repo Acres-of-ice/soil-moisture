@@ -147,7 +147,7 @@ void updateValveState(void *pvParameters) {
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
 
-      get_sensor_readings(&current_readings);
+      // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
       vTaskDelay(1000);
@@ -204,8 +204,8 @@ void updateValveState(void *pvParameters) {
         current_readings.soil_B = 0;
         newState = STATE_PUMP_OFF_A;
       } else {
-        // Update the sensor readings inside the loop
-        get_sensor_readings(&current_readings);
+        // // Update the sensor readings inside the loop
+        // get_sensor_readings(&current_readings);
         ESP_LOGI(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
@@ -277,8 +277,8 @@ void updateValveState(void *pvParameters) {
         current_readings.soil_A = 0;
         newState = STATE_PUMP_OFF_B;
       } else {
-        // Update the sensor readings inside the loop
-        get_sensor_readings(&current_readings);
+        // // Update the sensor readings inside the loop
+        // get_sensor_readings(&current_readings);
         ESP_LOGI(TAG, "Waiting for Soil B: %d", current_readings.soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }

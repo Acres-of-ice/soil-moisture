@@ -306,12 +306,12 @@ void app_main(void) {
   }
 
   if (site_config.has_valve) {
-  // xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-  //                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-  //                           VALVE_TASK_PRIORITY, &valveTaskHandle,
-  //                           VALVE_TASK_CORE_ID);
-  //   vTaskDelay(pdMS_TO_TICKS(1000));
-    
+    // xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+    //                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+    //                           VALVE_TASK_PRIORITY, &valveTaskHandle,
+    //                           VALVE_TASK_CORE_ID);
+    //   vTaskDelay(pdMS_TO_TICKS(1000));
+
     xTaskCreatePinnedToCore(
         espnow_discovery_task, "ESP-NOW Discovery",
         COMM_TASK_STACK_SIZE,     // Stack size
@@ -500,18 +500,18 @@ void app_main(void) {
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
   // init_gpio();
-    gpio_set_level(RELAY_POSITIVE, 0);
-    gpio_set_level(RELAY_NEGATIVE, 1);
-    vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 1);
+  vTaskDelay(pdMS_TO_TICKS(100)); // settle time
 
-    gpio_set_level(OE_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
-    gpio_set_level(OE_PIN, 0);
+  gpio_set_level(OE_PIN, 1);
+  vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
+  gpio_set_level(OE_PIN, 0);
 
-    vTaskDelay(pdMS_TO_TICKS(20));
-    gpio_set_level(RELAY_POSITIVE, 0);
-    gpio_set_level(RELAY_NEGATIVE, 0);
-    gpio_set_level(OE_PIN, 0);
+  vTaskDelay(pdMS_TO_TICKS(20));
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 0);
+  gpio_set_level(OE_PIN, 0);
 
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
@@ -549,7 +549,7 @@ void app_main(void) {
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
-   //xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
+  // xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif
 }
