@@ -423,12 +423,10 @@ void sensor_task(void *pvParameters) {
           else if (IS_SITE("Kuri"))
             adc_readings_arr[i] -= 0.1;
         }
-        //ESP_LOGI("ADC", "Channel %d reading: %.2f", i, adc_readings_arr[i]);
         vTaskDelay(pdMS_TO_TICKS(10));
       }
 
       local_readings.pressure = adc_readings_arr[1];
-      //ESP_LOGI("ADC", "Pressure reading: %.2f", local_readings.pressure);
     }
 
     // Handle Modbus readings without mutex

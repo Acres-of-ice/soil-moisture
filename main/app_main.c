@@ -1,4 +1,3 @@
-#include "esp_app_desc.h"
 #include "esp_event.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -168,7 +167,7 @@ void app_main(void) {
   esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
-  esp_log_level_set("GSM", ESP_LOG_DEBUG);
+  // esp_log_level_set("GSM", ESP_LOG_DEBUG);
   // esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
   // esp_log_level_set("DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("LoRa", ESP_LOG_DEBUG);
@@ -204,8 +203,7 @@ void app_main(void) {
 
 #if CONFIG_MASTER
   g_nodeAddress = MASTER_ADDRESS;
-  const esp_app_desc_t *app_desc = esp_app_get_description();
-  ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
 
   if (init_data_module() != ESP_OK) {
@@ -274,9 +272,7 @@ void app_main(void) {
                               SMS_TASK_CORE_ID);
       vTaskDelay(pdMS_TO_TICKS(500));
 
-      // Add version info to reboot message
-      const esp_app_desc_t *app_desc = esp_app_get_description();
-      snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", app_desc->version,
+      snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", PROJECT_VERSION,
                CONFIG_SITE_NAME);
       sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
       vTaskDelay(pdMS_TO_TICKS(5000));
@@ -382,8 +378,7 @@ void app_main(void) {
 #if CONFIG_SOIL_A
   // Initialize as Soil A sensor
   g_nodeAddress = SOIL_A_ADDRESS;
-  const esp_app_desc_t *app_desc = esp_app_get_description();
-  ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
 
   // Initialize ESP-NOW communication
@@ -428,8 +423,7 @@ void app_main(void) {
   // Initialize as Soil B sensor
   g_nodeAddress =
       SOIL_B_ADDRESS; // Fixed: was incorrectly set to SOIL_A_ADDRESS
-  const esp_app_desc_t *app_desc = esp_app_get_description();
-  ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
 
   // Initialize ESP-NOW communication
