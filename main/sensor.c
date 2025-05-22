@@ -427,6 +427,7 @@ void sensor_task(void *pvParameters) {
       }
 
       local_readings.pressure = adc_readings_arr[1];
+      ESP_LOGD(TAG, "Pressure reading: %.2f", local_readings.pressure);
     }
 
     // Handle Modbus readings without mutex
