@@ -423,11 +423,11 @@ void sensor_task(void *pvParameters) {
           else if (IS_SITE("Kuri"))
             adc_readings_arr[i] -= 0.1;
         }
+        ESP_LOGI("ADC", "Channel %d reading: %.2f", i, adc_readings_arr[i]);
         vTaskDelay(pdMS_TO_TICKS(10));
       }
 
       local_readings.pressure = adc_readings_arr[1];
-      ESP_LOGD(TAG, "Pressure reading: %.2f", local_readings.pressure);
     }
 
     // Handle Modbus readings without mutex
@@ -561,7 +561,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->voltage = readings.voltage;
     }
 
-    ESP_LOGD(
+    ESP_LOGI(
         TAG,
         "Sensor Readings - Soil A: %d, Soil B: %d, Temp: %.2f°C,Water: %.2f°C, "
         "Pressure: %.2f bar, Flow: %.2f l/s, Voltage: %.2f V",
