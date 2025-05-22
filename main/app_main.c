@@ -207,6 +207,8 @@ void app_main(void) {
   const esp_app_desc_t *app_desc = esp_app_get_description();
   ESP_LOGI(TAG, "v%s %s %s", app_desc->version, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress));
+  ESP_LOGI(TAG, "%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress));
 
   if (init_data_module() != ESP_OK) {
     ESP_LOGE(TAG, "data module Failed to initialize ");
