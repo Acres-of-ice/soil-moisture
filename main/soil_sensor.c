@@ -102,8 +102,16 @@ int read_soil_moisture(void) {
   int raw_moisture = total / NUM_SAMPLES;
 
   // Calibrate moisture value using pre-defined ranges
-  int calibrated_moisture = (SOIL_DRY_ADC_VALUE - raw_moisture) * 100 /
-                            (SOIL_DRY_ADC_VALUE - SOIL_MOIST_ADC_VALUE);
+  int calibrated_moisture;
+   #if CONFIG_SOIL_A
+   calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+                            (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+  #endif
+
+  #if CONFIG_SOIL_B
+   calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+                            (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+  #endif
 
   // Clamp to valid range
   if (calibrated_moisture < 0)

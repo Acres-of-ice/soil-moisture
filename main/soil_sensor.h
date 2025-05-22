@@ -11,11 +11,17 @@
 #include "freertos/semphr.h"
 
 // ADC channel for soil moisture sensor
-#define SOIL_ADC_CHANNEL ADC_CHANNEL_0
+#define SOIL_ADC_CHANNEL ADC_CHANNEL_3
 
 // Soil moisture calibration values
-#define SOIL_DRY_ADC_VALUE 2480
-#define SOIL_MOIST_ADC_VALUE 1500
+#define SOIL_DRY_ADC_VALUE_A 3532
+#define SOIL_MOIST_ADC_VALUE_A 2415
+
+#define SOIL_DRY_ADC_VALUE_B 3337
+#define SOIL_MOIST_ADC_VALUE_B 2192
+
+// #define SOIL_DRY_ADC_VALUE_ 3337
+// #define SOIL_MOIST_ADC_VALUE_B 2192
 
 // Sensor data structure for ESP-NOW communication
 typedef struct {
