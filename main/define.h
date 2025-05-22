@@ -54,9 +54,9 @@ extern uint8_t sequence_number;
 #define C_btn 27 // Replace with actual GPIO pin for Backup button
 #define D_btn 15 // Replace with actual GPIO pin for Backup button
 
-#define RELAY_POSITIVE 26
-#define RELAY_NEGATIVE 27
-#define OE_PIN 12
+#define RELAY_POSITIVE 6//26
+#define RELAY_NEGATIVE 7//27
+#define OE_PIN 5//12
 
 #define PULSE_DURATION_MS 50
 
@@ -80,6 +80,9 @@ typedef struct {
   char phone_number[20];
   char message[SMS_BUFFER_SIZE];
 } sms_message_t;
+
+extern int moisture_check_A;
+extern int moisture_check_B;
 
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
@@ -201,6 +204,17 @@ typedef struct {
   int soil_A;
   int soil_B;
 } sensor_readings_t;
+
+// static sensor_readings_t readings = {
+//     .temperature = 0.0f,
+//     .humidity = 0.0f,
+//     .pressure = 0.0f,
+//     .water_temp = 0.0f,
+//     .discharge = 0.0f,
+//     .voltage = 0.0f,
+//     .soil_A = 99,   // Explicit initialization
+//     .soil_B = 99    // Explicit initialization
+// };
 
 // Declare the globals
 extern sensor_readings_t simulated_readings;

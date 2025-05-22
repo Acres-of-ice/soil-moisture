@@ -500,6 +500,19 @@ void app_main(void) {
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
   // init_gpio();
+    gpio_set_level(RELAY_POSITIVE, 0);
+    gpio_set_level(RELAY_NEGATIVE, 1);
+    vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+
+    gpio_set_level(OE_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
+    gpio_set_level(OE_PIN, 0);
+
+    vTaskDelay(pdMS_TO_TICKS(20));
+    gpio_set_level(RELAY_POSITIVE, 0);
+    gpio_set_level(RELAY_NEGATIVE, 0);
+    gpio_set_level(OE_PIN, 0);
+
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
 

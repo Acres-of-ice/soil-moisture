@@ -10,7 +10,7 @@
 static const char *TAG = "SENSOR";
 
 SemaphoreHandle_t readings_mutex;
-sensor_readings_t readings = {.soil_A = 99.0f, .soil_B = 99.0f};
+sensor_readings_t readings = {.soil_A = 99, .soil_B = 99};
 sensor_readings_t simulated_readings = {.soil_A = 15.0f, .soil_B = 25.0f};
 sensor_readings_t data_readings;
 
