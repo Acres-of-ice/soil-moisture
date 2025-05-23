@@ -305,12 +305,6 @@ void app_main(void) {
   }
 
   if (site_config.has_valve) {
-    // xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-    //                           VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-    //                           VALVE_TASK_PRIORITY, &valveTaskHandle,
-    //                           VALVE_TASK_CORE_ID);
-    //   vTaskDelay(pdMS_TO_TICKS(1000));
-
     xTaskCreatePinnedToCore(
         espnow_discovery_task, "ESP-NOW Discovery",
         COMM_TASK_STACK_SIZE,     // Stack size
@@ -545,7 +539,7 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Pump Comm", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
   // xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
