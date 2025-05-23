@@ -69,6 +69,77 @@ menu "App Configuration"
         default "partitions/master.csv" if MASTER
         default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
+    # CPU Frequency Configuration
+    config ESP_DEFAULT_CPU_FREQ_MHZ
+        int
+        default 240 if MASTER
+        default 80 if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        help
+            CPU frequency to be set on application startup.
+            Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_80
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_160
+        bool
+        default n
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+config SMS_RECIPIENT_DATA
+  choice
+    prompt "Select Data SMS Recipient"
+    default SMS_RECIPIENT_DATA_AWS
+    help
+        Select the recipient who will receive data messages.
+
+    config SMS_RECIPIENT_DATA_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_DATA_PRIYAM
+        bool "Priyam"
+        
+    config SMS_RECIPIENT_DATA_SURYA
+        bool "Surya"
+endchoice
+
+config SMS_RECIPIENT_ERROR
+  choice
+    prompt "Select Error SMS Recipient"
+    default SMS_RECIPIENT_ERROR_SURYA
+    help
+        Select the recipient who will receive error messages and logs.
+
+    config SMS_RECIPIENT_ERROR_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_ERROR_PRIYAM
+        bool "Priyam"
+        
+    config SMS_RECIPIENT_ERROR_SURYA
+        bool "Surya"
+endchoice
+
+# Hidden configs to store the actual phone numbers
+config SMS_DATA_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_DATA_AWS
+default "+918902270142" if SMS_RECIPIENT_DATA_PRIYAM
+default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
+
+config SMS_ERROR_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
+default "+918902270142" if SMS_RECIPIENT_ERROR_PRIYAM
+default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
+
+
 
 config ENABLE_HW
     bool "Enable Hardware Configuration"
@@ -365,56 +436,6 @@ menu "RTC Configuration"
 		default 0
 		help
 			Minute to set (0-59)
-endmenu
-
-menu "SMS Configuration"
-    visible if HAS_GSM
-
-    choice SMS_RECIPIENT_DATA
-        prompt "Select Data SMS Recipient"
-        default SMS_RECIPIENT_DATA_AWS
-        help
-            Select the recipient who will receive data messages.
-            
-        config SMS_RECIPIENT_DATA_AWS
-            bool "AWS Server"
-            
-        config SMS_RECIPIENT_DATA_NIDHIN
-            bool "Nidhin"
-            
-        config SMS_RECIPIENT_DATA_SURYA
-            bool "Surya"
-    endchoice
-
-    choice SMS_RECIPIENT_ERROR
-        prompt "Select Error SMS Recipient"
-        default SMS_RECIPIENT_ERROR_NIDHIN
-        help
-            Select the recipient who will receive error messages and logs.
-            
-        config SMS_RECIPIENT_ERROR_AWS
-            bool "AWS Server"
-            
-        config SMS_RECIPIENT_ERROR_NIDHIN
-            bool "Nidhin"
-            
-        config SMS_RECIPIENT_ERROR_SURYA
-            bool "Surya"
-    endchoice
-
-    # Hidden configs to store the actual phone numbers
-    config SMS_DATA_NUMBER
-        string
-        default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-        default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-        default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
-
-    config SMS_ERROR_NUMBER
-        string
-        default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-        default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
-        default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
-
 endmenu
 
 endmenu
