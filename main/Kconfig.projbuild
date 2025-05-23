@@ -49,11 +49,6 @@ menu "App Configuration"
         default "8MB" if MASTER
         default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
-    config ESPTOOLPY_FLASHSIZE_2MB
-        string
-        default n if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
-
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
@@ -88,6 +83,17 @@ menu "App Configuration"
         default n
 
     config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    # Debugging
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
         bool
         default y if MASTER
         default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
