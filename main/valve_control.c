@@ -150,16 +150,13 @@ void updateValveState(void *pvParameters) {
       // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
-      ESP_LOGD(TAG, "Drip Timer %s",
-               !isWithinOFFTimeRange() ? "enabled" : "disabled");
+      ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
       vTaskDelay(1000);
 
-      if (current_readings.soil_A < CONFIG_SOIL_DRY &&
-          !isWithinOFFTimeRange()) {
+      if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
         newState = STATE_VALVE_A_OPEN;
         counter++;
-      } else if (current_readings.soil_B < CONFIG_SOIL_DRY &&
-                 !isWithinOFFTimeRange()) {
+      } else if (current_readings.soil_B < CONFIG_SOIL_DRY && dripTimer()) {
         newState = STATE_VALVE_B_OPEN;
         counter++;
       } else {
@@ -359,36 +356,29 @@ bool isTimeoutReached(TickType_t timeout) {
   return (xTaskGetTickCount() - stateEntryTime) >= pdMS_TO_TICKS(timeout);
 }
 
-bool isWithinOFFTimeRange(void) {
-#ifdef CONFIG_ENABLE_OFF_TIME_CONFIG
+bool dripTimer(void) {
+#ifdef CONFIG_ENABLE_DRIP_TIMER
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-  return (
-      (hour > CONFIG_OFF_START_HOUR ||
-       (hour == CONFIG_OFF_START_HOUR && minute >= CONFIG_OFF_START_MINUTE)) &&
-      (hour < CONFIG_OFF_END_HOUR ||
-       (hour == CONFIG_OFF_END_HOUR && minute < CONFIG_OFF_END_MINUTE)));
+  return !(
+      (hour > CONFIG_DRIP_START_HOUR || (hour == CONFIG_DRIP_START_HOUR &&
+                                         minute >= CONFIG_DRIP_START_MINUTE)) &&
+      (hour < CONFIG_DRIP_END_HOUR ||
+       (hour == CONFIG_DRIP_END_HOUR && minute < CONFIG_DRIP_END_MINUTE)));
 #else
-  return false;
+  return true;
 #endif
 }
 
 bool isResetTime(void) {
 
+#ifdef CONFIG_ENABLE_DRIP_TIMER
   char *timeStr = fetchTime();
-  int hour, minute;
-#ifndef CONFIG_RESET_HOUR
-#define CONFIG_RESET_HOUR 8
+  int year, month, day, hour, minute;
+  sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
+  return (hour == CONFIG_RESET_HOUR);
+#else
+  return false;
 #endif
-
-#ifndef CONFIG_RESET_MINUTE
-#define CONFIG_RESET_MINUTE 0
-#endif
-  sscanf(timeStr, "%d-%d", &hour, &minute);
-  if (hour == CONFIG_RESET_HOUR && minute == CONFIG_RESET_MINUTE) {
-    return true;
-  } else {
-    return false;
-  }
 }

@@ -147,65 +147,57 @@ menu "Hardware Configuration"
             default 0
 endmenu
 
-config ENABLE_OFF_TIME_CONFIG
-	bool "Enable OFF Time Configuration"
+config ENABLE_DRIP_TIMER
+	bool "Enable Drip Timer"
 	default false
 	help
 		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
 
-menu "OFF Time Configuration"
-	visible if ENABLE_OFF_TIME_CONFIG
+menu "Drip Timer Configuration"
+	visible if ENABLE_DRIP_TIMER
 
-	config OFF_START_HOUR
-		int "OFF start hour (0-23)"
+	config DRIP_START_HOUR
+		int "Drip start hour (0-23)"
 		default 0
 		range 0 23
 		help
 			Set the hour when the forced drain time starts (24-hour format).
 
-	config OFF_START_MINUTE
-		int "Drain start minute (0-59)"
+	config DRIP_START_MINUTE
+		int "Drip start minute (0-59)"
 		default 0
 		range 0 59
 		help
 			Set the minute when the forced drain time starts.
 
-	config OFF_END_HOUR
-		int "Drain end hour (0-23)"
+	config DRIP_END_HOUR
+		int "Drip end hour (0-23)"
 		default 23
 		range 0 23
 		help
 			Set the hour when the forced drain time ends (24-hour format).
 
-	config OFF_END_MINUTE
-		int "Drain end minute (0-59)"
+	config DRIP_END_MINUTE
+		int "Drip end minute (0-59)"
 		default 59
 		range 0 59
 		help
 			Set the minute when the forced drain time ends.
 endmenu
-    config ENABLE_RESET_SENSOR_CONFIG
-	   bool "Enable Reset Sensor Configuration"
-	   default false
-	   help
-		Enable this option to set a custom time to Reset the sensor values to zero.
+
+config ENABLE_RESET_SENSOR_CONFIG
+  bool "Enable Reset Sensor Configuration"
+  default false
+
 menu "Reset Time Configuration"
-    
 	visible if ENABLE_RESET_SENSOR_CONFIG
 
-	config Reset_Hour
+	config RESET_HOUR
 		int "Reset hour (0-23)"
 		default 0
 		range 0 23
 		help
 			Set the hour to reset the sensor readings (24-hour format).
-
-	config Reset_Minute
-		int "Reset minute (0-59)"
-		default 0
-		range 0 59
-		help
-			Set the hour to reset the sensor readings.
 endmenu
 
 config ENABLE_TIME_CONFIG
