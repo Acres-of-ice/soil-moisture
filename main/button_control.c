@@ -1,9 +1,8 @@
+#include "button_control.h"
 #include "button.h"
+#include "data.h"
 #include "define.h"
 #include "esp_log.h"
-
-#include "button_control.h"
-#include "data.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "gsm.h"
@@ -113,10 +112,7 @@ void c_btn_short_press(void) {
 
   if (gsm_init_success) {
     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
-
-#if CONFIG_CONDUCTOR
     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-#endif
   }
 }
 
