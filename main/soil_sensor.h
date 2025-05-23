@@ -3,12 +3,10 @@
 #ifndef SOIL_SENSOR_H
 #define SOIL_SENSOR_H
 
+#include "define.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
 #include "esp_now.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
 
 // ADC channel for soil moisture sensor
 #define SOIL_ADC_CHANNEL ADC_CHANNEL_3
@@ -22,15 +20,6 @@
 
 // #define SOIL_DRY_ADC_VALUE_ 3337
 // #define SOIL_MOIST_ADC_VALUE_B 2192
-
-// Sensor data structure for ESP-NOW communication
-typedef struct {
-  uint8_t
-      node_address;    // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
-  int soil_moisture;   // Soil moisture percentage (0-100)
-  float battery_level; // Battery level percentage (0-100)
-  int8_t rssi;         // Signal strength in dBm
-} espnow_recv_data_t;
 
 // Function prototypes for sensor operations
 void soil_sensor_init(void);

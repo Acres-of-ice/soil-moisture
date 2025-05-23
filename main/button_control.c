@@ -13,16 +13,7 @@
 
 static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
-extern bool sta_enabled;  // WiFi status flag
 static char response_sms[32];
-extern int counter;
-extern SemaphoreHandle_t i2c_mutex;
-extern TaskHandle_t wifiTaskHandle;
-extern char *log_path;
-extern char *data_path;
-extern const char *DATA_FILE_HEADER; // Declaration
-
-extern bool errorConditionMet;
 
 typedef struct {
   void (*short_press_action)(void);
@@ -43,28 +34,24 @@ void a_btn_short_press(void) {
       errorConditionMet = false; // Reset error flag
     }
 
-    // ESP_LOGI(TAG, "Counter: %d", on_off_counter);
+    ESP_LOGI(TAG, "Counter: %d", counter);
 
     if (counter % 2 == 0) {
       newState = STATE_VALVE_B_OPEN;
-      // Create compact response message with new counter value
-      // Using static buffer defined at the top
-      // snprintf(response_sms, sizeof(response_sms), "Manual drain mode");
+      if (gsm_init_success) {
+        snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
+        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+      }
 
-      // Send the response SMS
-      // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-
-      ESP_LOGI(TAG, "Manual drain mode");
+      ESP_LOGI(TAG, "Force drip sector B");
     } else {
       newState = STATE_VALVE_A_OPEN;
-      // Create compact response message with new counter value
-      // Using static buffer defined at the top
-      // snprintf(response_sms, sizeof(response_sms), "Manual spray mode");
+      if (gsm_init_success) {
+        snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
+        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+      }
 
-      // Send the response SMS
-      // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-
-      ESP_LOGI(TAG, "Manual spray mode");
+      ESP_LOGI(TAG, "Force drip sector A");
     }
     setCurrentState(newState);
   } else {
@@ -189,13 +176,10 @@ void c_btn_long_press(void) {
   ESP_LOGI(TAG, "All files cleared and reinitialized");
 
   // Optional: Send SMS notification
-  //   if (gsm_init_success) {
-  //     snprintf(sms_message, sizeof(sms_message), "Files cleared");
-
-  // #if CONFIG_CONDUCTOR
-  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  // #endif
-  //   }
+  if (gsm_init_success) {
+    snprintf(sms_message, sizeof(sms_message), "Files cleared");
+    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+  }
 }
 
 void d_btn_short_press(void) {
@@ -290,11 +274,6 @@ QueueHandle_t initialize_button_queue(int nodeAddress) {
     button_events = button_init(PIN_BIT(A_btn) | PIN_BIT(B_btn) |
                                 PIN_BIT(C_btn) | PIN_BIT(D_btn));
     break;
-    //   case SOURCE_NOTE_ADDRESS:
-    //   case DRAIN_NOTE_ADDRESS:
-    //   case AIR_NOTE_ADDRESS:
-    //     button_events = button_init(PIN_BIT(feed1_GPIO) |
-    //     PIN_BIT(feed2_GPIO)); break;
   default:
     ESP_LOGW(TAG, "Unknown node address: %d", nodeAddress);
     return NULL;
@@ -314,19 +293,11 @@ void setup_conductor_buttons(void) {
   register_button_actions(1, // C_btn
                           b_btn_short_press, b_btn_long_press);
   // C Button (former WIFIBACKUP_BUTTON_GPIO)
-  // if (IS_SITE("Ursi")){
-  //   register_button_actions(2,  // C_btn
-  //                         a_btn_short_press,
-  //                         a_btn_long_press);
-  // }else{
   register_button_actions(2, // C_btn
                           c_btn_short_press, c_btn_long_press);
-  // }
-
-  //   if (!site_config.has_water_temp) {
-  //     register_button_actions(3, // D_btn
-  //                             d_btn_short_press, d_btn_long_press);
-  //   }
+  // D Button (former WIFIBACKUP_BUTTON_GPIO)
+  register_button_actions(3, // D_btn
+                          d_btn_short_press, d_btn_long_press);
 }
 
 void button_task(void *pvParameters) {

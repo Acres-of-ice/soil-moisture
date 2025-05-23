@@ -25,11 +25,7 @@ char uptime_str[5] = "0.00";
 static int last_day = -1; // Track the last day we sent an SMS
 static bool first_run = true;
 
-extern bool lcd_device_ready;
-extern SemaphoreHandle_t i2c_mutex;
-extern sensor_readings_t simulated_readings;
-extern sensor_readings_t readings;
-extern i2c_master_bus_handle_t i2c0bus;
+bool lcd_device_ready = false;
 
 char wifi[] = {
     0b01110, 0b11111, 0b10001, 0b00100, 0b01110, 0b00000, 0b00100, 0b00000,

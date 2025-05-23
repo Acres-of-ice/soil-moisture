@@ -28,10 +28,7 @@ static TickType_t errorEntryTime = 0; // Track when we entered error state
 // bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
-extern espnow_recv_data_t recv_data;
-extern char last_sender_pcb_name[20];
-
-extern int counter;
+int counter = 1;
 
 bool errorConditionMet = false;
 
@@ -146,11 +143,9 @@ void updateValveState(void *pvParameters) {
     case STATE_IDLE:
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
-      if(isResetTime())
-      {
-        current_readings.soil_A =0;
-        current_readings.soil_B =0;
-
+      if (isResetTime()) {
+        current_readings.soil_A = 0;
+        current_readings.soil_B = 0;
       }
       // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
@@ -382,19 +377,18 @@ bool isWithinOFFTimeRange(void) {
 bool isResetTime(void) {
 
   char *timeStr = fetchTime();
-  int  hour, minute;
-    #ifndef CONFIG_RESET_HOUR
-  #define CONFIG_RESET_HOUR 8
-  #endif
-  
-  #ifndef CONFIG_RESET_MINUTE
-  #define CONFIG_RESET_MINUTE 0
-  #endif
+  int hour, minute;
+#ifndef CONFIG_RESET_HOUR
+#define CONFIG_RESET_HOUR 8
+#endif
+
+#ifndef CONFIG_RESET_MINUTE
+#define CONFIG_RESET_MINUTE 0
+#endif
   sscanf(timeStr, "%d-%d", &hour, &minute);
-  if (hour == CONFIG_RESET_HOUR && minute == CONFIG_RESET_MINUTE) 
-  {
+  if (hour == CONFIG_RESET_HOUR && minute == CONFIG_RESET_MINUTE) {
     return true;
-  }else{
-  return false;
+  } else {
+    return false;
   }
 }

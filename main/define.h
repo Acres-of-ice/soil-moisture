@@ -226,6 +226,18 @@ extern float mean_pressure;
 extern float tpipe_normal;
 extern float tpipe_hot;
 
+// ==================== ESP-NOW communication ====================
+typedef struct {
+  uint8_t
+      node_address;    // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
+  int soil_moisture;   // Soil moisture percentage (0-100)
+  float battery_level; // Battery level percentage (0-100)
+  int8_t rssi;         // Signal strength in dBm
+} espnow_recv_data_t;
+
+extern espnow_recv_data_t recv_data;
+extern char last_sender_pcb_name[20];
+
 // ==================== Miscellaneous Definitions ====================
 #define MAX_QUEUE_SIZE 8
 #define MAX_RETRIES 10
@@ -236,8 +248,6 @@ extern bool calibration_done;
 extern bool wifi_enabled, sta_enabled;
 extern bool SPRAY_mode, DRAIN_mode, AUTO_mode;
 extern float Twater_cal;
-
-extern bool inProgress;
 
 extern SemaphoreHandle_t DRAIN_NOTE_AckSemaphore;
 extern SemaphoreHandle_t SOURCE_NOTE_AckSemaphore;

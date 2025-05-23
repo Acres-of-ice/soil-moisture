@@ -24,8 +24,6 @@
 #include "valve_control.h"
 #include "wifi_app.h"
 
-int counter = 1;
-bool lcd_device_ready = false;
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
 bool gsm_init_success = false;
@@ -166,7 +164,7 @@ void app_main(void) {
   // esp_log_level_set("espnow_lib", ESP_LOG_INFO);
   esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
-   esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
+  esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
   // esp_log_level_set("GSM", ESP_LOG_DEBUG);
   // esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
   // esp_log_level_set("DATA", ESP_LOG_DEBUG);
