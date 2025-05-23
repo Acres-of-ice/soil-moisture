@@ -107,16 +107,16 @@ void b_btn_long_press(void) {
 }
 
 void c_btn_short_press(void) {
-  // snprintf(response_sms, sizeof(response_sms), "Counter:%d ",
-  // on_off_counter); ESP_LOGI(TAG, "%s", response_sms);
+  snprintf(response_sms, sizeof(response_sms), "Counter:%d ", counter);
+  ESP_LOGI(TAG, "%s", response_sms);
 
-  //   if (gsm_init_success) {
-  //     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
+  if (gsm_init_success) {
+    snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
 
-  // #if CONFIG_CONDUCTOR
-  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  // #endif
-  //  }
+#if CONFIG_CONDUCTOR
+    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+#endif
+  }
 }
 
 void c_btn_long_press(void) {
@@ -328,12 +328,9 @@ void button_task(void *pvParameters) {
           handle_button_event(1, &ev);
         else if (ev.pin == C_btn)
           handle_button_event(2, &ev);
-        // else if ((ev.pin == D_btn) && (!site_config.has_water_temp))
-        //   handle_button_event(3, &ev);
+        else if (ev.pin == D_btn)
+          handle_button_event(3, &ev);
       }
-      //    else if (nodeAddress == DRAIN_NOTE_ADDRESS) {
-      //     handle_feedback_buttons(&ev, nodeAddress);
-      //   }
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }
