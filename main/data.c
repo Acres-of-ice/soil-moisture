@@ -2,21 +2,21 @@
 #include "define.h"
 #include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
+#include "esp_spiffs.h"
 #include "esp_vfs_fat.h"
+#include "gsm.h"
+#include "http_server.h"
+#include "lcd.h"
+#include "rtc_operations.h"
 #include "sdmmc_cmd.h"
+#include "sensor.h"
+#include "valve_control.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-// #include "gsm.h"
-#include "esp_spiffs.h"
-#include "http_server.h"
-#include "lcd.h"
-#include "rtc_operations.h"
-#include "sensor.h"
-#include "valve_control.h"
 
 extern SemaphoreHandle_t spi_mutex;
 #define SHORT_SMS_BUFFER_SIZE 20
@@ -179,35 +179,10 @@ static int custom_log_function(const char *fmt, va_list args) {
         xSemaphoreGive(i2c_mutex);
       }
     }
-    //   if (gsm_init_success) {
-    //     snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag,
-    //     short_msg); sms_queue_message(CONFIG_SMS_ERROR_NUMBER,
-    //     sms_message);
-    //   } else if ((site_config.has_relay) && (g_nodeAddress != GSM_ADDRESS))
-    //   {
-    //     // LoRa error message handling
-    //     comm_t error_msg = {
-    //         .address = GSM_ADDRESS,
-    //         .command = 0xE0,
-    //         .source = g_nodeAddress,
-    //         .retries = 0,
-    //         .seq_num = sequence_number++,
-    //     };
-
-    //     snprintf(error_msg.data, sizeof(error_msg.data), "%s:%s", tag,
-    //              short_msg);
-
-    //     // Send error message with retries
-    //     for (int i = 0; i < 3; i++) {
-    //       error_msg.retries = i;
-    //       if (xQueueSend(message_queue, &error_msg, pdMS_TO_TICKS(100)) !=
-    //           pdPASS) {
-    //         ESP_LOGE(TAG, "Failed to queue error message");
-    //       }
-    //     }
-    //   }
-    // }
-    //
+    if (gsm_init_success) {
+      snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag, short_msg);
+      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    }
   }
 
   // Check if this log level should be printed based on ESP log level

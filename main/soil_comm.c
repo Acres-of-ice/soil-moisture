@@ -39,7 +39,7 @@ extern TaskHandle_t valveTaskHandle;
 #define MAX_RETRIES 10
 
 static time_t last_conductor_message_time = 0;
-static sensor_readings_t soil_readings = {99,99}; // Local buffer
+static sensor_readings_t soil_readings = {99, 99}; // Local buffer
 
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
@@ -70,9 +70,6 @@ uint8_t sequence_number = 0;
 
 int soil_A = 99;
 int soil_B = 99;
-
-int moisture_check_A = 99;
-int moisture_check_B = 99;
 
 espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
@@ -1006,10 +1003,8 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     // Update global readings if needed
     if (recv_data.node_address == SOIL_A_ADDRESS) {
       soil_readings.soil_A = recv_data.soil_moisture;
-      moisture_check_A = recv_data.soil_moisture;
     } else if (recv_data.node_address == SOIL_B_ADDRESS) {
       soil_readings.soil_B = recv_data.soil_moisture;
-      moisture_check_B = recv_data.soil_moisture;
     }
     // Now take mutex only for the quick copy operation
     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
@@ -1699,7 +1694,7 @@ bool verify_device_mappings(void) {
   // const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
   //                                     VALVE_B_ADDRESS, PUMP_ADDRESS,
   //                                     SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
-  const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
+  const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
                                       VALVE_B_ADDRESS, PUMP_ADDRESS};
 #endif
 

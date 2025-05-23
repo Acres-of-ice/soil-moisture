@@ -6,8 +6,8 @@
 #include "unistd.h"
 #include <driver/i2c_master.h>
 #include <math.h>
-// #include "modbus.h"
 
+#include "gsm.h"
 #include "sensor.h"
 #include "valve_control.h"
 
@@ -336,26 +336,15 @@ void update_lcd_row_one(const char *uptime_str,
            display_str, uptime_str, soilA_str, soilB_str, counter_str);
 }
 
-// void send_daily_status_sms(double uptime_days) {
-//   char sms_buffer[100];
-//   snprintf(sms_buffer, sizeof(sms_buffer), "%s PCB: %.2f days",
-//            CONFIG_SITE_NAME, uptime_days);
+void send_daily_status_sms(double uptime_days) {
+  char sms_buffer[100];
+  snprintf(sms_buffer, sizeof(sms_buffer), "%s PCB: %.2f days",
+           CONFIG_SITE_NAME, uptime_days);
 
-//   // if (IS_SITE("Likir")) {
-//   //
-//   //   // Update status if LCD is available
-//   //   update_status_message("LIKIR RESTART");
-//   //   ESP_LOGE(TAG, "LIKIR RESTART");
-//   //
-//   //   // Small delay to allow logging and status message to complete
-//   //   vTaskDelay(pdMS_TO_TICKS(3000));
-//   //   esp_restart();
-//   // }
-
-//   // Call your SMS sending function here
-//   //sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
-//   ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
-// }
+  // Call your SMS sending function here
+  sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
+  ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
+}
 
 void lcd_row_one_task(void *pvParameters) {
   if (!lcd_device_ready) {
@@ -376,8 +365,8 @@ void lcd_row_one_task(void *pvParameters) {
 
     // Check for day change
     int current_day = (int)current_uptime;
-    if ((first_run || current_day > last_day)) {
-      // send_daily_status_sms(current_uptime);
+    if ((first_run || current_day > last_day) && (gsm_init_success)) {
+      send_daily_status_sms(current_uptime);
       last_day = current_day;
       first_run = false;
     }

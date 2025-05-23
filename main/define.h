@@ -54,9 +54,9 @@ extern uint8_t sequence_number;
 #define C_btn 27 // Replace with actual GPIO pin for Backup button
 #define D_btn 15 // Replace with actual GPIO pin for Backup button
 
-#define RELAY_POSITIVE 6//26
-#define RELAY_NEGATIVE 7//27
-#define OE_PIN 5//12
+#define RELAY_POSITIVE 6 // 26
+#define RELAY_NEGATIVE 7 // 27
+#define OE_PIN 5         // 12
 
 #define PULSE_DURATION_MS 50
 
@@ -75,14 +75,16 @@ typedef struct {
 } data_statistics_t;
 extern data_statistics_t data_stats;
 
+// ==================== SMS Definitions ====================
+
+extern QueueHandle_t sms_evt_queue, sms_queue;
 #define SMS_BUFFER_SIZE 60
+#define SHORT_SMS_BUFFER_SIZE 20
 typedef struct {
   char phone_number[20];
   char message[SMS_BUFFER_SIZE];
 } sms_message_t;
-
-extern int moisture_check_A;
-extern int moisture_check_B;
+extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
 
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
