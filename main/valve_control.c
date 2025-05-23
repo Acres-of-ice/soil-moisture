@@ -246,6 +246,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(2000);
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -290,6 +291,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(2000);
       ESP_LOGI(TAG, "Closing Pump");
       newState = STATE_VALVE_B_CLOSE;
       break;
@@ -372,8 +374,7 @@ bool dripTimer(void) {
 }
 
 bool isResetTime(void) {
-
-#ifdef CONFIG_ENABLE_DRIP_TIMER
+#ifdef CONFIG_ENABLE_RESET_SENSOR_CONFIG
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
