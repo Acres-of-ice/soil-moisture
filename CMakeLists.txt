@@ -62,67 +62,69 @@ project(soil_moisture VERSION ${BASE_VERSION})
 # Optional: Print version information
 message(STATUS "Full version: ${PROJECT_VERSION}")
 
+# Optional: Print version information
+# message(STATUS "Flashing webapp")
 # spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
 
-# Create images directory
-file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)
-
-# Determine output filename based on configuration
-set(OUTPUT_BINARY_NAME ${CMAKE_PROJECT_NAME})
-
-if(CONFIG_MASTER AND CONFIG_SITE_NAME)
-    set(OUTPUT_BINARY_NAME "${CONFIG_SITE_NAME}_MASTER")
-elseif(CONFIG_SOIL_A)
-    set(OUTPUT_BINARY_NAME "SOIL_A")
-elseif(CONFIG_SOIL_B) 
-    set(OUTPUT_BINARY_NAME "SOIL_B")
-elseif(CONFIG_VALVE_A)
-    set(OUTPUT_BINARY_NAME "VALVE_A")
-elseif(CONFIG_VALVE_B)
-    set(OUTPUT_BINARY_NAME "VALVE_B")
-elseif(CONFIG_PUMP)
-    set(OUTPUT_BINARY_NAME "PUMP")
-endif()
-
-# Custom target to handle all image copying
-add_custom_target(create_images ALL
-    DEPENDS ${CMAKE_PROJECT_NAME}.elf
-    COMMENT "Creating images with proper naming"
-)
-
-# Copy main binary with appropriate name
-add_custom_command(TARGET create_images POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy 
-        ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin 
-        ${CMAKE_SOURCE_DIR}/images/${OUTPUT_BINARY_NAME}.bin
-    COMMENT "Copying ${OUTPUT_BINARY_NAME}.bin to images/"
-)
-
-# Copy partition table with size-specific naming
-if(CONFIG_MASTER)
-    set(PARTITION_TABLE_NAME "partition_table_8MB.bin")
-else()
-    set(PARTITION_TABLE_NAME "partition_table_4MB.bin")
-endif()
-
-add_custom_command(TARGET create_images POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy 
-        ${CMAKE_BINARY_DIR}/partition_table/partition-table.bin 
-        ${CMAKE_SOURCE_DIR}/images/${PARTITION_TABLE_NAME}
-    COMMENT "Copying ${PARTITION_TABLE_NAME} to images/"
-)
-
-# Copy bootloader
-add_custom_command(TARGET create_images POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy 
-        ${CMAKE_BINARY_DIR}/bootloader/bootloader.bin 
-        ${CMAKE_SOURCE_DIR}/images/bootloader.bin
-    COMMENT "Copying bootloader.bin to images/"
-)
-
-# Optional: Clean target for images
-add_custom_target(clean_images
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/images
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/images
-    COMMENT "Cleaning images directory"
-)
+# # Create images directory
+# file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)
+#
+# # Determine output filename based on configuration
+# set(OUTPUT_BINARY_NAME ${CMAKE_PROJECT_NAME})
+#
+# if(CONFIG_MASTER AND CONFIG_SITE_NAME)
+#     set(OUTPUT_BINARY_NAME "${CONFIG_SITE_NAME}_MASTER")
+# elseif(CONFIG_SOIL_A)
+#     set(OUTPUT_BINARY_NAME "SOIL_A")
+# elseif(CONFIG_SOIL_B) 
+#     set(OUTPUT_BINARY_NAME "SOIL_B")
+# elseif(CONFIG_VALVE_A)
+#     set(OUTPUT_BINARY_NAME "VALVE_A")
+# elseif(CONFIG_VALVE_B)
+#     set(OUTPUT_BINARY_NAME "VALVE_B")
+# elseif(CONFIG_PUMP)
+#     set(OUTPUT_BINARY_NAME "PUMP")
+# endif()
+#
+# # Custom target to handle all image copying
+# add_custom_target(create_images ALL
+#     DEPENDS ${CMAKE_PROJECT_NAME}.elf
+#     COMMENT "Creating images with proper naming"
+# )
+#
+# # Copy main binary with appropriate name
+# add_custom_command(TARGET create_images POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy 
+#         ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin 
+#         ${CMAKE_SOURCE_DIR}/images/${OUTPUT_BINARY_NAME}.bin
+#     COMMENT "Copying ${OUTPUT_BINARY_NAME}.bin to images/"
+# )
+#
+# # Copy partition table with size-specific naming
+# if(CONFIG_MASTER)
+#     set(PARTITION_TABLE_NAME "partition_table_8MB.bin")
+# else()
+#     set(PARTITION_TABLE_NAME "partition_table_4MB.bin")
+# endif()
+#
+# add_custom_command(TARGET create_images POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy 
+#         ${CMAKE_BINARY_DIR}/partition_table/partition-table.bin 
+#         ${CMAKE_SOURCE_DIR}/images/${PARTITION_TABLE_NAME}
+#     COMMENT "Copying ${PARTITION_TABLE_NAME} to images/"
+# )
+#
+# # Copy bootloader
+# add_custom_command(TARGET create_images POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy 
+#         ${CMAKE_BINARY_DIR}/bootloader/bootloader.bin 
+#         ${CMAKE_SOURCE_DIR}/images/bootloader.bin
+#     COMMENT "Copying bootloader.bin to images/"
+# )
+#
+# # Optional: Clean target for images
+# add_custom_target(clean_images
+#     COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/images
+#     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/images
+#     COMMENT "Cleaning images directory"
+# )
