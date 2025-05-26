@@ -59,6 +59,11 @@ menu "App Configuration"
         default n if MASTER
         default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
+    config ESPTOOLPY_FLASHSIZE_2MB
+        string
+        default "n" if MASTER
+        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
         default "partitions/master.csv" if MASTER
