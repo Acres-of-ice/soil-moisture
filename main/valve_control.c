@@ -159,7 +159,7 @@ void updateValveState(void *pvParameters) {
         current_readings.soil_A = 0;
         current_readings.soil_B = 0;
       }
-      //get_sensor_readings(&current_readings);
+      get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
       ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");

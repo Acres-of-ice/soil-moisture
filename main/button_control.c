@@ -316,6 +316,7 @@ void button_task(void *pvParameters) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
+    
     if (xQueueReceive(button_events, &ev, pdMS_TO_TICKS(1000))) {
       if (nodeAddress == MASTER_ADDRESS) {
         if (ev.pin == A_btn)

@@ -73,11 +73,92 @@ void soil_sensor_init(void) {
   ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
 }
 
+// #define SAMPLE_WINDOW 16  // Power of 2 for efficient filtering
+
+// typedef struct {
+//     int samples[SAMPLE_WINDOW];
+//     int index;
+//     int sum;
+// } adc_filter_t;
+
+// static adc_filter_t moisture_filter = {0};
+
+// int filtered_adc_read(adc_oneshot_unit_handle_t handle, int channel) {
+//     int raw_value;
+    
+//     // Multi-stage sampling
+//     int stage1 = 0;
+//     for (int i = 0; i < 4; i++) {
+//         adc_oneshot_read(handle, channel, &raw_value);
+//         stage1 += raw_value;
+//         ets_delay_us(50); // Spread out samples
+//     }
+//     raw_value = stage1 / 4;
+    
+//     // Moving average filter update
+//     moisture_filter.sum -= moisture_filter.samples[moisture_filter.index];
+//     moisture_filter.samples[moisture_filter.index] = raw_value;
+//     moisture_filter.sum += raw_value;
+//     moisture_filter.index = (moisture_filter.index + 1) % SAMPLE_WINDOW;
+    
+//     return moisture_filter.sum / SAMPLE_WINDOW;
+// }
+
 /**
  * @brief Read soil moisture from ADC and convert to percentage
  *
  * @return int Moisture percentage (0-100) or -1 on error
  */
+
+//  int read_soil_moisture(void) {
+//     if (adc1_handle == NULL) {
+//         ESP_LOGE(TAG, "ADC not initialized");
+//         return -1;
+//     }
+
+//     // Get filtered reading
+//     int raw_moisture = filtered_adc_read(adc1_handle, SOIL_ADC_CHANNEL);
+
+//     // Median filter for additional stability
+//     static int median_buffer[5] = {0};
+//     static int median_index = 0;
+//     median_buffer[median_index] = raw_moisture;
+//     median_index = (median_index + 1) % 5;
+    
+//     // Simple median (sort 3 middle values)
+//     int temp[5];
+//     memcpy(temp, median_buffer, sizeof(temp));
+//     for(int i = 0; i < 3; i++) {
+//         for(int j = i+1; j < 5; j++) {
+//             if(temp[j] < temp[i]) {
+//                 int swap = temp[i];
+//                 temp[i] = temp[j];
+//                 temp[j] = swap;
+//             }
+//         }
+//     }
+//     raw_moisture = temp[2]; // Take median value
+
+//     // Rest of your calibration remains the same
+//     int calibrated_moisture;
+//     #if CONFIG_SOIL_A
+//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+//                          (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+//     #endif
+
+//     #if CONFIG_SOIL_B
+//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+//                          (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+//     #endif
+
+//     // Clamp to valid range
+//     calibrated_moisture = MAX(0, MIN(100, calibrated_moisture));
+
+//     ESP_LOGD(TAG, "Filtered soil moisture ADC raw: %d -> %d%%", 
+//              raw_moisture, calibrated_moisture);
+//     return calibrated_moisture;
+// }
+
 int read_soil_moisture(void) {
   if (adc1_handle == NULL) {
     ESP_LOGE(TAG, "ADC not initialized");
@@ -87,9 +168,10 @@ int read_soil_moisture(void) {
   // Read multiple samples and average for stability
   const int NUM_SAMPLES = 5;
   int total = 0;
+  int raw_value = 0;
 
   for (int i = 0; i < NUM_SAMPLES; i++) {
-    int raw_value = 0;
+    
     esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &raw_value);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
@@ -101,7 +183,7 @@ int read_soil_moisture(void) {
 
   int raw_moisture = total / NUM_SAMPLES;
 
-  // Calibrate moisture value using pre-defined ranges
+  //Calibrate moisture value using pre-defined ranges
   int calibrated_moisture;
    #if CONFIG_SOIL_A
    calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
@@ -121,7 +203,8 @@ int read_soil_moisture(void) {
 
   ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
            calibrated_moisture);
-  return calibrated_moisture;
+  //return calibrated_moisture;
+  return raw_value;
 }
 
 /**
