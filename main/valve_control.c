@@ -147,7 +147,7 @@ void updateValveState(void *pvParameters) {
         current_readings.soil_A = 0;
         current_readings.soil_B = 0;
       }
-      // get_sensor_readings(&current_readings);
+      //get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
       ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
@@ -363,7 +363,7 @@ bool dripTimer(void) {
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-  return !(
+  return (
       (hour > CONFIG_DRIP_START_HOUR || (hour == CONFIG_DRIP_START_HOUR &&
                                          minute >= CONFIG_DRIP_START_MINUTE)) &&
       (hour < CONFIG_DRIP_END_HOUR ||
