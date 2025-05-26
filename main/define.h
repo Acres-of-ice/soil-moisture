@@ -7,6 +7,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 

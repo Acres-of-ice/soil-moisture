@@ -1,4 +1,5 @@
 #include "lcd.h"
+#include "define.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "i2cdev.h"
