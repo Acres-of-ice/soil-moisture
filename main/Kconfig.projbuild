@@ -291,14 +291,14 @@ menu "Time Configuration"
 
     config STATE_TIMEOUT_M
         int "State machine timeout (minutes)"
-        default 5
-        range 1 60
+        default 60
+        range 1 180
         help
             Timeout for state machine in minutes.
 
     config IRRIGATION_TIMEOUT_M
         int "Irrigation timeout (minutes)"
-        default 5
+        default 45
         range 1 60
         help
             Timeout for state machine in minutes.
@@ -318,6 +318,7 @@ menu "Time Configuration"
         range 1 60
         help
             Interval for keeping server on
+
     config SMS_INTERVAL_M
         int "Hex data and sms send interval (minutes)"
         default 10 if SITE_TEST
@@ -325,14 +326,6 @@ menu "Time Configuration"
         range 1 60
         help
             Timeout for SMS and HEX  in minutes.
-
-    config MODE_TIMEOUT_M
-        int "Mode timeout (minutes)"
-        default 3 if SITE_TEST
-        default 3
-        range 1 30
-        help
-            Timeout for mode operations in minutes.
 
     config DATA_TIME_M
         int "Data logging interval (minutes)"

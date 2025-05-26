@@ -63,8 +63,7 @@ void a_btn_long_press(void) {
   ESP_LOGI(TAG, "Calibration reset");
   //   calibration_done = false;
   //   mean_fountain_pressure = 0;
-  static char
-      display_calibration[5]; // Buffer to hold the string representation
+  // static char display_calibration[5];
   // int calibration_value = (int)(mean_fountain_pressure);
   //   snprintf(display_calibration, sizeof(display_calibration), "%2dP",
   // //            calibration_value);
