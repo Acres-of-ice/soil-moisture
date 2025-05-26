@@ -150,8 +150,6 @@ default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
 default "+918902270142" if SMS_RECIPIENT_ERROR_PRIYAM
 default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
 
-
-
 config ENABLE_HW
     bool "Enable Hardware Configuration"
     default false

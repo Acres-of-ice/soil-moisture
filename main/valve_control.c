@@ -1,5 +1,6 @@
 #include "valve_control.h"
 
+#include "define.h"
 #include "esp_log.h"
 #include "freertos/projdefs.h"
 #include <stdlib.h>
@@ -84,6 +85,10 @@ const char *valveStateToString(ValveState state) {
     return "PUMP OFF";
   case STATE_PUMP_OFF_B:
     return "PUMP OFF";
+  case STATE_IRR_DONE_A:
+    return "IRR A Done";
+  case STATE_IRR_DONE_B:
+    return "IRR B Done";
   case STATE_ERROR:
     return "SM Error";
   default:
@@ -137,6 +142,13 @@ void updateValveState(void *pvParameters) {
 
     // Add timeout check
     ValveState newState = getCurrentState(); // Start with current state
+    if (isStateTimedOut(newState)) {
+      ESP_LOGE(TAG, "Timeout State machine");
+      setCurrentState(STATE_IDLE);
+      reset_acknowledgements();
+      vTaskDelay(pdMS_TO_TICKS(1000)); // Short delay before continuing
+      continue;
+    }
 
     switch (newState) {
 
@@ -172,7 +184,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(100000)); // 100 seconds
+      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // 100 seconds
       newState = STATE_PUMP_ON_A;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -228,7 +240,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(100000)); // 100,000 milliseconds = 100 seconds
+      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
@@ -354,16 +366,12 @@ void setCurrentState(ValveState newState) {
   }
 }
 
-bool isTimeoutReached(TickType_t timeout) {
-  return (xTaskGetTickCount() - stateEntryTime) >= pdMS_TO_TICKS(timeout);
-}
-
 bool dripTimer(void) {
 #ifdef CONFIG_ENABLE_DRIP_TIMER
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-  return !(
+  return (
       (hour > CONFIG_DRIP_START_HOUR || (hour == CONFIG_DRIP_START_HOUR &&
                                          minute >= CONFIG_DRIP_START_MINUTE)) &&
       (hour < CONFIG_DRIP_END_HOUR ||
