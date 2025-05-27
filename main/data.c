@@ -2,21 +2,21 @@
 #include "define.h"
 #include "driver/sdmmc_host.h"
 #include "driver/sdspi_host.h"
+#include "esp_spiffs.h"
 #include "esp_vfs_fat.h"
+#include "gsm.h"
+#include "http_server.h"
+#include "lcd.h"
+#include "rtc_operations.h"
 #include "sdmmc_cmd.h"
+#include "sensor.h"
+#include "valve_control.h"
 #include <dirent.h>
 #include <errno.h>
 #include <math.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-// #include "gsm.h"
-#include "esp_spiffs.h"
-#include "http_server.h"
-#include "lcd.h"
-#include "rtc_operations.h"
-#include "sensor.h"
-#include "valve_control.h"
 
 extern SemaphoreHandle_t spi_mutex;
 #define SHORT_SMS_BUFFER_SIZE 20
@@ -37,6 +37,62 @@ const char *DATA_FILE_HEADER =
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
+data_statistics_t data_stats = {0};
+
+// Initialize moving average structure
+void init_data_statistics(void) {
+  memset(&data_stats, 0, sizeof(data_statistics_t));
+  strncpy(data_stats.last_data_time, fetchTime(),
+          sizeof(data_stats.last_data_time) - 1);
+  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
+
+  // Try to load previous statistics from SPIFFS if you want persistence
+  // This is optional but useful to maintain counts across reboots
+  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "rb");
+  if (stats_file != NULL) {
+    fread(&data_stats, sizeof(data_statistics_t), 1, stats_file);
+    fclose(stats_file);
+    ESP_LOGI(TAG, "Loaded existing statistics: %lu total data points",
+             data_stats.total_data_points);
+  }
+}
+
+void save_data_statistics(void) {
+  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "wb");
+  if (stats_file != NULL) {
+    fwrite(&data_stats, sizeof(data_statistics_t), 1, stats_file);
+    fclose(stats_file);
+  }
+}
+
+void update_data_statistics(const char *site_name) {
+  data_stats.total_data_points++;
+  strncpy(data_stats.last_data_time, fetchTime(),
+          sizeof(data_stats.last_data_time) - 1);
+  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
+
+  // Update site-specific counter
+  if (strcmp(site_name, "Sk") == 0) {
+    data_stats.site_data_points[0]++;
+  }
+  // Save statistics periodically (e.g., every 10 data points)
+  if (data_stats.total_data_points % 10 == 0) {
+    save_data_statistics();
+  }
+}
+
+void print_data_statistics(void) {
+  ESP_LOGI(TAG, "Data Collection Statistics:");
+  ESP_LOGI(TAG, "------------------------");
+  ESP_LOGI(TAG, "Total data points: %lu", data_stats.total_data_points);
+  ESP_LOGI(TAG, "Last data received: %s", data_stats.last_data_time);
+  ESP_LOGI(TAG, "Distribution by site:");
+  ESP_LOGI(TAG, "  Skuast: %lu (%.1f%%)", data_stats.site_data_points[0],
+           (data_stats.total_data_points > 0)
+               ? (float)data_stats.site_data_points[0] * 100.0f /
+                     data_stats.total_data_points
+               : 0.0f);
+}
 
 static int custom_log_function(const char *fmt, va_list args) {
   char buffer[512];
@@ -123,35 +179,10 @@ static int custom_log_function(const char *fmt, va_list args) {
         xSemaphoreGive(i2c_mutex);
       }
     }
-    //   if (gsm_init_success) {
-    //     snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag,
-    //     short_msg); sms_queue_message(CONFIG_SMS_ERROR_NUMBER,
-    //     sms_message);
-    //   } else if ((site_config.has_relay) && (g_nodeAddress != GSM_ADDRESS))
-    //   {
-    //     // LoRa error message handling
-    //     comm_t error_msg = {
-    //         .address = GSM_ADDRESS,
-    //         .command = 0xE0,
-    //         .source = g_nodeAddress,
-    //         .retries = 0,
-    //         .seq_num = sequence_number++,
-    //     };
-
-    //     snprintf(error_msg.data, sizeof(error_msg.data), "%s:%s", tag,
-    //              short_msg);
-
-    //     // Send error message with retries
-    //     for (int i = 0; i < 3; i++) {
-    //       error_msg.retries = i;
-    //       if (xQueueSend(message_queue, &error_msg, pdMS_TO_TICKS(100)) !=
-    //           pdPASS) {
-    //         ESP_LOGE(TAG, "Failed to queue error message");
-    //       }
-    //     }
-    //   }
-    // }
-    //
+    if (gsm_init_success) {
+      snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag, short_msg);
+      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    }
   }
 
   // Check if this log level should be printed based on ESP log level
@@ -288,7 +319,7 @@ void dataLoggingTask(void *pvParameters) {
              "%s,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", fetchTime(),
              counter, data_readings.soil_A, data_readings.soil_B,
              data_readings.temperature, data_readings.humidity,
-             data_readings.voltage, data_readings.fountain_pressure,
+             data_readings.voltage, data_readings.pressure,
              data_readings.water_temp, data_readings.discharge);
 
     // Added error handling for file append operation

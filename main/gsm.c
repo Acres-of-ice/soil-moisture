@@ -1,7 +1,7 @@
 #include "gsm.h"
-//#include "button_control.h"
+#include "button_control.h"
 #include "data.h"
-
+#include "define.h"
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -11,10 +11,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-
+#include "hex_data.h"
 #include "lcd.h"
 #include "rtc_operations.h"
 #include "sensor.h"
+#include "tasks_common.h"
 #include "valve_control.h"
 
 #include <ctype.h>
@@ -23,48 +24,13 @@
 
 static const char *TAG = "GSM";
 
-extern TaskHandle_t smsTaskHandle;
-extern TaskHandle_t smsReceiveTaskHandle;
-extern TaskHandle_t smsManagerTaskHandle;
 #define SMS_BUFFER_SIZE 60
-#define SHORT_SMS_BUFFER_SIZE 20
-#define SMS_CHECK_MS (1 * 60000)
-
-#define SIM_GPIO GPIO_NUM_13
-
-#define SITE_NAME_LENGTH 2  // Fixed length for site name
-#define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
-#define HEX_SIZE                                                               \
-  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
-   sizeof(uint16_t) *                                                          \
-       6)
-
-typedef struct {
-        char phone_number[20];
-        char message[SMS_BUFFER_SIZE];
-      } sms_message_t;
-extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
-extern bool http_server_active;
-
-#ifdef CONFIG_AWS
-#define SMS_BUFFER_SIZE 200
-#endif
-
-
 static char sms_buffer[SMS_BUFFER_SIZE];
 QueueHandle_t sms_evt_queue = NULL;
 QueueHandle_t sms_queue = NULL;
 static char cmd_buffer[64];               // Smaller static buffer for commands
 static char last_recovery_time[20] = {0}; // Store last recovery attempt time
 static char last_queued_message[SMS_BUFFER_SIZE] = {0};
-bool gsm_init_success = false;
-
-// void handle_get_temps(void) {
-//   static char temps_msg[100];
-//   snprintf(temps_msg, sizeof(temps_msg), "Hot:%.1f Normal:%.1f", tpipe_hot,
-//            tpipe_normal);
-//   sms_queue_message(CONFIG_SMS_ERROR_NUMBER, temps_msg);
-// }
 
 // Helper function to convert string to lowercase
 static void str_to_lower(char *str) {
@@ -133,7 +99,7 @@ int sim800c_read_response(char *buffer, int len) {
       uart_read_bytes(GSM_UART_NUM, buffer, len - 1, pdMS_TO_TICKS(1000));
   if (rxBytes > 0) {
     buffer[rxBytes] = 0; // Null-terminate the string
-    ESP_LOGD(TAG, "Bytes read: %d", rxBytes);
+    // ESP_LOGD(TAG, "Bytes read: %d", rxBytes);
     ESP_LOGD(TAG, "Response: %s", buffer);
   }
   return rxBytes;
@@ -197,129 +163,6 @@ void extract_sms(const char *buffer, int buffer_len) {
   } else {
     ESP_LOGW(TAG, "SMS too long for buffer (%d bytes)", sms_length);
   }
-}
-
-bool process_sms_command(const char *message) {
-  if (!message || strlen(message) == 0) {
-    ESP_LOGW(TAG, "Empty or null message received");
-    return false;
-  }
-
-  // Create local buffer with bounds checking
-  static char cmd[32];
-  static float temp_value;
-
-  size_t msg_len = strlen(message);
-  if (msg_len >= sizeof(cmd)) {
-    ESP_LOGW(TAG, "Message too long: %d chars", msg_len);
-    return false;
-  }
-
-  // Copy message and convert to lowercase
-  strncpy(cmd, message, sizeof(cmd) - 1);
-  cmd[sizeof(cmd) - 1] = '\0'; // Ensure null termination
-  str_to_lower(cmd);
-
-  // Remove any trailing whitespace or newlines
-  char *end = cmd + strlen(cmd) - 1;
-  while (end > cmd && isspace((unsigned char)*end)) {
-    *end = '\0';
-    end--;
-  }
-
-  // Check for temperature setting commands
-//   if (sscanf(cmd, "hot:%f", &temp_value) == 1) {
-//     if (temp_value > 0 && temp_value < 50) {
-//       tpipe_hot = temp_value;
-//       char response[50];
-//       snprintf(response, sizeof(response), "Hot pipe set to %.1f", tpipe_hot);
-//       sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
-//     } else {
-//       sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
-//     }
-//     return true;
-//   } else if (sscanf(cmd, "nor:%f", &temp_value) == 1) {
-//     if (temp_value > 0 && temp_value < 50) {
-//       tpipe_normal = temp_value;
-//       char response[50];
-//       snprintf(response, sizeof(response), "Normal pipe set to %.1f",
-//                tpipe_normal);
-//       sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response);
-//     } else {
-//       sms_queue_message(CONFIG_SMS_ERROR_NUMBER, "Invalid temperature (0-50)");
-//     }
-//     return true;
-//   }
-  // Look up command in mapping and execute if found
-//   for (const sms_command_t *command = sms_commands; command->command != NULL;
-//        command++) {
-//     if (strcmp(cmd, command->command) == 0) {
-//       ESP_LOGI(TAG, "Executing command: %s", cmd);
-//       command->handler();
-//       return true;
-//     }
-//   }
-
-  ESP_LOGW(TAG, "Unknown command received: %s", cmd);
-  return false;
-}
-
-bool format_and_save_hex_data(const char *json_str) {
-  if (json_str == NULL) {
-    ESP_LOGW(TAG, "Invalid JSON string");
-    return false;
-  }
-
-  // Create space for the parsed data
-  char site_name[SITE_NAME_LENGTH + 1] = {0}; // +1 for null terminator
-  char timestamp[32] = {0};
-  float temperature = 0.0f;
-  unsigned int counter = 0;
-  float wind = 0.0f;
-  float fountain_pressure = 0.0f;
-  float water_temp = 0.0f;
-  float discharge = 0.0f;
-  static char data_entry[256];
-
-  // Parse values according to your exact JSON format
-  if (sscanf(json_str,
-             "{\"site_name\":\"%[^\"]\","
-             "\"temperature\":%f,"
-             "\"counter\":%u,"
-             "\"wind\":%f,"
-             "\"fountain_pressure\":%f,"
-             "\"water_temp\":%f,"
-             "\"discharge\":%f,"
-             "\"timestamp\":\"%[^\"]\"}",
-             site_name, &temperature, &counter, &wind, &fountain_pressure,
-             &water_temp, &discharge, timestamp) != 8) {
-    ESP_LOGW(TAG, "Failed to parse JSON data: %s", json_str);
-    return false;
-  }
-
-  // Format data entry with the counter from hex data instead of on_off_counter
-  snprintf(data_entry, sizeof(data_entry),
-           "%s,%s,%u,%.2f,%.2f,%.2f,%.2f,%.2f\n", site_name, timestamp,
-           counter,     // Using counter from hex data
-           temperature, // Values are already scaled (/10.0f) in decode function
-           0.0f,        // Humidity not provided in hex data
-           wind, fountain_pressure, water_temp);
-
-//   if (!appendFile(data_path, data_entry)) {
-//     ESP_LOGW(TAG, "Failed to append hex data to data file: %s", data_entry);
-//     return false;
-//   }
-
-  // Update statistics with extracted site name
-  //update_data_statistics(site_name);
-
-  // Print statistics periodically
-  // if (data_stats.total_data_points % 2 == 0) {
-  print_data_statistics();
-  // }
-
-  ESP_LOGI(TAG, "Hex data saved from site %s: %s", site_name, data_entry);
-  return true;
 }
 
 esp_err_t gsm_init(void) {
@@ -441,18 +284,6 @@ esp_err_t gsm_init(void) {
   return ESP_OK;
 }
 
-// void sms_queue_message(const char *phone_number, const char *message) {
-//   sms_message_t sms = {0};
-//   strncpy(sms.phone_number, phone_number, sizeof(sms.phone_number) - 1);
-//   strncpy(sms.message, message, sizeof(sms.message) - 1);
-//
-//   if (xQueueSend(sms_queue, &sms, 0) != pdPASS) {
-//     ESP_LOGW(TAG, "Failed to queue SMS");
-//   } else {
-//     ESP_LOGI(TAG, "Queued SMS to number %s", phone_number);
-//   }
-// }
-//
 void sms_queue_message(const char *phone_number, const char *message) {
   // Skip if the message is the same as the last one
   if (strcmp(last_queued_message, message) == 0) {
@@ -479,7 +310,7 @@ void sms_receive_task(void *pvParameters) {
 
   static char buffer[SMS_BUFFER_SIZE] = {0};
   int bytes_read = 0;
- // hex_data_t decoded_data;
+  hex_data_t decoded_data;
   for (;;) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGW(TAG, "Low stack in SMS receive task: %d",
@@ -511,55 +342,33 @@ void sms_receive_task(void *pvParameters) {
         continue;
       }
       ESP_LOGI(TAG, "SMS: %s", sms_buffer);
-      if (process_sms_command(sms_buffer)) {
-        ESP_LOGD(TAG, "%s command", sms_buffer);
-        continue;
-      } 
-     // else {
-        // if (is_hex_data_message(sms_buffer)) {
-        //   if (decode_hex_data(sms_buffer, &decoded_data) == ESP_OK) {
-        //     // Convert to JSON for easier processing/display
-        //     char *json_str = decode_hex_to_json(sms_buffer);
-        //     if (json_str != NULL) {
-        //       ESP_LOGI(TAG, "Decoded hex data: %s", json_str);
-        //       if (add_payload_to_buffer(json_str) != ESP_OK) {
-        //         ESP_LOGW(TAG, "Failed to add payload to buffer");
-        //       }
-        //       // Save to data.csv
-        //       if (!format_and_save_hex_data(json_str)) {
-        //         ESP_LOGW(TAG, "Failed to save hex data to CSV");
-        //       }
-        //       // Process the decoded data as needed
-        //       free(json_str);
-        //     }
-        //   } else {
-        //     ESP_LOGW(TAG, "Failed to decode hex data");
-        //   }
-        // }
-    //  }
+      // if (process_sms_command(sms_buffer)) {
+      //   ESP_LOGD(TAG, "%s command", sms_buffer);
+      //   continue;
+      // } else {
+      //   if (is_hex_data_message(sms_buffer)) {
+      //     if (decode_hex_data(sms_buffer, &decoded_data) == ESP_OK) {
+      //       // Convert to JSON for easier processing/display
+      //       char *json_str = decode_hex_to_json(sms_buffer);
+      //       if (json_str != NULL) {
+      //         ESP_LOGI(TAG, "Decoded hex data: %s", json_str);
+      //         if (add_payload_to_buffer(json_str) != ESP_OK) {
+      //           ESP_LOGW(TAG, "Failed to add payload to buffer");
+      //         }
+      //         // // Save to data.csv
+      //         // if (!format_and_save_hex_data(json_str)) {
+      //         //   ESP_LOGW(TAG, "Failed to save hex data to CSV");
+      //         // }
+      //         // Process the decoded data as needed
+      //         free(json_str);
+      //       }
+      //     } else {
+      //       ESP_LOGW(TAG, "Failed to decode hex data");
+      //     }
+      //   }
+      // }
     }
   }
-}
-
-esp_err_t power_cycle_gsm(void) {
-  ESP_LOGI(TAG, "Power cycling GSM module...");
-
-  // Power down GSM module
-  gpio_set_level(SIM_GPIO, 0);
-  vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 seconds
-
-  // Power up GSM module
-  gpio_set_level(SIM_GPIO, 1);
-  vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds for module to initialize
-
-  // Re-initialize GSM
-  esp_err_t ret = gsm_init();
-  if (ret != ESP_OK) {
-    ESP_LOGW(TAG, "GSM re-initialization failed after power cycle");
-    return ESP_FAIL;
-  }
-
-  return ESP_OK;
 }
 
 int8_t check_gsm_signal(void) {
@@ -572,16 +381,13 @@ int8_t check_gsm_signal(void) {
   sim800c_send_command("AT");
   vTaskDelay(pdMS_TO_TICKS(100)); // Reduced delay
   sim800c_read_response(buffer, sizeof(buffer));
-  // sim800c_read_response(cmd_buffer, sizeof(cmd_buffer));
 
   // If first AT fails, do one retry with longer delay
   if (strstr(buffer, "OK") == NULL) {
-    // if (strstr(cmd_buffer, "OK") == NULL) {
     ESP_LOGW(TAG, "Initial AT check failed, retrying with longer delay");
     vTaskDelay(pdMS_TO_TICKS(500));
     sim800c_send_command("AT");
     vTaskDelay(pdMS_TO_TICKS(200));
-    // sim800c_read_response(cmd_buffer, sizeof(cmd_buffer));
     sim800c_read_response(buffer, sizeof(buffer));
 
     if (strstr(buffer, "OK") == NULL) {
@@ -593,20 +399,16 @@ int8_t check_gsm_signal(void) {
   // Now check signal strength
   while (retry_count < max_retries) {
     memset(buffer, 0, sizeof(buffer));
-    // memset(cmd_buffer, 0, sizeof(cmd_buffer));
 
     // Send CSQ command with longer timeout
     sim800c_send_command("AT+CSQ");
     vTaskDelay(pdMS_TO_TICKS(300)); // Increased waiting time
 
     int rx_len = sim800c_read_response(buffer, sizeof(buffer));
-    // int rx_len = sim800c_read_response(cmd_buffer, sizeof(cmd_buffer));
     if (rx_len > 0) {
-      // ESP_LOGD(TAG, "CSQ Response: %s", cmd_buffer);
       ESP_LOGD(TAG, "CSQ Response: %s", buffer);
 
       // More lenient response parsing
-      // char *csq_start = strstr(cmd_buffer, "+CSQ:");
       char *csq_start = strstr(buffer, "+CSQ:");
       if (csq_start != NULL) {
         int rssi, ber;
@@ -775,46 +577,13 @@ bool send_sms(const char *phone_number, const char *message) {
   return false;
 }
 
-/**
- * Checks if free heap memory is below a threshold and restarts the ESP32 if
- * needed
- * @param threshold_bytes The minimum acceptable heap size in bytes
- * @return true if memory is sufficient, false if restart was initiated
- */
-bool check_heap_and_restart_if_low(size_t threshold_bytes) {
-  // Get current free heap size
-  size_t free_heap = xPortGetFreeHeapSize();
-
-  // Log current heap status at debug level
-  ESP_LOGD(TAG, "Current free heap: %zu bytes (threshold: %zu bytes)",
-           free_heap, threshold_bytes);
-
-  // Check if heap is below threshold
-  if (free_heap < threshold_bytes) {
-    ESP_LOGE(TAG, "%zu bytes Free ", free_heap);
-    ESP_LOGW(TAG, "System will restart in 3 seconds...");
-
-    // Update status if LCD is available
-    update_status_message("LOW MEMORY RESTART");
-
-    // Small delay to allow logging and status message to complete
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    // Restart the ESP32
-    esp_restart();
-    return false; // This line won't execute but included for clarity
-  }
-
-  return true;
-}
-
 void unified_sms_task(void *pvParameters) {
   TickType_t last_check_time = xTaskGetTickCount();
   const TickType_t signal_check_period = pdMS_TO_TICKS(SMS_CHECK_MS);
   static char buffer[SMS_BUFFER_SIZE] = {0};
   static sms_message_t sms = {0};
   uint32_t io_num;
-  //hex_data_t decoded_data;
+  hex_data_t decoded_data;
   char *payload = NULL;
 
   while (1) {
@@ -825,21 +594,11 @@ void unified_sms_task(void *pvParameters) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
-    // Check heap memory every loop iteration - adjust threshold as needed
-    // 10KB (10240 bytes) minimum free heap threshold
-    check_heap_and_restart_if_low(10240);
-
-    // HTTP server check
-    if (http_server_active) {
-      ESP_LOGD(TAG, "HTTP server active, suspending SMS operations");
-      vTaskSuspend(NULL);
-      continue;
-    }
 
     // Regular signal strength check
     if (xTaskGetTickCount() - last_check_time >= signal_check_period) {
       int8_t signal = check_gsm_signal();
-      ESP_LOGD(TAG, "Signal strength check: %d", signal);
+      // ESP_LOGD(TAG, "Signal strength check: %d", signal);
 
       if (signal <= 1 && !sms_state.tasks_deleted) {
         ESP_LOGW(TAG, "Poor signal strength (%d)", signal);
@@ -881,56 +640,46 @@ void unified_sms_task(void *pvParameters) {
       continue;
     }
 
-    // Handle incoming SMS
-    if (xQueueReceive(sms_evt_queue, &io_num, 0) == pdTRUE) {
-      ESP_LOGD(TAG, "SMS Interrupt Received");
-      vTaskDelay(pdMS_TO_TICKS(100));
-
-      int bytes_read = sim800c_read_response(buffer, sizeof(buffer));
-      if (bytes_read > 0) {
-        extract_sms(buffer, bytes_read);
-        // if (strlen(sms_buffer) > 0) {
-        //   ESP_LOGI(TAG, "Received SMS: %s", sms_buffer);
-        //   if (!process_sms_command(sms_buffer) &&
-        //       is_hex_data_message(sms_buffer)) {
-        //     if (decode_hex_data(sms_buffer, &decoded_data) == ESP_OK) {
-        //       char *json_str = decode_hex_to_json(sms_buffer);
-        //       if (json_str) {
-        //         add_payload_to_buffer(json_str);
-        //         format_and_save_hex_data(json_str);
-        //         free(json_str);
-        //       }
-        //     }
-        //   }
-        // }
-      }
-    }
+    // // Handle incoming SMS
+    // if (xQueueReceive(sms_evt_queue, &io_num, 0) == pdTRUE) {
+    //   ESP_LOGD(TAG, "SMS Interrupt Received");
+    //   vTaskDelay(pdMS_TO_TICKS(100));
+    //
+    //   int bytes_read = sim800c_read_response(buffer, sizeof(buffer));
+    //   if (bytes_read > 0) {
+    //     extract_sms(buffer, bytes_read);
+    //     if (strlen(sms_buffer) > 0) {
+    //       ESP_LOGI(TAG, "Received SMS: %s", sms_buffer);
+    //       if (!process_sms_command(sms_buffer) &&
+    //           is_hex_data_message(sms_buffer)) {
+    //         if (decode_hex_data(sms_buffer, &decoded_data) == ESP_OK) {
+    //           char *json_str = decode_hex_to_json(sms_buffer);
+    //           if (json_str) {
+    //             add_payload_to_buffer(json_str);
+    //             format_and_save_hex_data(json_str);
+    //             free(json_str);
+    //           }
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
 
     // Handle outgoing SMS
-    ValveState current_state = getCurrentState();
-    bool can_send =
-        (current_state == STATE_IDLE || current_state == STATE_IRR_START_A ||
-         current_state == STATE_ERROR ||
-         current_state == STATE_IRR_START_B ||
-         current_state == STATE_IRR_DONE_A ||
-         current_state == STATE_IRR_DONE_B);
+    payload = get_hex_from_buffer();
 
-    if (can_send) {
-      // Check hex data buffer
-      //payload = get_hex_from_buffer();
-      //if (payload) {
-        // if (!send_sms(CONFIG_SMS_DATA_NUMBER, payload)) {
-        //   ESP_LOGW(TAG, "Failed to send hex data SMS");
-        // }
-       // free(payload);
-      //}
+    if (payload) {
+      if (!send_sms(CONFIG_SMS_DATA_NUMBER, payload)) {
+        ESP_LOGW(TAG, "Failed to send hex data SMS");
+      }
+      free(payload);
+    }
 
-      // Check SMS queue
-      if (xQueueReceive(sms_queue, &sms, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        ESP_LOGI(TAG, "Sending SMS to %s", sms.phone_number);
-        if (!send_sms(sms.phone_number, sms.message)) {
-          ESP_LOGW(TAG, "Failed to send queued SMS");
-        }
+    // Check SMS queue
+    if (xQueueReceive(sms_queue, &sms, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      ESP_LOGI(TAG, "Sending SMS to %s", sms.phone_number);
+      if (!send_sms(sms.phone_number, sms.message)) {
+        ESP_LOGW(TAG, "Failed to send queued SMS");
       }
     }
 

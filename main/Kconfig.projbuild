@@ -49,11 +49,6 @@ menu "App Configuration"
         default "8MB" if MASTER
         default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
-    config ESPTOOLPY_FLASHSIZE_2MB
-        string
-        default n if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
-
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
@@ -64,11 +59,96 @@ menu "App Configuration"
         default n if MASTER
         default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
+    config ESPTOOLPY_FLASHSIZE_2MB
+        string
+        default "n" if MASTER
+        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
         default "partitions/master.csv" if MASTER
         default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
 
+    # CPU Frequency Configuration
+    config ESP_DEFAULT_CPU_FREQ_MHZ
+        int
+        default 240 if MASTER
+        default 80 if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        help
+            CPU frequency to be set on application startup.
+            Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_80
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_160
+        bool
+        default n
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    # Debugging
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+config SMS_RECIPIENT_DATA
+  choice
+    prompt "Select Data SMS Recipient"
+    default SMS_RECIPIENT_DATA_AWS
+    help
+        Select the recipient who will receive data messages.
+
+    config SMS_RECIPIENT_DATA_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_DATA_PRIYAM
+        bool "Priyam"
+        
+    config SMS_RECIPIENT_DATA_SURYA
+        bool "Surya"
+endchoice
+
+config SMS_RECIPIENT_ERROR
+  choice
+    prompt "Select Error SMS Recipient"
+    default SMS_RECIPIENT_ERROR_SURYA
+    help
+        Select the recipient who will receive error messages and logs.
+
+    config SMS_RECIPIENT_ERROR_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_ERROR_PRIYAM
+        bool "Priyam"
+        
+    config SMS_RECIPIENT_ERROR_SURYA
+        bool "Surya"
+endchoice
+
+# Hidden configs to store the actual phone numbers
+config SMS_DATA_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_DATA_AWS
+default "+918902270142" if SMS_RECIPIENT_DATA_PRIYAM
+default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
+
+config SMS_ERROR_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
+default "+918902270142" if SMS_RECIPIENT_ERROR_PRIYAM
+default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
 
 config ENABLE_HW
     bool "Enable Hardware Configuration"
@@ -147,42 +227,57 @@ menu "Hardware Configuration"
             default 0
 endmenu
 
-config ENABLE_OFF_TIME_CONFIG
-	bool "Enable OFF Time Configuration"
+config ENABLE_DRIP_TIMER
+	bool "Enable Drip Timer"
 	default false
 	help
 		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
 
-menu "OFF Time Configuration"
-	visible if ENABLE_OFF_TIME_CONFIG
+menu "Drip Timer Configuration"
+	visible if ENABLE_DRIP_TIMER
 
-	config OFF_START_HOUR
-		int "OFF start hour (0-23)"
+	config DRIP_START_HOUR
+		int "Drip start hour (0-23)"
 		default 0
 		range 0 23
 		help
 			Set the hour when the forced drain time starts (24-hour format).
 
-	config OFF_START_MINUTE
-		int "Drain start minute (0-59)"
+	config DRIP_START_MINUTE
+		int "Drip start minute (0-59)"
 		default 0
 		range 0 59
 		help
 			Set the minute when the forced drain time starts.
 
-	config OFF_END_HOUR
-		int "Drain end hour (0-23)"
+	config DRIP_END_HOUR
+		int "Drip end hour (0-23)"
 		default 23
 		range 0 23
 		help
 			Set the hour when the forced drain time ends (24-hour format).
 
-	config OFF_END_MINUTE
-		int "Drain end minute (0-59)"
+	config DRIP_END_MINUTE
+		int "Drip end minute (0-59)"
 		default 59
 		range 0 59
 		help
 			Set the minute when the forced drain time ends.
+endmenu
+
+config ENABLE_RESET_SENSOR_CONFIG
+  bool "Enable Reset Sensor Configuration"
+  default false
+
+menu "Reset Time Configuration"
+	visible if ENABLE_RESET_SENSOR_CONFIG
+
+	config RESET_HOUR
+		int "Reset hour (0-23)"
+		default 0
+		range 0 23
+		help
+			Set the hour to reset the sensor readings (24-hour format).
 endmenu
 
 config ENABLE_TIME_CONFIG
@@ -196,14 +291,14 @@ menu "Time Configuration"
 
     config STATE_TIMEOUT_M
         int "State machine timeout (minutes)"
-        default 5
-        range 1 60
+        default 60
+        range 1 180
         help
             Timeout for state machine in minutes.
 
     config IRRIGATION_TIMEOUT_M
         int "Irrigation timeout (minutes)"
-        default 5
+        default 45
         range 1 60
         help
             Timeout for state machine in minutes.
@@ -223,6 +318,7 @@ menu "Time Configuration"
         range 1 60
         help
             Interval for keeping server on
+
     config SMS_INTERVAL_M
         int "Hex data and sms send interval (minutes)"
         default 10 if SITE_TEST
@@ -230,14 +326,6 @@ menu "Time Configuration"
         range 1 60
         help
             Timeout for SMS and HEX  in minutes.
-
-    config MODE_TIMEOUT_M
-        int "Mode timeout (minutes)"
-        default 3 if SITE_TEST
-        default 3
-        range 1 30
-        help
-            Timeout for mode operations in minutes.
 
     config DATA_TIME_M
         int "Data logging interval (minutes)"
@@ -320,7 +408,6 @@ menu "RTC Configuration"
 		int "Year"
 		range 2000 2099
 		default 2025
-		# depends on HAS_RTC_SET
 		help
 			Year to set (2000-2099)
 
@@ -328,7 +415,6 @@ menu "RTC Configuration"
 		int "Month"
 		range 1 12
 		default 1
-		# depends on HAS_RTC_SET
 		help
 			Month to set (1-12)
 
@@ -336,7 +422,6 @@ menu "RTC Configuration"
 		int "Day"
 		range 1 31
 		default 1
-		# depends on HAS_RTC_SET
 		help
 			Day to set (1-31)
 
@@ -344,7 +429,6 @@ menu "RTC Configuration"
 		int "Hour"
 		range 0 23
 		default 0
-		# depends on HAS_RTC_SET
 		help
 			Hour to set (0-23)
 
@@ -352,7 +436,6 @@ menu "RTC Configuration"
 		int "Minute"
 		range 0 59
 		default 0
-		# depends on HAS_RTC_SET
 		help
 			Minute to set (0-59)
 endmenu

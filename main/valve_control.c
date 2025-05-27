@@ -1,5 +1,6 @@
 #include "valve_control.h"
 
+#include "define.h"
 #include "esp_log.h"
 #include "freertos/projdefs.h"
 #include <stdlib.h>
@@ -28,10 +29,7 @@ static TickType_t errorEntryTime = 0; // Track when we entered error state
 // bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
-extern espnow_recv_data_t recv_data;
-extern char last_sender_pcb_name[20];
-
-extern int counter;
+int counter = 1;
 
 bool errorConditionMet = false;
 
@@ -87,6 +85,10 @@ const char *valveStateToString(ValveState state) {
     return "PUMP OFF";
   case STATE_PUMP_OFF_B:
     return "PUMP OFF";
+  case STATE_IRR_DONE_A:
+    return "IRR A Done";
+  case STATE_IRR_DONE_B:
+    return "IRR B Done";
   case STATE_ERROR:
     return "SM Error";
   default:
@@ -140,24 +142,33 @@ void updateValveState(void *pvParameters) {
 
     // Add timeout check
     ValveState newState = getCurrentState(); // Start with current state
+    if (isStateTimedOut(newState)) {
+      ESP_LOGE(TAG, "Timeout State machine");
+      setCurrentState(STATE_IDLE);
+      reset_acknowledgements();
+      vTaskDelay(pdMS_TO_TICKS(1000)); // Short delay before continuing
+      continue;
+    }
 
     switch (newState) {
 
     case STATE_IDLE:
       reset_acknowledgements();
       ESP_LOGI(TAG, "IDLE");
-
-      get_sensor_readings(&current_readings);
+      if (isResetTime()) {
+        current_readings.soil_A = 0;
+        current_readings.soil_B = 0;
+      }
+      // get_sensor_readings(&current_readings);
       ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
                current_readings.soil_A, current_readings.soil_B);
+      ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
       vTaskDelay(1000);
 
-      if (current_readings.soil_A < CONFIG_SOIL_DRY &&
-          !isWithinOFFTimeRange()) {
+      if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
         newState = STATE_VALVE_A_OPEN;
         counter++;
-      } else if (current_readings.soil_B < CONFIG_SOIL_DRY &&
-                 !isWithinOFFTimeRange()) {
+      } else if (current_readings.soil_B < CONFIG_SOIL_DRY && dripTimer()) {
         newState = STATE_VALVE_B_OPEN;
         counter++;
       } else {
@@ -173,7 +184,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-
+      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // 100 seconds
       newState = STATE_PUMP_ON_A;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -185,11 +196,11 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      stateEntryTime = xTaskGetTickCount();
       newState = STATE_IRR_START_A;
       break;
 
     case STATE_IRR_START_A:
-      stateEntryTime = xTaskGetTickCount();
       if (current_readings.soil_A >= CONFIG_SOIL_WET) {
         ESP_LOGI(TAG, "Soil A moisture reached threshold: %d",
                  current_readings.soil_A);
@@ -200,11 +211,13 @@ void updateValveState(void *pvParameters) {
         ESP_LOGW(TAG, "Irrigation timeout for Soil A: %d",
                  current_readings.soil_A);
         reset_acknowledgements();
+        current_readings.soil_A = 90;
+        current_readings.soil_B = 0;
         newState = STATE_PUMP_OFF_A;
       } else {
-        // Update the sensor readings inside the loop
-        get_sensor_readings(&current_readings);
-        ESP_LOGD(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
+        // // Update the sensor readings inside the loop
+        // get_sensor_readings(&current_readings);
+        ESP_LOGI(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
       break;
@@ -219,6 +232,7 @@ void updateValveState(void *pvParameters) {
       ESP_LOGI(TAG, "Closing Pump");
       newState = STATE_VALVE_A_CLOSE;
       break;
+
     case STATE_VALVE_A_CLOSE:
       if (!sendCommandWithRetry(VALVE_A_ADDRESS, 0x10, nodeAddress)) {
         ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
@@ -226,6 +240,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
@@ -243,6 +258,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(2000);
       newState = STATE_PUMP_ON_B;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -254,11 +270,11 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      stateEntryTime = xTaskGetTickCount();
       newState = STATE_IRR_START_B;
       break;
 
     case STATE_IRR_START_B:
-      stateEntryTime = xTaskGetTickCount();
       if (current_readings.soil_B >= CONFIG_SOIL_WET) {
         ESP_LOGI(TAG, "Soil B moisture reached threshold: %d",
                  current_readings.soil_B);
@@ -269,11 +285,13 @@ void updateValveState(void *pvParameters) {
         ESP_LOGW(TAG, "Irrigation timeout for Soil B: %d",
                  current_readings.soil_B);
         reset_acknowledgements();
+        current_readings.soil_B = 90;
+        current_readings.soil_A = 90;
         newState = STATE_PUMP_OFF_B;
       } else {
-        // Update the sensor readings inside the loop
-        get_sensor_readings(&current_readings);
-        ESP_LOGD(TAG, "Waiting for Soil B: %d", current_readings.soil_B);
+        // // Update the sensor readings inside the loop
+        // get_sensor_readings(&current_readings);
+        ESP_LOGI(TAG, "Waiting for Soil B: %d", current_readings.soil_B);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
       break;
@@ -285,6 +303,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
+      vTaskDelay(2000);
       ESP_LOGI(TAG, "Closing Pump");
       newState = STATE_VALVE_B_CLOSE;
       break;
@@ -347,20 +366,27 @@ void setCurrentState(ValveState newState) {
   }
 }
 
-bool isTimeoutReached(TickType_t timeout) {
-  return (xTaskGetTickCount() - stateEntryTime) >= pdMS_TO_TICKS(timeout);
-}
-
-bool isWithinOFFTimeRange(void) {
-#ifdef CONFIG_ENABLE_OFF_TIME_CONFIG
+bool dripTimer(void) {
+#ifdef CONFIG_ENABLE_DRIP_TIMER
   char *timeStr = fetchTime();
   int year, month, day, hour, minute;
   sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
   return (
-      (hour > CONFIG_OFF_START_HOUR ||
-       (hour == CONFIG_OFF_START_HOUR && minute >= CONFIG_OFF_START_MINUTE)) &&
-      (hour < CONFIG_OFF_END_HOUR ||
-       (hour == CONFIG_OFF_END_HOUR && minute < CONFIG_OFF_END_MINUTE)));
+      (hour > CONFIG_DRIP_START_HOUR || (hour == CONFIG_DRIP_START_HOUR &&
+                                         minute >= CONFIG_DRIP_START_MINUTE)) &&
+      (hour < CONFIG_DRIP_END_HOUR ||
+       (hour == CONFIG_DRIP_END_HOUR && minute < CONFIG_DRIP_END_MINUTE)));
+#else
+  return true;
+#endif
+}
+
+bool isResetTime(void) {
+#ifdef CONFIG_ENABLE_RESET_SENSOR_CONFIG
+  char *timeStr = fetchTime();
+  int year, month, day, hour, minute;
+  sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
+  return (hour == CONFIG_RESET_HOUR);
 #else
   return false;
 #endif

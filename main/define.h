@@ -7,6 +7,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 
@@ -54,9 +55,9 @@ extern uint8_t sequence_number;
 #define C_btn 27 // Replace with actual GPIO pin for Backup button
 #define D_btn 15 // Replace with actual GPIO pin for Backup button
 
-#define RELAY_POSITIVE 26
-#define RELAY_NEGATIVE 27
-#define OE_PIN 12
+#define RELAY_POSITIVE 6 // 26
+#define RELAY_NEGATIVE 7 // 27
+#define OE_PIN 5         // 12
 
 #define PULSE_DURATION_MS 50
 
@@ -65,13 +66,34 @@ extern uint8_t sequence_number;
 #define PUMP_START 2
 #define PUMP_STOP 3
 
+#define MAX_SITES 11
+
+typedef struct {
+  uint32_t total_data_points;
+  uint32_t
+      site_data_points[MAX_SITES]; // Assuming you define MAX_SITES in define.h
+  char last_data_time[32];
+} data_statistics_t;
+extern data_statistics_t data_stats;
+
+// ==================== SMS Definitions ====================
+
+extern QueueHandle_t sms_evt_queue, sms_queue;
+#define SMS_BUFFER_SIZE 60
+#define SHORT_SMS_BUFFER_SIZE 20
+typedef struct {
+  char phone_number[20];
+  char message[SMS_BUFFER_SIZE];
+} sms_message_t;
+extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
+
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
 #define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
 #define HEX_SIZE                                                               \
   (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
    sizeof(uint16_t) *                                                          \
-       6) // 2 bytes site name + timestamp + counter + sensor data
+       7) // 2 bytes site name + timestamp + counter + sensor data
 typedef struct {
   uint8_t address;
   uint8_t command;
@@ -97,6 +119,7 @@ extern QueueHandle_t message_queue;
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 #define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
+#define SMS_CHECK_MS (CONFIG_SMS_CHECK_M * 60000)
 
 // ==================== Logging Definitions ====================
 #define CUSTOM_LOG_LEVEL_NONE 0
@@ -177,8 +200,7 @@ extern const site_config_t site_config;
 typedef struct {
   float temperature;
   float humidity;
-  float wind;
-  float fountain_pressure;
+  float pressure;
   float water_temp;
   float discharge;
   float voltage;
@@ -186,13 +208,36 @@ typedef struct {
   int soil_B;
 } sensor_readings_t;
 
+// static sensor_readings_t readings = {
+//     .temperature = 0.0f,
+//     .humidity = 0.0f,
+//     .pressure = 0.0f,
+//     .water_temp = 0.0f,
+//     .discharge = 0.0f,
+//     .voltage = 0.0f,
+//     .soil_A = 99,   // Explicit initialization
+//     .soil_B = 99    // Explicit initialization
+// };
+
 // Declare the globals
 extern sensor_readings_t simulated_readings;
 extern sensor_readings_t readings;
 
-extern float mean_fountain_pressure;
+extern float mean_pressure;
 extern float tpipe_normal;
 extern float tpipe_hot;
+
+// ==================== ESP-NOW communication ====================
+typedef struct {
+  uint8_t
+      node_address;    // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
+  int soil_moisture;   // Soil moisture percentage (0-100)
+  float battery_level; // Battery level percentage (0-100)
+  int8_t rssi;         // Signal strength in dBm
+} espnow_recv_data_t;
+
+extern espnow_recv_data_t recv_data;
+extern char last_sender_pcb_name[20];
 
 // ==================== Miscellaneous Definitions ====================
 #define MAX_QUEUE_SIZE 8
@@ -204,8 +249,6 @@ extern bool calibration_done;
 extern bool wifi_enabled, sta_enabled;
 extern bool SPRAY_mode, DRAIN_mode, AUTO_mode;
 extern float Twater_cal;
-
-extern bool inProgress;
 
 extern SemaphoreHandle_t DRAIN_NOTE_AckSemaphore;
 extern SemaphoreHandle_t SOURCE_NOTE_AckSemaphore;
@@ -241,6 +284,43 @@ typedef struct wifi_app_queue_message {
 
 extern QueueHandle_t wifi_app_queue_handle;
 extern bool http_server_active;
+
+#define MAX_PAYLOAD_SIZE 256
+#define CIRCULAR_BUFFER_SIZE 10
+
+typedef struct {
+  char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
+  char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
+  uint16_t counter;                 // On/off counter
+  uint16_t soil_A;                  // Water temperature * 10
+  uint16_t soil_B;                  // Discharge * 10
+  int16_t temperature; // Temperature * 10 to preserve one decimal place
+  uint16_t pressure;   // Fountain pressure * 10
+  int16_t water_temp;  // Fountain pressure * 10
+  uint16_t discharge;  // Fountain pressure * 10
+} hex_data_t;
+
+typedef struct {
+  char buffer[CIRCULAR_BUFFER_SIZE][MAX_PAYLOAD_SIZE];
+  int head;
+  int tail;
+  int count;
+  SemaphoreHandle_t mutex;
+} CircularBuffer;
+extern CircularBuffer payload_buffer;
+
+#define HEX_BUFFER_SIZE 8
+#define MAX_HEX_SIZE (HEX_SIZE * 2 + 1)
+
+typedef struct {
+  char buffer[HEX_BUFFER_SIZE][MAX_HEX_SIZE];
+  int head;
+  int tail;
+  int count;
+  SemaphoreHandle_t mutex;
+} HexCircularBuffer;
+
+extern HexCircularBuffer hex_buffer;
 
 // ==================== Simulation mode ====================
 // Test case data structure

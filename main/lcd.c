@@ -1,4 +1,5 @@
 #include "lcd.h"
+#include "define.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "i2cdev.h"
@@ -6,8 +7,8 @@
 #include "unistd.h"
 #include <driver/i2c_master.h>
 #include <math.h>
-// #include "modbus.h"
 
+#include "gsm.h"
 #include "sensor.h"
 #include "valve_control.h"
 
@@ -25,11 +26,7 @@ char uptime_str[5] = "0.00";
 static int last_day = -1; // Track the last day we sent an SMS
 static bool first_run = true;
 
-extern bool lcd_device_ready;
-extern SemaphoreHandle_t i2c_mutex;
-extern sensor_readings_t simulated_readings;
-extern sensor_readings_t readings;
-extern i2c_master_bus_handle_t i2c0bus;
+bool lcd_device_ready = false;
 
 char wifi[] = {
     0b01110, 0b11111, 0b10001, 0b00100, 0b01110, 0b00000, 0b00100, 0b00000,
@@ -295,7 +292,7 @@ void update_lcd_row_one(const char *uptime_str,
   strncat(temp_str, "C", sizeof(temp_str) - strlen(temp_str) - 1);
 
   // Pressure formatting with validation and float display
-  int press = (int)(lcd_readings->fountain_pressure + 0.5); // Added: Rounding
+  int press = (int)(lcd_readings->pressure + 0.5); // Added: Rounding
   press = (press < 0) ? 0 : (press > 10) ? 10 : press;
   char press_str[5];
   // Display pressure with one decimal place
@@ -336,26 +333,15 @@ void update_lcd_row_one(const char *uptime_str,
            display_str, uptime_str, soilA_str, soilB_str, counter_str);
 }
 
-// void send_daily_status_sms(double uptime_days) {
-//   char sms_buffer[100];
-//   snprintf(sms_buffer, sizeof(sms_buffer), "%s PCB: %.2f days",
-//            CONFIG_SITE_NAME, uptime_days);
+void send_daily_status_sms(double uptime_days) {
+  char sms_buffer[100];
+  snprintf(sms_buffer, sizeof(sms_buffer), "%s PCB: %.2f days",
+           CONFIG_SITE_NAME, uptime_days);
 
-//   // if (IS_SITE("Likir")) {
-//   //
-//   //   // Update status if LCD is available
-//   //   update_status_message("LIKIR RESTART");
-//   //   ESP_LOGE(TAG, "LIKIR RESTART");
-//   //
-//   //   // Small delay to allow logging and status message to complete
-//   //   vTaskDelay(pdMS_TO_TICKS(3000));
-//   //   esp_restart();
-//   // }
-
-//   // Call your SMS sending function here
-//   //sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
-//   ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
-// }
+  // Call your SMS sending function here
+  sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
+  ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
+}
 
 void lcd_row_one_task(void *pvParameters) {
   if (!lcd_device_ready) {
@@ -376,8 +362,8 @@ void lcd_row_one_task(void *pvParameters) {
 
     // Check for day change
     int current_day = (int)current_uptime;
-    if ((first_run || current_day > last_day) ) {
-      //send_daily_status_sms(current_uptime);
+    if ((first_run || current_day > last_day) && (gsm_init_success)) {
+      send_daily_status_sms(current_uptime);
       last_day = current_day;
       first_run = false;
     }

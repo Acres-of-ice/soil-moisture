@@ -102,8 +102,16 @@ int read_soil_moisture(void) {
   int raw_moisture = total / NUM_SAMPLES;
 
   // Calibrate moisture value using pre-defined ranges
-  int calibrated_moisture = (SOIL_DRY_ADC_VALUE - raw_moisture) * 100 /
-                            (SOIL_DRY_ADC_VALUE - SOIL_MOIST_ADC_VALUE);
+  int calibrated_moisture;
+   #if CONFIG_SOIL_A
+   calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+                            (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+  #endif
+
+  #if CONFIG_SOIL_B
+   calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+                            (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+  #endif
 
   // Clamp to valid range
   if (calibrated_moisture < 0)
@@ -162,6 +170,11 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
            sensor_data->node_address, sensor_data->soil_moisture,
            read_battery_level());
 
+  ESP_LOGI(TAG, "Node: 0x%02X, Soil: %d%%, Battery: %.1f%%",
+         sensor_data->node_address, 
+         sensor_data->soil_moisture,
+         read_battery_level());
+
   ESP_LOGD(TAG, "Sending to master: %s", message);
 
   // Try to send with retries
@@ -200,11 +213,26 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
  * @param data Pointer to sensor data structure to queue
  * @return true if data was successfully queued, false otherwise
  */
+// bool queue_sensor_data(const espnow_recv_data_t *data) {
+//   if (sensor_data_queue == NULL)
+//     ESP_LOGD(TAG, "Queued sensor data");
+//   return false;
+//   return xQueueSend(sensor_data_queue, data, 0) == pdTRUE;
+// }
+
 bool queue_sensor_data(const espnow_recv_data_t *data) {
-  if (sensor_data_queue == NULL)
+  if (sensor_data_queue == NULL) {
+    ESP_LOGE(TAG, "Sensor data queue not initialized");
+    return false;
+  }
+  
+  if (xQueueSend(sensor_data_queue, data, pdMS_TO_TICKS(10)) == pdTRUE) {
     ESP_LOGD(TAG, "Queued sensor data");
+    return true;
+  }
+  
+  ESP_LOGW(TAG, "Failed to queue sensor data, queue might be full");
   return false;
-  return xQueueSend(sensor_data_queue, data, 0) == pdTRUE;
 }
 
 /**
@@ -214,12 +242,29 @@ bool queue_sensor_data(const espnow_recv_data_t *data) {
  * @param timeout_ms Timeout in milliseconds to wait for data
  * @return true if data was successfully received, false otherwise
  */
+// bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
+//   if (sensor_data_queue == NULL)
+//     ESP_LOGW(TAG, "Sensor queue null");
+//   return false;
+//   return xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms)) ==
+//          pdTRUE;
+// }
+
 bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
-  if (sensor_data_queue == NULL)
-    ESP_LOGW(TAG, "Sensor queue null");
+  if (sensor_data_queue == NULL) {
+    ESP_LOGW(TAG, "Sensor queue not initialized");
+    return false;
+  }
+  
+  BaseType_t result = xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms));
+  
+  if (result == pdTRUE) {
+    ESP_LOGD(TAG, "Successfully received data from queue");
+    return true;
+  }
+  
+  ESP_LOGD(TAG, "No data available in queue");
   return false;
-  return xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms)) ==
-         pdTRUE;
 }
 
 /**
@@ -236,7 +281,7 @@ bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
  */
 void vTaskESPNOW_TX(void *pvParameters) {
   // Configuration constants
-  const TickType_t TRANSMISSION_CYCLE_MS = 5000; // Full cycle duration in ms
+  const TickType_t TRANSMISSION_CYCLE_MS = 3000; // Full cycle duration in ms
   const uint8_t MAX_TRANSMISSION_RETRIES =
       3; // Maximum retries for failed transmission
 
@@ -284,7 +329,7 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
       // Try to get new data from queue, but don't block if empty
       if (receive_sensor_data(&sensor_data, 0)) {
-        ESP_LOGD(TAG, "Got fresh sensor data from queue: moisture=%d%%",
+        ESP_LOGI(TAG, "Got fresh sensor data from queue: moisture=%d%%",
                  sensor_data.soil_moisture);
         got_data = true;
       } else {
