@@ -76,6 +76,22 @@ typedef struct {
 } data_statistics_t;
 extern data_statistics_t data_stats;
 
+// ==================== Soil Sensor Calibration ====================
+
+#define NVS_NAMESPACE "soil_calib"
+#define NVS_DRY_KEY "dry_value"
+#define NVS_WET_KEY "wet_value"
+#define MY_ADC_CHANNEL      ADC_CHANNEL_3
+#define MY_ADC_ATTEN        ADC_ATTEN_DB_12
+#define SAMPLE_DURATION_MS  30000
+#define SAMPLE_INTERVAL_MS  1000
+// #define SOIL_DRY_ADC_VALUE 0
+// #define SOIL_MOIST_ADC_VALUE 0
+static int32_t DRY_STATE = 0;
+static int32_t WET_STATE = 0;
+static int32_t soil_dry_adc_value = 0;  
+static int32_t soil_wet_adc_value = 0;
+
 // ==================== SMS Definitions ====================
 
 extern QueueHandle_t sms_evt_queue, sms_queue;

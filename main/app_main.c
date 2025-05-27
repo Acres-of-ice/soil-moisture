@@ -393,6 +393,14 @@ void app_main(void) {
   // Initialize soil sensor
   soil_sensor_init();
 
+  // if (load_calibration_values(&DRY_STATE, &WET_STATE) != ESP_OK) {
+  //     ESP_LOGI(TAG, "No calibration found - starting calibration task");
+  //     xTaskCreate(calibration_task, "calibration_task", 4096, NULL, 5, NULL);
+  //     vTaskDelay(pdMS_TO_TICKS(80000));
+  // } else {
+  //       ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32, DRY_STATE, WET_STATE);
+  //   }
+
   // Start sensor reading task
   xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
               "soil_sensor",    // Task name

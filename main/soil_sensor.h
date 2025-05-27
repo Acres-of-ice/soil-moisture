@@ -18,6 +18,7 @@
 #define SOIL_DRY_ADC_VALUE_B 3346
 #define SOIL_MOIST_ADC_VALUE_B 2192
 
+
 // #define SOIL_DRY_ADC_VALUE_ 3337
 // #define SOIL_MOIST_ADC_VALUE_B 2192
 
@@ -28,6 +29,11 @@ int read_soil_moisture_sensor(void); // Wrapper for compatibility
 float read_battery_level(void);
 int8_t get_current_rssi(void);
 void soil_sensor_task(void *pvParameters);
+
+void init_led_gpio();
+esp_err_t save_calibration_values(int dry, int wet);
+esp_err_t load_calibration_values(int32_t *dry, int32_t *wet);
+void calibration_task(void *pvParameters);
 
 // ESP-NOW transmission functions
 void vTaskESPNOW_TX(void *pvParameters);

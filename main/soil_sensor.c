@@ -14,8 +14,13 @@
 #include "soil_comm.h"
 #include <string.h>
 #include <time.h>
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "driver/gpio.h"
 
 static const char *TAG = "SoilSensor";
+
+#define LED_GPIO GPIO_NUM_10  // GPIO10 connected to LED
 
 // Queue for handling ESP-NOW transmission data
 QueueHandle_t sensor_data_queue = NULL;
@@ -71,6 +76,128 @@ void soil_sensor_init(void) {
       adc_oneshot_config_channel(adc1_handle, SOIL_ADC_CHANNEL, &config));
 
   ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
+}
+
+void init_led_gpio() {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << LED_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+}
+
+esp_err_t save_calibration_values(int dry, int wet) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+    
+    err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) return err;
+    
+    err = nvs_set_i32(nvs_handle, NVS_DRY_KEY, dry);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+    
+    err = nvs_set_i32(nvs_handle, NVS_WET_KEY, wet);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+    
+    err = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    
+    return err;
+}
+
+esp_err_t load_calibration_values(int32_t *dry, int32_t *wet) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+    
+    err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) return err;
+    
+    err = nvs_get_i32(nvs_handle, NVS_DRY_KEY, dry);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+    
+    err = nvs_get_i32(nvs_handle, NVS_WET_KEY, wet);
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+    
+    nvs_close(nvs_handle);
+    return ESP_OK;
+}
+
+// Calibration Task
+void calibration_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Starting calibration task...");
+    
+    init_led_gpio();
+
+    int raw_val = 0;
+    
+    // DRY calibration
+    ESP_LOGI(TAG, "=== Calibration Step 1: Place sensor in DRY soil ===");
+    // Turn ON LED
+    gpio_set_level(LED_GPIO, 1);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    // Turn OFF LED
+    gpio_set_level(LED_GPIO, 0);
+    ESP_LOGI(TAG, "Sampling DRY state...");
+
+    int dry_sum = 0, dry_count = 0;
+    for (int i = 0; i < SAMPLE_DURATION_MS; i += SAMPLE_INTERVAL_MS) {
+        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, MY_ADC_CHANNEL, &raw_val));
+        dry_sum += raw_val;
+        dry_count++;
+        ESP_LOGI(TAG, "[DRY] Sample %d: %d", dry_count, raw_val);
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_INTERVAL_MS));
+    }
+    soil_dry_adc_value = dry_sum / dry_count;
+
+    // WET calibration
+    ESP_LOGI(TAG, "\n=== Calibration Step 2: Submerge sensor in WATER ===");
+    // Blink LED for 5 seconds
+    const int blink_duration_ms = 5000;
+    const int blink_interval_ms = 250;  // LED toggle every 250 ms
+    int elapsed = 0;
+
+    while (elapsed < blink_duration_ms) {
+    gpio_set_level(LED_GPIO, 1);  // LED ON
+    vTaskDelay(pdMS_TO_TICKS(blink_interval_ms / 2));
+    gpio_set_level(LED_GPIO, 0);  // LED OFF
+    vTaskDelay(pdMS_TO_TICKS(blink_interval_ms / 2));
+    elapsed += blink_interval_ms;
+    }
+    ESP_LOGI(TAG, "Sampling WET state...");
+
+    int wet_sum = 0, wet_count = 0;
+    for (int i = 0; i < SAMPLE_DURATION_MS; i += SAMPLE_INTERVAL_MS) {
+        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, MY_ADC_CHANNEL, &raw_val));
+        wet_sum += raw_val;
+        wet_count++;
+        ESP_LOGI(TAG, "[WET] Sample %d: %d", wet_count, raw_val);
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_INTERVAL_MS));
+    }
+    soil_wet_adc_value = wet_sum / wet_count;
+
+    // Save calibration
+    if (save_calibration_values(soil_dry_adc_value, soil_wet_adc_value) == ESP_OK) {
+        ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32, soil_dry_adc_value, soil_wet_adc_value);
+    } else {
+        ESP_LOGE(TAG, "Failed to save calibration");
+    }
+
+    vTaskDelete(NULL); // Delete this task when done
 }
 
 // #define SAMPLE_WINDOW 16  // Power of 2 for efficient filtering
@@ -185,7 +312,10 @@ int read_soil_moisture(void) {
 
   //Calibrate moisture value using pre-defined ranges
   int calibrated_moisture;
-   #if CONFIG_SOIL_A
+  // load_calibration_values(&DRY_STATE, &WET_STATE);
+  //  calibrated_moisture = (DRY_STATE - raw_moisture) * 100 /
+  //                           (DRY_STATE - WET_STATE);
+  #if CONFIG_SOIL_A
    calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
                             (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
   #endif
