@@ -22,6 +22,7 @@ extern const char *DATA_FILE_HEADER; // Declaration
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
+extern int soil_A_Live;
 
 // Device type identifiers (high nibble)
 #define DEVICE_TYPE_MASTER 0xA0
@@ -67,6 +68,11 @@ extern uint8_t sequence_number;
 #define PUMP_STOP 3
 
 #define MAX_SITES 11
+
+// Irrigation Demo mode 
+extern bool demo_mode_active;
+extern TickType_t demo_mode_start_time;
+#define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
 
 typedef struct {
   uint32_t total_data_points;

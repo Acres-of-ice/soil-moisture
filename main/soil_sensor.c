@@ -333,8 +333,8 @@ int read_soil_moisture(void) {
 
   ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
            calibrated_moisture);
-  //return calibrated_moisture;
-  return raw_value;
+  return calibrated_moisture;
+  //return raw_value;
 }
 
 /**
