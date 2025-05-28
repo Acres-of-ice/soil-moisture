@@ -561,22 +561,12 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;
       output_readings->soil_B = readings.soil_B;
-<<<<<<< HEAD
-      // output_readings->temperature = readings.temperature;
-      // output_readings->humidity = readings.humidity;
-      // output_readings->water_temp = readings.water_temp;
-      // output_readings->wind = readings.wind;
-      // output_readings->fountain_pressure = readings.fountain_pressure;
-      // output_readings->discharge = readings.discharge;
-       output_readings->voltage = readings.voltage;
-=======
       output_readings->temperature = readings.temperature;
       output_readings->humidity = readings.humidity;
       output_readings->water_temp = readings.water_temp;
       output_readings->pressure = readings.pressure;
       output_readings->discharge = readings.discharge;
       output_readings->voltage = readings.voltage;
->>>>>>> origin/surya
     }
 
     ESP_LOGD(

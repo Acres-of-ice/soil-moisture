@@ -23,6 +23,10 @@ QueueHandle_t sensor_data_queue = NULL;
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 
+// Calibration handle and state for battery
+static adc_cali_handle_t cali_handle = NULL;
+static bool cali_enabled = false;
+
 // External variables from soil_comm.c we need access to
 extern uint8_t g_nodeAddress;
 extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
@@ -69,18 +73,34 @@ void soil_sensor_init(void) {
 
   ESP_ERROR_CHECK(
       adc_oneshot_config_channel(adc1_handle, SOIL_ADC_CHANNEL, &config));
+  // FOR BATTERY MANAGEMENT
+  ESP_ERROR_CHECK(
+      adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));     
+      // Configure battery ADC channel
+adc_cali_curve_fitting_config_t cali_cfg = {
+        .unit_id = SOIL_BATT_ADC_UNIT,
+        .atten = SOIL_BATT_ADC_ATTEN,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {      
+        cali_enabled = true;
+        ESP_LOGI(TAG, "ADC calibration enabled");
+    } else {
+        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+    }
 
   ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
 }
 
 /**
  * @brief Read soil moisture from ADC and convert to percentage
- *
+ * 
  * @return int Moisture percentage (0-100) or -1 on error
  */
 int read_soil_moisture(void) {
   if (adc1_handle == NULL) {
-    ESP_LOGE(TAG, "ADC not initialized");
+    ESP_LOGE(TAG, "ADC not initialized"); 
     return -1;
   }
 
@@ -148,7 +168,36 @@ int8_t get_current_rssi(void) {
  *
  * @return float Battery level percentage (0-100)
  */
-float read_battery_level(void) { return 100.0f; }
+
+static float read_battery_voltage(void) {
+    if (!adc1_handle) soil_sensor_init(); // Ensure ADC is initialized
+
+    int raw = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, SOIL_BATT_ADC_CHANNEL, &raw));
+    ESP_LOGD(TAG, "Raw ADC value: %d", raw);
+
+    int mv = 0;
+    if (cali_enabled) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, raw, &mv));
+        ESP_LOGD(TAG, "Calibrated voltage: %d mV", mv);
+    } else {
+        mv = raw * 1100 / 4095;  // fallback rough estimate
+    }
+
+    float battery_voltage = (mv / 1000.0f) * SOIL_BATT_VOLTAGE_DIVIDER;
+    return battery_voltage;
+}
+
+
+
+float read_battery_level(void) { 
+    float vbat = read_battery_voltage();
+    float percent = (vbat - SOIL_BATT_MIN_VOLTAGE) / (SOIL_BATT_MAX_VOLTAGE - SOIL_BATT_MIN_VOLTAGE) * 100.0f;
+    if (percent > 100.0f) percent = 100.0f;
+    if (percent < 0.0f) percent = 0.0f;
+    ESP_LOGI(TAG, "Battery voltage: %.2f V, Battery level: %.1f%%", vbat, percent);
+    return percent;
+ }
 
 /**
  * @brief Send sensor data to master device with retry mechanism
