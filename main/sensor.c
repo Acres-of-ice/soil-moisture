@@ -19,6 +19,9 @@ static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
 static bool adc_cali_initialized = false;
 
+extern int soil_A;
+extern int soil_B;
+
 // Initialization Functions
 void sensors_init(void) {
   // Initialize mutex if not already done
@@ -478,6 +481,9 @@ void sensor_task(void *pvParameters) {
       // Default value if voltage cutoff is disabled
       local_readings.voltage = 0.0f;
     }
+
+    local_readings.soil_A = soil_A;
+    local_readings.soil_B = soil_B;
 
     // Now take mutex only for the quick copy operation
     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
