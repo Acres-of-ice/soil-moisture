@@ -1,3 +1,10 @@
 .cache/
+.vscode/
 build/
 managed_components/
+images/
+
+# Configuration and version files
+sdkconfig
+sdkconfig.old
+version.txt

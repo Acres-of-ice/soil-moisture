@@ -293,7 +293,7 @@ TEST_GROUP_RUNNER(mdns)
 
 }
 
-// void app_main(void)
-// {
-//     UNITY_MAIN(mdns);
-// }
+void app_main(void)
+{
+    UNITY_MAIN(mdns);
+}

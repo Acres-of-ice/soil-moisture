@@ -1,100 +1,61 @@
-/*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: Apache-2.0
- */
 #include "esp_event.h"
-#include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "nvs_flash.h"
 #include "soc/soc_caps.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "button_control.h"
+#include "define.h"
+#include "tasks_common.h"
+
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
 #include "gsm.h"
+#include "hex_data.h"
 #include "i2cdev.h"
 #include "lcd.h"
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "soil_comm.h"
+#include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
 
-#define SIM_GPIO GPIO_NUM_13
-
-#define RELAY_1 GPIO_NUM_16
-#define RELAY_2 GPIO_NUM_13
-#define RELAY_3 GPIO_NUM_12
-
-#define RELAY_POSITIVE 26
-#define RELAY_NEGATIVE 27
-#define OE_PIN 12
-
-#define PULSE_DURATION_MS 50
-
-#define START_btn 4
-#define STOP_btn 5
-#define OUT_START 2
-#define OUT_STOP 3
-
-int on_off_counter = 1;
-bool calibration_done = false;
-
-bool lcd_device_ready = false;
-#define LCD_TASK_STACK_SIZE (1024 * 4)
-#define LCD_TASK_PRIORITY 6
-#define LCD_TASK_CORE_ID 0
-
-TaskHandle_t buttonTaskHandle = NULL;
-#define BUTTON_TASK_STACK_SIZE (1024 * 4)
-#define BUTTON_TASK_PRIORITY 10
-#define BUTTON_TASK_CORE_ID 0
-
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
+bool gsm_init_success = false;
+
 SemaphoreHandle_t Valve_A_AckSemaphore = NULL;
 SemaphoreHandle_t Valve_B_AckSemaphore = NULL;
 SemaphoreHandle_t Pump_AckSemaphore = NULL;
 SemaphoreHandle_t Soil_AckSemaphore = NULL;
+SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
+SemaphoreHandle_t stateMutex = NULL;
+SemaphoreHandle_t i2c_mutex = NULL;
 
 TaskHandle_t wifiTaskHandle = NULL;
-#define WIFI_APP_TASK_STACK_SIZE (1024 * 5)
-#define WIFI_APP_TASK_PRIORITY 5
-#define WIFI_APP_TASK_CORE_ID 0
-
 TaskHandle_t dataLoggingTaskHandle = NULL;
-#define DATA_LOG_TASK_STACK_SIZE (1024 * 8)
-#define DATA_LOG_TASK_PRIORITY 7
-#define DATA_LOG_TASK_CORE_ID 1
-
-#define SMS_TASK_STACK_SIZE (1024 * 8)
-#define SMS_TASK_PRIORITY 10 // Same as LoRa since they're mutually exclusive
-#define SMS_TASK_CORE_ID 0
-
 TaskHandle_t valveTaskHandle = NULL;
-#define VALVE_TASK_STACK_SIZE (1024 * 6)
-#define VALVE_TASK_PRIORITY 11
-#define VALVE_TASK_CORE_ID 0
-
-#define LORA_APP_TASK_STACK_SIZE (1024 * 6)
-#define LORA_APP_TASK_PRIORITY 12 // Highest priority
-#define LORA_APP_TASK_CORE_ID 0
-
 TaskHandle_t discoveryTaskHandle = NULL;
-#define COMM_TASK_STACK_SIZE (1024 * 6)
-#define COMM_TASK_PRIORITY 12 // Highest priority
-#define COMM_TASK_CORE_ID 0
+TaskHandle_t smsTaskHandle = NULL;
+TaskHandle_t simulationTaskHandle = NULL;
+TaskHandle_t sensorTaskHandle = NULL;
+TaskHandle_t buttonTaskHandle = NULL;
 
-static const char *TAG = "main";
+static const char *TAG = "APP";
+
+const site_config_t site_config = {
+    .has_temp_humidity = CONFIG_ENABLE_TEMP_HUMIDITY,
+    .has_flowmeter = CONFIG_ENABLE_FLOWMETER,
+    .has_pressure = CONFIG_ENABLE_PRESSURE,
+    .has_gsm = CONFIG_ENABLE_GSM,
+    .has_valve = CONFIG_ENABLE_VALVE,
+    .simulate = CONFIG_ENABLE_SIMULATION_MODE,
+    .has_voltage_cutoff = CONFIG_ENABLE_VOLTAGE_CUTOFF};
+
 char last_message[256] = {0}; // Adjust size as needed
 uint8_t last_sender_mac[ESP_NOW_ETH_ALEN] = {0};
 int last_rssi = 0;
@@ -102,36 +63,11 @@ bool message_received = false;
 char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH] = {0};
 char pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 
-SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
-SemaphoreHandle_t stateMutex = NULL;
-SemaphoreHandle_t i2c_mutex = NULL;
-
-TaskHandle_t smsTaskHandle = NULL;
-TaskHandle_t smsReceiveTaskHandle = NULL;
-TaskHandle_t smsManagerTaskHandle = NULL;
-
 QueueHandle_t message_queue = NULL;
 #define MAX_QUEUE_SIZE 8
+#define SMS_BUFFER_SIZE 60
+char sms_message[SMS_BUFFER_SIZE] = "Reboot";
 
-
-
-espnow_config_t config = {
-    .pcb_name = pcb_name,        // Set the PCB name
-    .wifi_channel = 1,           // WiFi channel (must match WiFi config)
-    .send_delay_ms = 1000,       // Delay between sends
-    .enable_long_range = true,   // Enable long range mode
-    .enable_encryption = false,  // No encryption for simplicity
-    .recv_cb = on_data_received, // Callback for received data
-    .send_cb = on_data_sent,     // Callback for sent data
-
-    // Authentication settings
-    .require_auth = true,           // Enable authentication
-    .auth_key = "AIR4201",          // Set authentication key
-    .auth_broadcast_interval_ms = 0 // Set authentication key
-
-    // .discovery_timeout_ms; // Timeout for peer discovery in milliseconds
-    // .max_auth_attempts;     // Maximum authentication attempts per peer
-};
 typedef enum {
   BUTTON_IDLE,
   BUTTON_START_PRESSED,
@@ -146,15 +82,15 @@ void init_gpio_pump(void) {
   gpio_set_direction(STOP_btn, GPIO_MODE_INPUT);
   gpio_set_pull_mode(STOP_btn, GPIO_PULLUP_ONLY);
   gpio_config_t io_conf = {.pin_bit_mask =
-                               (1ULL << OUT_START) | (1ULL << OUT_STOP),
+                               (1ULL << PUMP_START) | (1ULL << PUMP_STOP),
                            .mode = GPIO_MODE_OUTPUT,
                            .pull_down_en = 0,
                            .pull_up_en = 0,
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
 
-  gpio_set_level(OUT_START, 0);
-  gpio_set_level(OUT_STOP, 0);
+  gpio_set_level(PUMP_START, 0);
+  gpio_set_level(PUMP_STOP, 0);
 
   ESP_LOGI(TAG, "GPIOs initialized");
 }
@@ -168,20 +104,6 @@ void init_gpio(void) {
   gpio_set_direction(RELAY_2, GPIO_MODE_OUTPUT);
   gpio_set_direction(RELAY_3, GPIO_MODE_OUTPUT);
 
-  // // Set initial state of relays (all off)
-  // gpio_set_level(PUMP_1, 0);
-  // gpio_set_level(PUMP_2, 0);
-
-  // esp_rom_gpio_pad_select_gpio(PUMP_1);
-  // esp_rom_gpio_pad_select_gpio(PUMP_2);
-
-  // gpio_set_direction(PUMP_1, GPIO_MODE_OUTPUT);
-  // gpio_set_direction(PUMP_2, GPIO_MODE_OUTPUT);
-
-  // // Set initial state of relays (all off)
-  // gpio_set_level(PUMP_1, 0);
-  // gpio_set_level(PUMP_2, 0);
-
   gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
                                            (1ULL << RELAY_NEGATIVE) |
                                            (1ULL << OE_PIN),
@@ -190,68 +112,21 @@ void init_gpio(void) {
                            .pull_down_en = GPIO_PULLDOWN_DISABLE,
                            .intr_type = GPIO_INTR_DISABLE};
   gpio_config(&io_conf);
-
-  // Set all LOW initially
-  gpio_set_level(RELAY_POSITIVE, 0);
-  gpio_set_level(RELAY_NEGATIVE, 0);
-  gpio_set_level(OE_PIN, 0);
 }
 
 esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
                               .partition_label = "spiffs_storage",
                               .max_files = 5,
                               .format_if_mount_failed = true};
-
-// void filesystem_init(void)
-// {
-//     ESP_LOGI(TAG, "Initializing SPIFFS");
-
-//     // Use settings defined above to initialize and mount SPIFFS filesystem.
-//     // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-//     esp_err_t ret = esp_vfs_spiffs_register(&conf);
-
-//     if (ret != ESP_OK) {
-//         if (ret == ESP_FAIL) {
-//             ESP_LOGE(TAG, "Failed to mount or format filesystem");
-//         } else if (ret == ESP_ERR_NOT_FOUND) {
-//             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
-//         } else {
-//             ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)",
-//             esp_err_to_name(ret));
-//         }
-//         return;
-//     }
-
-// #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
-//     ESP_LOGI(TAG, "Performing SPIFFS_check().");
-//     ret = esp_spiffs_check(conf.partition_label);
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
-//         return;
-//     } else {
-//         ESP_LOGI(TAG, "SPIFFS_check() successful");
-//     }
-// #endif
-
-//     size_t total = 0, used = 0;
-//     ret = esp_spiffs_info(conf.partition_label, &total, &used);
-//     if (ret != ESP_OK) {
-//         ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s).
-//         Formatting...", esp_err_to_name(ret));
-//         esp_spiffs_format(conf.partition_label);
-//         return;
-//     } else {
-//         ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
-//     }
-// }
-
 void init_semaphores(void) {
-
+  stateMutex = xSemaphoreCreateMutex();
+  message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
   Valve_A_AckSemaphore = xSemaphoreCreateBinary();
   Valve_B_AckSemaphore = xSemaphoreCreateBinary();
   Pump_AckSemaphore = xSemaphoreCreateBinary();
   Soil_AckSemaphore = xSemaphoreCreateBinary();
   i2c_mutex = xSemaphoreCreateMutex();
+  readings_mutex = xSemaphoreCreateMutex();
 }
 
 void pump_button_task(void *arg) {
@@ -259,16 +134,16 @@ void pump_button_task(void *arg) {
     if (gpio_get_level(START_btn) == 1) {
       button_state = BUTTON_START_PRESSED;
       ESP_LOGI(TAG, "START button pressed. Turning ON OUT_START for 1 second.");
-      gpio_set_level(OUT_START, 1);
+      gpio_set_level(PUMP_START, 1);
       vTaskDelay(pdMS_TO_TICKS(1000));
-      gpio_set_level(OUT_START, 0);
+      gpio_set_level(PUMP_START, 0);
       ESP_LOGI(TAG, "OUT_START turned OFF.");
     } else if (gpio_get_level(STOP_btn) == 1) {
       button_state = BUTTON_STOP_PRESSED;
       ESP_LOGI(TAG, "STOP button pressed. Turning ON OUT_STOP for 1 second.");
-      gpio_set_level(OUT_STOP, 1);
+      gpio_set_level(PUMP_STOP, 1);
       vTaskDelay(pdMS_TO_TICKS(1000));
-      gpio_set_level(OUT_STOP, 0);
+      gpio_set_level(PUMP_STOP, 0);
       ESP_LOGI(TAG, "OUT_STOP turned OFF.");
     } else {
       if (button_state != BUTTON_IDLE) {
@@ -282,8 +157,37 @@ void pump_button_task(void *arg) {
 
 void app_main(void) {
 
-  esp_log_level_set("Debug", ESP_LOG_DEBUG);
-  // esp_log_level_set("command", ESP_LOG_DEBUG);
+  // Set log level for all components
+  esp_log_level_set("*", ESP_LOG_INFO);
+  // esp_log_level_set("*", ESP_LOG_ERROR);
+
+   esp_log_level_set("ESPNOW", ESP_LOG_INFO);
+  // esp_log_level_set("espnow_lib", ESP_LOG_INFO);
+  esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+  // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
+  esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
+  // esp_log_level_set("GSM", ESP_LOG_DEBUG);
+  esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
+  // esp_log_level_set("DATA", ESP_LOG_DEBUG);
+  // esp_log_level_set("LoRa", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT", ESP_LOG_DEBUG);
+  // esp_log_level_set("AIR", ESP_LOG_DEBUG);
+  // esp_log_level_set("LCD", ESP_LOG_DEBUG);
+
+  esp_log_level_set("nvs", ESP_LOG_NONE);
+  esp_log_level_set("wifi", ESP_LOG_NONE);
+  esp_log_level_set("wifi_init", ESP_LOG_NONE);
+  esp_log_level_set("phy_init", ESP_LOG_NONE);
+  esp_log_level_set("esp_netif_lwip", ESP_LOG_NONE);
+  esp_log_level_set("BUTTON", ESP_LOG_NONE);
+  esp_log_level_set("coreMQTT", ESP_LOG_NONE);
+  esp_log_level_set("gpio", ESP_LOG_NONE);
+  esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
+
+  if (site_config.simulate) {
+    esp_log_level_set("ESPNOW", ESP_LOG_NONE);
+  }
+
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
     ESP_LOGE(TAG, "SPI mutex Failed to create ");
@@ -296,146 +200,274 @@ void app_main(void) {
   }
   ESP_ERROR_CHECK(ret);
 
+#if CONFIG_MASTER
+  g_nodeAddress = MASTER_ADDRESS;
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress));
+
+  if (init_data_module() != ESP_OK) {
+    ESP_LOGE(TAG, "data module Failed to initialize ");
+  }
+
+  espnow_init2();
+
+  // Check if waking up from deep sleep
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+    ESP_LOGI(TAG, "Woke up from deep sleep, checking voltage...");
+
+    esp_err_t voltage_init_result = voltage_monitor_init();
+    if (voltage_init_result != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to initialize voltage monitor %s ",
+               esp_err_to_name(voltage_init_result));
+    }
+
+    float voltage = measure_voltage();
+    ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
+    if (voltage < LOW_CUTOFF_VOLTAGE) {
+      ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_deep_sleep_start();
+    }
+    ESP_LOGI(TAG, "Voltage is sufficient, resuming normal operation...");
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  i2c_master_init_(&i2c0bus);
+  vTaskDelay(100);
+  init_semaphores();
+  vTaskDelay(100);
+  modbus_init();
+  vTaskDelay(100);
+  init_logging();
+  vTaskDelay(100);
+
   if (init_hex_buffer() != ESP_OK) {
     ESP_LOGE(TAG, "Failed to initialize hex buffer");
     vTaskDelete(NULL);
   }
-
-#if CONFIG_SENDER_A
-  g_nodeAddress = SOIL_A;
-  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-  static const char *pcb_a = "Soil_A";
-  espnow_init2();
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-  vTaskDelay(pdMS_TO_TICKS(5000));
-  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_a, 3, NULL);
-  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
-#endif
-#if CONFIG_SENDER_B
-  g_nodeAddress = SOIL_B;
-  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-  static const char *pcb_b = "Soil_B";
-  espnow_init2();
-
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-
-  vTaskDelay(pdMS_TO_TICKS(5000));
-  xTaskCreate(&sensor_task, "read", 1024 * 4, (void *)pcb_b, 3, NULL);
-  xTaskCreate(&vTaskESPNOW_TX, "transmit", 1024 * 4, NULL, 5, NULL);
-#endif
-
-#if CONFIG_RECEIVER
-  ESP_LOGI(TAG, "inside receiver");
-
-  g_nodeAddress = CONDUCTOR_ADDRESS;
-  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-  if (init_data_module() != ESP_OK) {
-    ESP_LOGE(TAG, "data module Failed to initialize ");
-  }
-  espnow_init2();
-  vTaskDelay(pdMS_TO_TICKS(2000));
-  stateMutex = xSemaphoreCreateMutex();
-  message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
-  i2c_master_init_(&i2c0bus);
-  vTaskDelay(100);
-  init_semaphores();
-#ifdef CONFIG_ENABLE_RTC
-  ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
-#endif
+  init_payload_buffer();
   lcd_init();
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
-  xTaskCreatePinnedToCore(updateValveState, "updateValveState",
-                          VALVE_TASK_STACK_SIZE, &g_nodeAddress,
-                          VALVE_TASK_PRIORITY, &valveTaskHandle,
-                          VALVE_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(2000));
+#ifdef CONFIG_ENABLE_RTC
+  ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
+#endif
 
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-  vTaskDelay(pdMS_TO_TICKS(20000));
-  
+  if (site_config.has_gsm) {
+    esp_err_t gsm_init_result = gsm_init();
+    if (gsm_init_result != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to initialize GSM module");
+      // Disable SIM pin
+      esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+      gpio_set_level(SIM_GPIO, 1);
+    } else {
+      ESP_LOGI(TAG, "GSM module initialized successfully");
+      xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
+                              NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
+                              SMS_TASK_CORE_ID);
+      vTaskDelay(pdMS_TO_TICKS(500));
+
+      snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", PROJECT_VERSION,
+               CONFIG_SITE_NAME);
+      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+  } else {
+    ESP_LOGW(TAG, "GSM module disabled");
+    // Disable SIM pin
+    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    gpio_set_level(SIM_GPIO, 1);
+  }
 
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
                           &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
 
-#ifdef CONFIG_GSM
-  esp_err_t gsm_init_result = gsm_init();
-  if (gsm_init_result != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to initialize GSM module");
-    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-    gpio_set_level(SIM_GPIO, 1);
-  } else {
-    ESP_LOGI(TAG, "GSM module initialized successfully");
-    xTaskCreatePinnedToCore(sms_manager_task, "SMS Manager",
-                            SMS_MANAGER_STACK_SIZE, &smsManagerTaskHandle,
-                            SMS_MANAGER_PRIORITY, NULL, SMS_MANAGER_CORE_ID);
-    xTaskCreatePinnedToCore(sms_receive_task, "SMS_receive",
-                            RECEIVE_SMS_TASK_STACK_SIZE, &smsReceiveTaskHandle,
-                            RECEIVE_SMS_TASK_PRIORITY, NULL,
-                            RECEIVE_SMS_TASK_CORE_ID);
-    xTaskCreatePinnedToCore(sms_task, "SMS", SMS_TASK_STACK_SIZE, NULL,
-                            SMS_TASK_PRIORITY, &smsTaskHandle,
-                            SMS_TASK_CORE_ID);
-    vTaskSuspend(smsTaskHandle);
-  }
-
-#endif
-
-  // xTaskCreate(simulation_task, "simulation_task", 4096, NULL, 5, NULL);
-  //  xTaskCreate(simulate_irrigation_workflow, "simulation_task", 4096, NULL,
-  //  5, NULL);
-
-  xTaskCreate(vTaskESPNOW_RX, "receive", 1024 * 4, NULL, 3, NULL);
+  xTaskCreatePinnedToCore(sensor_task, "Sensor task", SENSOR_TASK_STACK_SIZE,
+                          NULL, SENSOR_TASK_PRIORITY, &sensorTaskHandle,
+                          SENSOR_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(100));
 
   xTaskCreatePinnedToCore(
       wifi_app_task, "wifi_app_task", WIFI_APP_TASK_STACK_SIZE, NULL,
       WIFI_APP_TASK_PRIORITY, &wifiTaskHandle, WIFI_APP_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(2000));
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
-                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
-                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
-  // if (lcd_device_ready) {
-  //     xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW",
-  //     LCD_TASK_STACK_SIZE,
-  //                               NULL, LCD_TASK_PRIORITY, NULL,
-  //                               LCD_TASK_CORE_ID);
-  //       vTaskDelay(pdMS_TO_TICKS(100));
-  //     }
+
+  if (lcd_device_ready) {
+    xTaskCreatePinnedToCore(lcd_row_one_task, "LCD_ROW", LCD_TASK_STACK_SIZE,
+                            NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+
+  if (site_config.has_valve) {
+    xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery",
+        COMM_TASK_STACK_SIZE,     // Stack size
+        NULL,                     // Parameters
+        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+        &discoveryTaskHandle,
+        COMM_TASK_CORE_ID // Core ID
+    );
+    xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
+                            &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                            COMM_TASK_CORE_ID);
+
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    xTaskCreatePinnedToCore(updateValveState, "updateValveState",
+                            VALVE_TASK_STACK_SIZE, &g_nodeAddress,
+                            VALVE_TASK_PRIORITY, &valveTaskHandle,
+                            VALVE_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+
+  if (site_config.simulate) {
+    ESP_LOGW(TAG, "Simulation ON");
+    update_status_message("Simulation ON");
+    xTaskCreatePinnedToCore(simulation_task, "simulation_task",
+                            SIMULATION_TASK_STACK_SIZE, NULL,
+                            SIMULATION_TASK_PRIORITY, &simulationTaskHandle,
+                            SIMULATION_TASK_CORE_ID);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
 
   xTaskCreatePinnedToCore(
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(10000));
+  xTaskCreatePinnedToCore(hex_data_task, "HEXDataTask",
+                          HEX_DATA_TASK_STACK_SIZE, NULL,
+                          HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
+  vTaskDelay(pdMS_TO_TICKS(100));
+
+  if (site_config.has_voltage_cutoff) {
+    // Measure voltage and handle low voltage cutoff
+    float voltage = measure_voltage();
+    ESP_LOGI(TAG, "Measured voltage: %.2fV", voltage);
+
+    if (voltage < LOW_CUTOFF_VOLTAGE) {
+      ESP_LOGE(TAG,
+               "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+               LOW_CUTOFF_VOLTAGE);
+
+      // Disable SIM pin
+      esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+      gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
+      gpio_set_level(SIM_GPIO, 1);
+
+      // Enter deep sleep
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_deep_sleep_start();
+    }
+  }
+#endif
+
+#if CONFIG_SOIL_A
+  // Initialize as Soil A sensor
+  g_nodeAddress = SOIL_A_ADDRESS;
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress));
+
+  // Initialize ESP-NOW communication
+  espnow_init2();
+
+  // Start ESP-NOW discovery task
+  xTaskCreatePinnedToCore(
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
+
+  // Brief delay to allow discovery to start
+  vTaskDelay(pdMS_TO_TICKS(5000));
+
+  // Initialize soil sensor
+  soil_sensor_init();
+
+  // if (load_calibration_values(&DRY_STATE, &WET_STATE) != ESP_OK) {
+  //     ESP_LOGI(TAG, "No calibration found - starting calibration task");
+  //     xTaskCreate(calibration_task, "calibration_task", 4096, NULL, 5, NULL);
+  //     vTaskDelay(pdMS_TO_TICKS(80000));
+  // } else {
+  //       ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32, DRY_STATE, WET_STATE);
+  //   }
+
+  // Start sensor reading task
+  xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
+              "soil_sensor",    // Task name
+              1024 * 4,         // Stack size
+              NULL, // No parameters needed - node type determined in init
+              3,    // Priority
+              NULL  // No handle needed
+  );
+
+  // Start ESP-NOW transmission task
+  xTaskCreate(vTaskESPNOW_TX, // Transmission task
+              "transmit",     // Task name
+              1024 * 4,       // Stack size
+              NULL,           // No parameters needed
+              5,              // Priority
+              NULL            // No handle needed
+  );
+#endif
+
+#if CONFIG_SOIL_B
+  // Initialize as Soil B sensor
+  g_nodeAddress =
+      SOIL_B_ADDRESS; // Fixed: was incorrectly set to SOIL_A_ADDRESS
+  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress));
+
+  // Initialize ESP-NOW communication
+  espnow_init2();
+
+  // Start ESP-NOW discovery task
+  xTaskCreatePinnedToCore(
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
+
+  // Brief delay to allow discovery to start
+  vTaskDelay(pdMS_TO_TICKS(5000));
+
+  // Initialize soil sensor
+  soil_sensor_init();
+
+  // Start sensor reading task
+  xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
+              "soil_sensor",    // Task name
+              1024 * 4,         // Stack size
+              NULL, // No parameters needed - node type determined in init
+              3,    // Priority
+              NULL  // No handle needed
+  );
+
+  // Start ESP-NOW transmission task
+  xTaskCreate(vTaskESPNOW_TX, // Transmission task
+              "transmit",     // Task name
+              1024 * 4,       // Stack size
+              NULL,           // No parameters needed
+              5,              // Priority
+              NULL            // No handle needed
+  );
 #endif
 
 #if CONFIG_VALVE_A
   ESP_LOGI(TAG, "inside valve a");
-  g_nodeAddress = A_VALVE_ADDRESS;
+  g_nodeAddress = VALVE_A_ADDRESS;
   init_gpio();
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
@@ -448,15 +480,40 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
-                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
-                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
 
 #endif
 
 #if CONFIG_VALVE_B
-  g_nodeAddress = B_VALVE_ADDRESS;
-  init_gpio();
+  g_nodeAddress = VALVE_B_ADDRESS;
+  // Set all LOW initially
+  // gpio_set_level(RELAY_POSITIVE, 0);
+  // gpio_set_level(RELAY_NEGATIVE, 0);
+  // gpio_set_level(OE_PIN, 0);
+  gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+                                           (1ULL << RELAY_NEGATIVE) |
+                                           (1ULL << OE_PIN),
+                           .mode = GPIO_MODE_OUTPUT,
+                           .pull_up_en = GPIO_PULLUP_DISABLE,
+                           .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                           .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&io_conf);
+  // init_gpio();
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 1);
+  vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+
+  gpio_set_level(OE_PIN, 1);
+  vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
+  gpio_set_level(OE_PIN, 0);
+
+  vTaskDelay(pdMS_TO_TICKS(20));
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 0);
+  gpio_set_level(OE_PIN, 0);
+
   ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
   espnow_init2();
 
@@ -468,9 +525,9 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
-                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
-                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
 
 #endif
 
@@ -490,9 +547,9 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE",
-                          LORA_APP_TASK_STACK_SIZE, &g_nodeAddress,
-                          LORA_APP_TASK_PRIORITY, NULL, LORA_APP_TASK_CORE_ID);
+  xTaskCreatePinnedToCore(vTaskESPNOW, "Pump Comm", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
   // xTaskCreate(pump_button_task, "button_task", 2048, NULL, 10, NULL);
 
 #endif

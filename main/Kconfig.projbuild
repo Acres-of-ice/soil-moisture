@@ -1,272 +1,348 @@
-menu "SX126X Configuration"
+menu "App Configuration"
+    choice SITE_SELECT
+        prompt "Select Site"
+        default SITE_TEST
+        
+        config SITE_SKUAST
+            bool "Skuast"
+        config SITE_TEST
+            bool "Test"
+    endchoice
 
-	config GPIO_RANGE_MAX
-		int
-		default 33 if IDF_TARGET_ESP32
-		default 46 if IDF_TARGET_ESP32S2
-		default 48 if IDF_TARGET_ESP32S3
-		default 18 if IDF_TARGET_ESP32C2
-		default 19 if IDF_TARGET_ESP32C3
-		default 30 if IDF_TARGET_ESP32C6
+    config SITE_NAME
+        string
+        default "Test" if SITE_TEST
+        default "Skuast" if SITE_SKUAST
 
-	choice FREQUENCY
-		prompt "Frequency to use"
-		default 433MHZ
-		help
-			Select Frequency to use.
-		config 433MHZ
-			bool "433MHz"
-			help
-				Frequency is 433MHz.
-		config 866MHZ
-			bool "866MHz"
-			help
-				Frequency is 866MHz.
-		config 915MHZ
-			bool "915MHz"
-			help
-				Frequency is 915MHz.
-		config OTHER
-			bool "Other"
-			help
-				Other Frequency.
-	endchoice
-
-	config OTHER_FREQUENCY
-		depends on OTHER
-		int "Frequency to use[MHz]"
-		range 1 999
-		default 433
-		help
-			Frequency to use[MHz].
-
-	config ADVANCED
-		bool "Enable Advanced settings"
-		default false
-		help
-			Enable Advanced settings.
-
-	config CODING_RATE
-		depends on ADVANCED
-		int "Error coding rate"
-		range 1 4
-		default 1
-		help
-			Error coding rate.
-
-	config BANDWIDTH
-		depends on ADVANCED
-		int "Signal Bandwidth"
-		range 0 6
-		default 4
-		help
-			Signal Bandwidth.
-
-	config SF_RATE
-		depends on ADVANCED
-		int "Spreading Factor"
-		range 5 12
-		default 7
-		help
-			Spreading Factor.
-
-	config USE_TCXO
-		bool "Enable TCXO"
-		default false
-		help
-			Enable Temperature-Compensated Crystal Oscillator.
-
-	config RECEIVER
-		bool "Enable receiver"
-		default false
-		help
-			Enable Receiver Function.
-
-	config SENDER_A
-		bool "Enable Sender Sector A"
-		default false
-		help
-			Enable Sender A Function.
-	config SENDER_B
-		bool "Enable Sender Sector B "
-		default false
-		help
-		   Enable Sender B Function.
-	config VALVE_A
-		bool "Enable Valve Sector A"
-		default false
-		help
-			Enable Valve A Function.
-	config VALVE_B
-		bool "Enable Valve Sector B "
-		default false
-		help
-			Enable Valve B Function.
-	config PUMP
-		bool "Enable Pump "
-		default false
-		help
-			Enable Pump Function.		
-
-	config MISO_GPIO
-		int "SX126X MISO GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 19 if IDF_TARGET_ESP32
-		default 37 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  4 # C3 and others
-		help
-			Pin Number to be used as the MISO SPI signal.
-
-	config SCLK_GPIO
-		int "SX126X SCLK GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 18 if IDF_TARGET_ESP32
-		default 36 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  5 # C3 and others
-		help
-			Pin Number to be used as the SCLK SPI signal.
-
-	config MOSI_GPIO
-		int "SX126X MOSI GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 23 if IDF_TARGET_ESP32
-		default 35 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  6 # C3 and others
-		help
-			Pin Number to be used as the MOSI SPI signal.
-
-	config NSS_GPIO
-		int "SX126X NSS GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 15 if IDF_TARGET_ESP32
-		default 34 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  7 # C3 and others
-		help
-			Pin Number to be used as the NSS SPI signal.
-
-	config RST_GPIO
-		int "SX126X RST GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 16 if IDF_TARGET_ESP32
-		default 38 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  2 # C3 and others
-		help
-			Pin Number to be used as the RST signal.
-
-	config BUSY_GPIO
-		int "SX126X BUSY GPIO"
-		range 0 GPIO_RANGE_MAX
-		default 17 if IDF_TARGET_ESP32
-		default 39 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-		default  3 # C3 and others
-		help
-			Pin Number to be used as the BUSY signal.
-
-	config TXEN_GPIO
-		int "SX126X TXEN GPIO"
-		range -1 GPIO_RANGE_MAX
-		default -1
-		help
-			Pin Number to be used as the TXEN signal.
-
-	config RXEN_GPIO
-		int "SX126X RXEN GPIO"
-		range -1 GPIO_RANGE_MAX
-		default -1
-		help
-			Pin Number to be used as the RXEN signal.
-
-	choice SPI_HOST
-		prompt "SPI peripheral that controls this bus"
-		default SPI2_HOST
-		help
-			Select SPI peripheral that controls this bus.
-		config SPI2_HOST
-			bool "SPI2_HOST"
-			help
-				Use SPI2_HOST. This is also called HSPI_HOST.
-		config SPI3_HOST
-			depends on IDF_TARGET_ESP32 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-			bool "SPI3_HOST"
-			help
-				USE SPI3_HOST. This is also called VSPI_HOST
-	endchoice
-    config SMS_RECIPIENT_DATA
-		visible if HAS_GSM
-		choice
-		  prompt "Select Data SMS Recipient"
-		  default SMS_RECIPIENT_DATA_NIDHIN
-		  help
-			  Select the recipient who will receive data messages.
-  
-		  config SMS_RECIPIENT_DATA_AWS
-			  bool "AWS Server"
-			  
-		  config SMS_RECIPIENT_DATA_NIDHIN
-			  bool "Nidhin"
-			  
-		  config SMS_RECIPIENT_DATA_SURYA
-			  bool "Surya"
-	  endchoice
-  
-	  config SMS_RECIPIENT_ERROR
-		visible if HAS_GSM
-		choice
-		  prompt "Select Error SMS Recipient"
-		  default SMS_RECIPIENT_ERROR_NIDHIN
-		  help
-			  Select the recipient who will receive error messages and logs.
-  
-		  config SMS_RECIPIENT_ERROR_AWS
-			  bool "AWS Server"
-			  
-		  config SMS_RECIPIENT_ERROR_NIDHIN
-			  bool "Nidhin"
-			  
-		  config SMS_RECIPIENT_ERROR_SURYA
-			  bool "Surya"
-	  endchoice
-  
-  # Hidden configs to store the actual phone numbers
-	  config SMS_DATA_NUMBER
-		  string
-		  default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-		  default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-		  default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
-  
-	  config SMS_ERROR_NUMBER
-		  string
-		  default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-		  default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-		  default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
-
-	   config SMS_CHECK_M
-           int "SMS Check Interval (minutes)"
-            default 1 if SITE_TEST
-            default 3
-            range 1 60
+    choice PCB
+        prompt "Select PCB Configuration"
+        help
+            Choose the pcb type.
+        config MASTER
+            bool "MASTER as sensor master"
             help
-                Set the interval in minutes to check for new data to send via SMS.
-  
-	  choice LOG_SAVE_LEVEL
-		  prompt "Minimum log level to save"
-		  default LOG_SAVE_LEVEL_ERROR
-		  help
-			  Specify the minimum level of log messages to save to file.
-  
-		  config LOG_SAVE_LEVEL_NONE
-			  bool "No logs saved"
-		  config LOG_SAVE_LEVEL_ERROR
-			  bool "Error"
-		  config LOG_SAVE_LEVEL_WARN
-			  bool "Warning"
-	  endchoice
-  
-	  config LOG_SAVE_LEVEL
-		  int
-		  default 0 if LOG_SAVE_LEVEL_NONE
-		  default 1 if LOG_SAVE_LEVEL_ERROR
-		  default 2 if LOG_SAVE_LEVEL_WARN
+                Configure MASTER
+        config SOIL_A
+            bool "Soil A as soil sensor A"
+            help
+                Configure SOIL_A the soil sensor.
+        config SOIL_B
+            bool "Soil B as soil sensor B"
+            help
+                Configure SOIL_B the soil sensor.
+        config VALVE_A
+            bool "Valve A"
+            help
+                Configure VALVE_A the valve A.
+        config VALVE_B
+            bool "Valve B"
+            help
+                Configure VALVE_B the valve B.
+        config PUMP
+            bool "PUMP"
+            help
+                Configure Pump.
+    endchoice
+
+    config ESPTOOLPY_FLASHSIZE
+        string
+        default "8MB" if MASTER
+        default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESPTOOLPY_FLASHSIZE_8MB
+        string
+        default "y" if MASTER
+        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESPTOOLPY_FLASHSIZE_4MB
+        string
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESPTOOLPY_FLASHSIZE_2MB
+        string
+        default "n" if MASTER
+        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config PARTITION_TABLE_CUSTOM_FILENAME
+        string
+        default "partitions/master.csv" if MASTER
+        default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    # CPU Frequency Configuration
+    config ESP_DEFAULT_CPU_FREQ_MHZ
+        int
+        default 240 if MASTER
+        default 80 if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        help
+            CPU frequency to be set on application startup.
+            Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_80
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_160
+        bool
+        default n
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    # Debugging
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
+        bool
+        default n if MASTER
+        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+    config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
+        bool
+        default y if MASTER
+        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+
+config SMS_RECIPIENT_DATA
+  choice
+    prompt "Select Data SMS Recipient"
+    default SMS_RECIPIENT_DATA_AWS
+    help
+        Select the recipient who will receive data messages.
+
+    config SMS_RECIPIENT_DATA_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_DATA_NIDHIN
+        bool "Nidhin"
+        
+    config SMS_RECIPIENT_DATA_SURYA
+        bool "Surya"
+endchoice
+
+config SMS_RECIPIENT_ERROR
+  choice
+    prompt "Select Error SMS Recipient"
+    default SMS_RECIPIENT_ERROR_SURYA
+    help
+        Select the recipient who will receive error messages and logs.
+
+    config SMS_RECIPIENT_ERROR_AWS
+        bool "AWS Server"
+        
+    config SMS_RECIPIENT_ERROR_NIDHIN
+        bool "Nidhin"
+        
+    config SMS_RECIPIENT_ERROR_SURYA
+        bool "Surya"
+endchoice
+
+# Hidden configs to store the actual phone numbers
+config SMS_DATA_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_DATA_AWS
+default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
+default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
+
+config SMS_ERROR_NUMBER
+string
+default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
+default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
+default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
+
+config ENABLE_HW
+    bool "Enable Hardware Configuration"
+    default false
+    help
+        Enable to customize hardware settings. If disabled, site defaults will be used.
+
+menu "Hardware Configuration"
+	visible if ENABLE_HW
+
+	config LCD_ADDR_3F
+		bool "Use LCD I2C address 0x3F"
+		default y
+		help
+			Enable this for sites using LCD with I2C address 0x3F.
+
+        config HAS_VALVE
+            bool "Use Valves"
+            default y
+            help
+                Enable valve for sites
+        config ENABLE_VALVE
+            int
+            default 1 if HAS_VALVE
+            default 0
+
+        config HAS_GSM
+            bool "Use GSM"
+            default n if SITE_TEST
+            default y
+            help
+                Enable GSM for sites
+        config ENABLE_GSM
+            int
+            default 1 if HAS_GSM
+            default 0
+
+        config HAS_TEMP_HUMIDITY
+            bool "Enable Temperature Sensor"
+            default y
+            help
+                Enable if site has a temp sensor.
+        config ENABLE_TEMP_HUMIDITY
+            int
+            default 1 if HAS_TEMP_HUMIDITY
+            default 0
+
+        config HAS_FLOWMETER
+            bool "Enable Flowmeter"
+            default y
+            help
+                Enable if site has a flowmeter.
+        config ENABLE_FLOWMETER
+            int
+            default 1 if HAS_FLOWMETER
+            default 0
+
+        config HAS_PRESSURE
+            bool "Enable pressure sensor"
+            default y
+            help
+                Enable if site has a pressure sensor.
+        config ENABLE_PRESSURE
+            int
+            default 1 if HAS_PRESSURE
+            default 0
+
+        config HAS_VOLTAGE_CUTOFF
+            bool "Enable Low Voltage Auto Cutoff"
+            default n
+            help
+                Enable low voltage auto cutoff for sites
+        config ENABLE_VOLTAGE_CUTOFF
+            int
+            default 1 if HAS_VOLTAGE_CUTOFF
+            default 0
+        config HAS_CALIBRATION
+            bool "Does the calibration for soil moisture sensor"
+            default n
+            help
+                Enable calibration for soil moisture sensor
+        config ENABLE_CALIBRATION
+            int
+            default 1 if HAS_CALIBRATION
+            default 0
+endmenu
+
+config ENABLE_DRIP_TIMER
+	bool "Enable Drip Timer"
+	default false
+	help
+		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
+
+menu "Drip Timer Configuration"
+	visible if ENABLE_DRIP_TIMER
+
+	config DRIP_START_HOUR
+		int "Drip start hour (0-23)"
+		default 0
+		range 0 23
+		help
+			Set the hour when the forced drain time starts (24-hour format).
+
+	config DRIP_START_MINUTE
+		int "Drip start minute (0-59)"
+		default 0
+		range 0 59
+		help
+			Set the minute when the forced drain time starts.
+
+	config DRIP_END_HOUR
+		int "Drip end hour (0-23)"
+		default 23
+		range 0 23
+		help
+			Set the hour when the forced drain time ends (24-hour format).
+
+	config DRIP_END_MINUTE
+		int "Drip end minute (0-59)"
+		default 59
+		range 0 59
+		help
+			Set the minute when the forced drain time ends.
+endmenu
+
+config ENABLE_RESET_SENSOR_CONFIG
+  bool "Enable Reset Sensor Configuration"
+  default false
+
+menu "Reset Time Configuration"
+	visible if ENABLE_RESET_SENSOR_CONFIG
+
+	config RESET_HOUR
+		int "Reset hour (0-23)"
+		default 0
+		range 0 23
+		help
+			Set the hour to reset the sensor readings (24-hour format).
+endmenu
+
+config ENABLE_TIME_CONFIG
+    bool "Enable Timeout Configuration"
+    default false
+    help
+        Enable this option to customize timeout settings. If disabled, default values will be used.
+
+menu "Time Configuration"
+    visible if ENABLE_TIME_CONFIG
+
+    config STATE_TIMEOUT_M
+        int "State machine timeout (minutes)"
+        default 60
+        range 1 180
+        help
+            Timeout for state machine in minutes.
+
+    config IRRIGATION_TIMEOUT_M
+        int "Irrigation timeout (minutes)"
+        default 45
+        range 1 60
+        help
+            Timeout for state machine in minutes.
+
+    config VALVE_TIMEOUT_S
+        int "Valve operation timeout (seconds)"
+        default 6 if SITE_TEST
+        default 90
+        range 1 3600
+        help
+            Timeout for valve operations in seconds.
+
+    config SERVER_TIMEOUT_M
+        int "Server timeout (minutes)"
+        default 2 if SITE_TEST
+        default 5
+        range 1 60
+        help
+            Interval for keeping server on
+
+    config SMS_INTERVAL_M
+        int "Hex data and sms send interval (minutes)"
+        default 10 if SITE_TEST
+        default 20
+        range 1 60
+        help
+            Timeout for SMS and HEX  in minutes.
+
+    config DATA_TIME_M
+        int "Data logging interval (minutes)"
+        default 2 if SITE_TEST
+        default 5
+        range 1 60
+        help
+            Interval for data logging in seconds (default: 5 minutes).
 
     config CALIBRATION_DURATION_M
         int "Calibration duration (minutes)"
@@ -282,7 +358,7 @@ menu "SX126X Configuration"
         default 120
         range 1 600
         help
-           Set the interval in minutes for calibration task.
+            Set the interval in minutes for calibration task.
 
     config POLL_INTERVAL_S
         int "Poll interval (seconds)"
@@ -291,10 +367,42 @@ menu "SX126X Configuration"
         range 1 60
         help
             Set the interval in seconds between sensor readings.
-  
-	  endmenu
 
+    config SMS_CHECK_M
+        int "SMS Check Interval (minutes)"
+        default 1 if SITE_TEST
+        default 3
+        range 1 60
+        help
+            Set the interval in minutes to check for new data to send via SMS.
+endmenu
 
+config ENABLE_SIMULATION_MODE
+    int
+    default 1 if SITE_TEST
+    default 0
+    help
+        Enable simulation mode which uses fixed simulated sensor readings instead of real sensor data.
+
+menu "Soil Moisture Thresholds"
+    config SOIL_DRY
+        int "Soil Dry Threshold (%)"
+        range 0 100
+        default 40
+        help
+            Set the soil moisture threshold below which irrigation will start.
+            Value is a percentage (0-100). Lower values mean drier soil.
+            Example: 40 means irrigation starts when moisture falls below 40%.
+            
+    config SOIL_WET
+        int "Soil Wet Threshold (%)"
+        range 0 100
+        default 70
+        help
+            Set the soil moisture threshold at which irrigation will stop.
+            Value is a percentage (0-100). Higher values mean wetter soil.
+            Example: 70 means irrigation stops when moisture reaches 70%.
+endmenu
 
 config ENABLE_RTC
 	bool "Enable RTC Configuration"
@@ -309,7 +417,6 @@ menu "RTC Configuration"
 		int "Year"
 		range 2000 2099
 		default 2025
-		# depends on HAS_RTC_SET
 		help
 			Year to set (2000-2099)
 
@@ -317,7 +424,6 @@ menu "RTC Configuration"
 		int "Month"
 		range 1 12
 		default 1
-		# depends on HAS_RTC_SET
 		help
 			Month to set (1-12)
 
@@ -325,7 +431,6 @@ menu "RTC Configuration"
 		int "Day"
 		range 1 31
 		default 1
-		# depends on HAS_RTC_SET
 		help
 			Day to set (1-31)
 
@@ -333,7 +438,6 @@ menu "RTC Configuration"
 		int "Hour"
 		range 0 23
 		default 0
-		# depends on HAS_RTC_SET
 		help
 			Hour to set (0-23)
 
@@ -341,123 +445,10 @@ menu "RTC Configuration"
 		int "Minute"
 		range 0 59
 		default 0
-		# depends on HAS_RTC_SET
 		help
 			Minute to set (0-59)
 endmenu
 
-menu "Hardware Configuration"
-	visible if ENABLE_HW
-
-	config LCD_ADDR_3F
-		bool "Use LCD I2C address 0x3F"
-		default y
-		help
-			Enable this for sites using LCD with I2C address 0x3F.
-
-	config GSM
-		bool "Enable GSM"
-		default false
-		help
-					
-			
-	config HAS_GSM
-		bool "Use GSM"
-		default y
-		help
-			Enable GSM for sites
-	config ENABLE_GSM
-		int
-		default 1 if HAS_GSM
-		default 0
-
-	config HAS_RELAY
-		bool "Use GSM Relay"
-		default n
-		help
-			Enable relay for sites
-	config ENABLE_RELAY
-		int
-		default 1 if HAS_RELAY
-		default 0
-
-	config HAS_WIND_SENSOR
-        bool "Enable Wind Sensor"
-        default y
-        help
-            Enable if site has a wind sensor.
-    config ENABLE_WIND_SENSOR
-        int
-        default 1 if HAS_WIND_SENSOR
-        default 0
-
-    config HAS_FLOWMETER
-        bool "Enable Flowmeter"
-        default y
-         help
-                Enable if site has a flowmeter.
-    config ENABLE_FLOWMETER
-        int
-        default 1 if HAS_FLOWMETER
-        default 0
-
-    config HAS_PRESSURE
-        bool "Enable pressure sensor"
-        default y
-        help
-            Enable if site has a pressure sensor.
-    config ENABLE_PRESSURE
-        int
-        default 1 if HAS_PRESSURE
-        default 0
-
-    config HAS_ADC_WATER_TEMP
-        bool "Enable ADC Water Temperature Sensor"
-        default n
-        help
-             Enable if site has a water temperature sensor.
-    config ENABLE_ADC_WATER_TEMP
-        int
-        default 1 if HAS_ADC_WATER_TEMP
-        default 0
-endmenu
-
-config ENABLE_DRAIN_TIME_CONFIG
-	bool "Enable Drain Time Configuration"
-	default false
-	help
-		Enable this option to set a custom drain time range. If disabled, draining will occur based on other conditions only.
-
-menu "Drain Time Configuration"
-	visible if ENABLE_DRAIN_TIME_CONFIG
-
-	config DRAIN_START_HOUR
-		int "Drain start hour (0-23)"
-		default 0
-		range 0 23
-		help
-			Set the hour when the forced drain time starts (24-hour format).
-
-	config DRAIN_START_MINUTE
-		int "Drain start minute (0-59)"
-		default 0
-		range 0 59
-		help
-			Set the minute when the forced drain time starts.
-
-	config DRAIN_END_HOUR
-		int "Drain end hour (0-23)"
-		default 0
-		range 0 23
-		help
-			Set the hour when the forced drain time ends (24-hour format).
-
-	config DRAIN_END_MINUTE
-		int "Drain end minute (0-59)"
-		default 0
-		range 0 59
-		help
-			Set the minute when the forced drain time ends.
 endmenu
 
 
