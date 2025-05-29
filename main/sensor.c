@@ -20,6 +20,8 @@ static adc_cali_handle_t adc_cali_handle = NULL;
 static bool adc_cali_initialized = false;
 static float current_voltage = 0.0f;
 
+extern int soil_A;
+extern int soil_B;
 
 // Initialization Functions
 void sensors_init(void) {
@@ -55,11 +57,11 @@ float get_voltage(void) {
 }
 
 float measure_voltage(void) {
-  
+
   if (adc_handle == NULL) {
     ESP_LOGE(TAG, "ADC handle is not initialized");
     return 0.0f; // Return a default value
-}
+  }
   int adc_reading = 0;
 
   // Take multiple readings and average
@@ -474,8 +476,7 @@ void sensor_task(void *pvParameters) {
         esp_rom_gpio_pad_select_gpio(SIM_GPIO);
         gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
         gpio_set_level(SIM_GPIO, 1);
-        gpio_hold_en(SIM_GPIO); // Hold the GPIO level
-
+        gpio_hold_en(SIM_GPIO);
 
         // Enter deep sleep
         esp_sleep_enable_timer_wakeup(
@@ -487,6 +488,9 @@ void sensor_task(void *pvParameters) {
       // Default value if voltage cutoff is disabled
       local_readings.voltage = 0.0f;
     }
+
+    local_readings.soil_A = soil_A;
+    local_readings.soil_B = soil_B;
 
     // Now take mutex only for the quick copy operation
     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {

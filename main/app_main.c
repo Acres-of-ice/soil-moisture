@@ -161,7 +161,7 @@ void app_main(void) {
   esp_log_level_set("*", ESP_LOG_INFO);
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
-  // esp_log_level_set("ESPNOW", ESP_LOG_INFO);
+  esp_log_level_set("ESPNOW", ESP_LOG_INFO);
   // esp_log_level_set("espnow_lib", ESP_LOG_INFO);
   esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
@@ -225,7 +225,10 @@ void app_main(void) {
     ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
     if(voltage < LOW_CUTOFF_VOLTAGE){
       ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
-      esp_sleep_enable_timer_wakeup((uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 * 1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      gpio_hold_dis(SIM_GPIO);
       esp_deep_sleep_start();
       gpio_hold_dis(SIM_GPIO); // Release the GPIO hold
     }
@@ -345,13 +348,13 @@ void app_main(void) {
 
   if (site_config.has_voltage_cutoff) {
     // Measure voltage and handle low voltage cutoff
-      // After other initializations but before the main loop
-  esp_err_t voltage_init_result = voltage_monitor_init();
-  if (voltage_init_result != ESP_OK) {
-    ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
-             esp_err_to_name(voltage_init_result));
-  }
-  
+    // After other initializations but before the main loop
+    esp_err_t voltage_init_result = voltage_monitor_init();
+    if (voltage_init_result != ESP_OK) {
+      ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
+               esp_err_to_name(voltage_init_result));
+    }
+    // Measure voltage and handle low voltage cutoff
     float voltage = measure_voltage();
     ESP_LOGI(TAG, "Measured voltage: %.2fV", voltage);
 
@@ -363,7 +366,7 @@ void app_main(void) {
       esp_rom_gpio_pad_select_gpio(SIM_GPIO);
       gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
       gpio_set_level(SIM_GPIO, 1);
-      gpio_hold_en(SIM_GPIO); // Hold the GPIO level
+      gpio_hold_en(SIM_GPIO);
 
       // Enter deep sleep
       esp_sleep_enable_timer_wakeup((uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 * 1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
@@ -396,6 +399,15 @@ void app_main(void) {
 
   // Initialize soil sensor
   soil_sensor_init();
+
+  // if (load_calibration_values(&DRY_STATE, &WET_STATE) != ESP_OK) {
+  //     ESP_LOGI(TAG, "No calibration found - starting calibration task");
+  //     xTaskCreate(calibration_task, "calibration_task", 4096, NULL, 5, NULL);
+  //     vTaskDelay(pdMS_TO_TICKS(80000));
+  // } else {
+  //       ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32,
+  //       DRY_STATE, WET_STATE);
+  //   }
 
   // Start sensor reading task
   xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c

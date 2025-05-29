@@ -15,6 +15,9 @@ static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
 static char response_sms[32];
 
+bool demo_mode_active = false;
+TickType_t demo_mode_start_time = 0;
+
 typedef struct {
   void (*short_press_action)(void);
   void (*long_press_action)(void);
@@ -60,21 +63,40 @@ void a_btn_short_press(void) {
 }
 
 void a_btn_long_press(void) {
-  ESP_LOGI(TAG, "Calibration reset");
-  //   calibration_done = false;
-  //   mean_fountain_pressure = 0;
-  // static char display_calibration[5];
-  // int calibration_value = (int)(mean_fountain_pressure);
-  //   snprintf(display_calibration, sizeof(display_calibration), "%2dP",
-  // //            calibration_value);
+  ValveState currentState = getCurrentState();
 
-  //   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-  //     lcd_put_cur(0, 10);
-  //     lcd_send_string(display_calibration);
-  //     vTaskDelay(100);
-  //     lcd_put_cur(1, 0);
-  //     xSemaphoreGive(i2c_mutex);
-  //   }
+  if (currentState != STATE_IDLE) {
+    ESP_LOGI(TAG, "Cannot start demo - system not in IDLE state");
+
+    // Show message on LCD if available
+    if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+      lcd_put_cur(1, 0);
+      lcd_send_string("Not idle - abort");
+      xSemaphoreGive(i2c_mutex);
+      vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
+    }
+    return;
+  }
+
+  ESP_LOGI(TAG, "Starting demo mode");
+  demo_mode_active = true;
+  demo_mode_start_time = xTaskGetTickCount();
+
+  // Start irrigation in demo mode
+  setCurrentState(STATE_VALVE_A_OPEN);
+
+  // Notify via LCD
+  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    lcd_put_cur(1, 0);
+    lcd_send_string("Demo Mode ON");
+    xSemaphoreGive(i2c_mutex);
+  }
+
+  // Optional SMS notification
+  if (gsm_init_success) {
+    snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
+    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+  }
 }
 
 void b_btn_short_press(void) {

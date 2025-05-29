@@ -22,6 +22,7 @@ extern const char *DATA_FILE_HEADER; // Declaration
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
+extern int soil_A_Live;
 
 // Device type identifiers (high nibble)
 #define DEVICE_TYPE_MASTER 0xA0
@@ -68,6 +69,11 @@ extern uint8_t sequence_number;
 
 #define MAX_SITES 11
 
+// Irrigation Demo mode
+extern bool demo_mode_active;
+extern TickType_t demo_mode_start_time;
+#define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
+
 typedef struct {
   uint32_t total_data_points;
   uint32_t
@@ -75,6 +81,22 @@ typedef struct {
   char last_data_time[32];
 } data_statistics_t;
 extern data_statistics_t data_stats;
+
+// ==================== Soil Sensor Calibration ====================
+
+#define NVS_NAMESPACE "soil_calib"
+#define NVS_DRY_KEY "dry_value"
+#define NVS_WET_KEY "wet_value"
+#define MY_ADC_CHANNEL ADC_CHANNEL_3
+#define MY_ADC_ATTEN ADC_ATTEN_DB_12
+#define SAMPLE_DURATION_MS 30000
+#define SAMPLE_INTERVAL_MS 1000
+// #define SOIL_DRY_ADC_VALUE 0
+// #define SOIL_MOIST_ADC_VALUE 0
+static int32_t DRY_STATE = 0;
+static int32_t WET_STATE = 0;
+static int32_t soil_dry_adc_value = 0;
+static int32_t soil_wet_adc_value = 0;
 
 // ==================== SMS Definitions ====================
 
@@ -207,17 +229,6 @@ typedef struct {
   int soil_A;
   int soil_B;
 } sensor_readings_t;
-
-// static sensor_readings_t readings = {
-//     .temperature = 0.0f,
-//     .humidity = 0.0f,
-//     .pressure = 0.0f,
-//     .water_temp = 0.0f,
-//     .discharge = 0.0f,
-//     .voltage = 0.0f,
-//     .soil_A = 99,   // Explicit initialization
-//     .soil_B = 99    // Explicit initialization
-// };
 
 // Declare the globals
 extern sensor_readings_t simulated_readings;

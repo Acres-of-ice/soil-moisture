@@ -2,6 +2,7 @@
 
 #include "soil_sensor.h"
 #include "define.h"
+#include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
@@ -11,17 +12,25 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "soil_comm.h"
 #include <string.h>
 #include <time.h>
 
 static const char *TAG = "SoilSensor";
 
+#define LED_GPIO GPIO_NUM_10 // GPIO10 connected to LED
+
 // Queue for handling ESP-NOW transmission data
 QueueHandle_t sensor_data_queue = NULL;
 
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
+
+// Calibration handle and state for battery
+static adc_cali_handle_t cali_handle = NULL;
+static bool cali_enabled = false;
 
 // Calibration handle and state for battery
 static adc_cali_handle_t cali_handle = NULL;
@@ -93,11 +102,216 @@ adc_cali_curve_fitting_config_t cali_cfg = {
   ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
 }
 
+void init_led_gpio() {
+  gpio_config_t io_conf = {.pin_bit_mask = (1ULL << LED_GPIO),
+                           .mode = GPIO_MODE_OUTPUT,
+                           .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                           .pull_up_en = GPIO_PULLUP_DISABLE,
+                           .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&io_conf);
+}
+
+esp_err_t save_calibration_values(int dry, int wet) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+
+  err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK)
+    return err;
+
+  err = nvs_set_i32(nvs_handle, NVS_DRY_KEY, dry);
+  if (err != ESP_OK) {
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  err = nvs_set_i32(nvs_handle, NVS_WET_KEY, wet);
+  if (err != ESP_OK) {
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  err = nvs_commit(nvs_handle);
+  nvs_close(nvs_handle);
+
+  return err;
+}
+
+esp_err_t load_calibration_values(int32_t *dry, int32_t *wet) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+
+  err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+  if (err != ESP_OK)
+    return err;
+
+  err = nvs_get_i32(nvs_handle, NVS_DRY_KEY, dry);
+  if (err != ESP_OK) {
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  err = nvs_get_i32(nvs_handle, NVS_WET_KEY, wet);
+  if (err != ESP_OK) {
+    nvs_close(nvs_handle);
+    return err;
+  }
+
+  nvs_close(nvs_handle);
+  return ESP_OK;
+}
+
+// Calibration Task
+void calibration_task(void *pvParameters) {
+  ESP_LOGI(TAG, "Starting calibration task...");
+
+  init_led_gpio();
+
+  int raw_val = 0;
+
+  // DRY calibration
+  ESP_LOGI(TAG, "=== Calibration Step 1: Place sensor in DRY soil ===");
+  // Turn ON LED
+  gpio_set_level(LED_GPIO, 1);
+  vTaskDelay(pdMS_TO_TICKS(5000));
+  // Turn OFF LED
+  gpio_set_level(LED_GPIO, 0);
+  ESP_LOGI(TAG, "Sampling DRY state...");
+
+  int dry_sum = 0, dry_count = 0;
+  for (int i = 0; i < SAMPLE_DURATION_MS; i += SAMPLE_INTERVAL_MS) {
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, MY_ADC_CHANNEL, &raw_val));
+    dry_sum += raw_val;
+    dry_count++;
+    ESP_LOGI(TAG, "[DRY] Sample %d: %d", dry_count, raw_val);
+    vTaskDelay(pdMS_TO_TICKS(SAMPLE_INTERVAL_MS));
+  }
+  soil_dry_adc_value = dry_sum / dry_count;
+
+  // WET calibration
+  ESP_LOGI(TAG, "\n=== Calibration Step 2: Submerge sensor in WATER ===");
+  // Blink LED for 5 seconds
+  const int blink_duration_ms = 5000;
+  const int blink_interval_ms = 250; // LED toggle every 250 ms
+  int elapsed = 0;
+
+  while (elapsed < blink_duration_ms) {
+    gpio_set_level(LED_GPIO, 1); // LED ON
+    vTaskDelay(pdMS_TO_TICKS(blink_interval_ms / 2));
+    gpio_set_level(LED_GPIO, 0); // LED OFF
+    vTaskDelay(pdMS_TO_TICKS(blink_interval_ms / 2));
+    elapsed += blink_interval_ms;
+  }
+  ESP_LOGI(TAG, "Sampling WET state...");
+
+  int wet_sum = 0, wet_count = 0;
+  for (int i = 0; i < SAMPLE_DURATION_MS; i += SAMPLE_INTERVAL_MS) {
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, MY_ADC_CHANNEL, &raw_val));
+    wet_sum += raw_val;
+    wet_count++;
+    ESP_LOGI(TAG, "[WET] Sample %d: %d", wet_count, raw_val);
+    vTaskDelay(pdMS_TO_TICKS(SAMPLE_INTERVAL_MS));
+  }
+  soil_wet_adc_value = wet_sum / wet_count;
+
+  // Save calibration
+  if (save_calibration_values(soil_dry_adc_value, soil_wet_adc_value) ==
+      ESP_OK) {
+    ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32,
+             soil_dry_adc_value, soil_wet_adc_value);
+  } else {
+    ESP_LOGE(TAG, "Failed to save calibration");
+  }
+
+  vTaskDelete(NULL); // Delete this task when done
+}
+
+// #define SAMPLE_WINDOW 16  // Power of 2 for efficient filtering
+
+// typedef struct {
+//     int samples[SAMPLE_WINDOW];
+//     int index;
+//     int sum;
+// } adc_filter_t;
+
+// static adc_filter_t moisture_filter = {0};
+
+// int filtered_adc_read(adc_oneshot_unit_handle_t handle, int channel) {
+//     int raw_value;
+
+//     // Multi-stage sampling
+//     int stage1 = 0;
+//     for (int i = 0; i < 4; i++) {
+//         adc_oneshot_read(handle, channel, &raw_value);
+//         stage1 += raw_value;
+//         ets_delay_us(50); // Spread out samples
+//     }
+//     raw_value = stage1 / 4;
+
+//     // Moving average filter update
+//     moisture_filter.sum -= moisture_filter.samples[moisture_filter.index];
+//     moisture_filter.samples[moisture_filter.index] = raw_value;
+//     moisture_filter.sum += raw_value;
+//     moisture_filter.index = (moisture_filter.index + 1) % SAMPLE_WINDOW;
+
+//     return moisture_filter.sum / SAMPLE_WINDOW;
+// }
+
 /**
  * @brief Read soil moisture from ADC and convert to percentage
  * 
  * @return int Moisture percentage (0-100) or -1 on error
  */
+
+//  int read_soil_moisture(void) {
+//     if (adc1_handle == NULL) {
+//         ESP_LOGE(TAG, "ADC not initialized");
+//         return -1;
+//     }
+
+//     // Get filtered reading
+//     int raw_moisture = filtered_adc_read(adc1_handle, SOIL_ADC_CHANNEL);
+
+//     // Median filter for additional stability
+//     static int median_buffer[5] = {0};
+//     static int median_index = 0;
+//     median_buffer[median_index] = raw_moisture;
+//     median_index = (median_index + 1) % 5;
+
+//     // Simple median (sort 3 middle values)
+//     int temp[5];
+//     memcpy(temp, median_buffer, sizeof(temp));
+//     for(int i = 0; i < 3; i++) {
+//         for(int j = i+1; j < 5; j++) {
+//             if(temp[j] < temp[i]) {
+//                 int swap = temp[i];
+//                 temp[i] = temp[j];
+//                 temp[j] = swap;
+//             }
+//         }
+//     }
+//     raw_moisture = temp[2]; // Take median value
+
+//     // Rest of your calibration remains the same
+//     int calibrated_moisture;
+//     #if CONFIG_SOIL_A
+//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+//                          (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+//     #endif
+
+//     #if CONFIG_SOIL_B
+//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+//                          (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+//     #endif
+
+//     // Clamp to valid range
+//     calibrated_moisture = MAX(0, MIN(100, calibrated_moisture));
+
+//     ESP_LOGD(TAG, "Filtered soil moisture ADC raw: %d -> %d%%",
+//              raw_moisture, calibrated_moisture);
+//     return calibrated_moisture;
+// }
+
 int read_soil_moisture(void) {
   if (adc1_handle == NULL) {
     ESP_LOGE(TAG, "ADC not initialized"); 
@@ -107,9 +321,10 @@ int read_soil_moisture(void) {
   // Read multiple samples and average for stability
   const int NUM_SAMPLES = 5;
   int total = 0;
+  int raw_value = 0;
 
   for (int i = 0; i < NUM_SAMPLES; i++) {
-    int raw_value = 0;
+
     esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &raw_value);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
@@ -123,15 +338,18 @@ int read_soil_moisture(void) {
 
   // Calibrate moisture value using pre-defined ranges
   int calibrated_moisture;
-   #if CONFIG_SOIL_A
-   calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
-                            (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
-  #endif
+// load_calibration_values(&DRY_STATE, &WET_STATE);
+//  calibrated_moisture = (DRY_STATE - raw_moisture) * 100 /
+//                           (DRY_STATE - WET_STATE);
+#if CONFIG_SOIL_A
+  calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+                        (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+#endif
 
-  #if CONFIG_SOIL_B
-   calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
-                            (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
-  #endif
+#if CONFIG_SOIL_B
+  calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+                        (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+#endif
 
   // Clamp to valid range
   if (calibrated_moisture < 0)
@@ -142,6 +360,7 @@ int read_soil_moisture(void) {
   ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
            calibrated_moisture);
   return calibrated_moisture;
+  // return raw_value;
 }
 
 /**
@@ -198,6 +417,38 @@ float read_battery_level(void) {
     ESP_LOGI(TAG, "Battery voltage: %.2f V, Battery level: %.1f%%", vbat, percent);
     return percent;
  }
+static float read_battery_voltage(void) {
+  if (!adc1_handle)
+    soil_sensor_init(); // Ensure ADC is initialized
+
+  int raw = 0;
+  ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, SOIL_BATT_ADC_CHANNEL, &raw));
+  ESP_LOGD(TAG, "Raw ADC value: %d", raw);
+
+  int mv = 0;
+  if (cali_enabled) {
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, raw, &mv));
+    ESP_LOGD(TAG, "Calibrated voltage: %d mV", mv);
+  } else {
+    mv = raw * 1100 / 4095; // fallback rough estimate
+  }
+
+  float battery_voltage = (mv / 1000.0f) * SOIL_BATT_VOLTAGE_DIVIDER;
+  return battery_voltage;
+}
+
+float read_battery_level(void) {
+  float vbat = read_battery_voltage();
+  float percent = (vbat - SOIL_BATT_MIN_VOLTAGE) /
+                  (SOIL_BATT_MAX_VOLTAGE - SOIL_BATT_MIN_VOLTAGE) * 100.0f;
+  if (percent > 100.0f)
+    percent = 100.0f;
+  if (percent < 0.0f)
+    percent = 0.0f;
+  ESP_LOGI(TAG, "Battery voltage: %.2f V, Battery level: %.1f%%", vbat,
+           percent);
+  return percent;
+}
 
 /**
  * @brief Send sensor data to master device with retry mechanism
@@ -220,9 +471,8 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
            read_battery_level());
 
   ESP_LOGI(TAG, "Node: 0x%02X, Soil: %d%%, Battery: %.1f%%",
-         sensor_data->node_address, 
-         sensor_data->soil_moisture,
-         read_battery_level());
+           sensor_data->node_address, sensor_data->soil_moisture,
+           read_battery_level());
 
   ESP_LOGD(TAG, "Sending to master: %s", message);
 
@@ -274,12 +524,12 @@ bool queue_sensor_data(const espnow_recv_data_t *data) {
     ESP_LOGE(TAG, "Sensor data queue not initialized");
     return false;
   }
-  
+
   if (xQueueSend(sensor_data_queue, data, pdMS_TO_TICKS(10)) == pdTRUE) {
     ESP_LOGD(TAG, "Queued sensor data");
     return true;
   }
-  
+
   ESP_LOGW(TAG, "Failed to queue sensor data, queue might be full");
   return false;
 }
@@ -304,14 +554,15 @@ bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
     ESP_LOGW(TAG, "Sensor queue not initialized");
     return false;
   }
-  
-  BaseType_t result = xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms));
-  
+
+  BaseType_t result =
+      xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms));
+
   if (result == pdTRUE) {
     ESP_LOGD(TAG, "Successfully received data from queue");
     return true;
   }
-  
+
   ESP_LOGD(TAG, "No data available in queue");
   return false;
 }

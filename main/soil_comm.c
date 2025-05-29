@@ -39,7 +39,7 @@ extern TaskHandle_t valveTaskHandle;
 #define MAX_RETRIES 10
 
 static time_t last_conductor_message_time = 0;
-static sensor_readings_t soil_readings = {99, 99}; // Local buffer
+static sensor_readings_t soil_readings;
 
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
@@ -54,7 +54,7 @@ static int num_device_mappings = 0;
 // External queue for receiving sensor data
 extern QueueHandle_t espnow_queue;
 
-static const char *TAG = "ESPNOW";
+static const char *TAG = "COMMAND";
 extern char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 extern bool message_received;
 extern char last_message[256];
@@ -68,11 +68,11 @@ uint8_t rx_buffer[ESPNOW_MAX_PAYLOAD_SIZE] = {0};
 extern QueueHandle_t message_queue;
 uint8_t sequence_number = 0;
 
-int soil_A = 99;
-int soil_B = 99;
-
 espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
+
+int soil_A = 999;
+int soil_B = 999;
 
 bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
                           espnow_recv_data_t *data) {
@@ -134,7 +134,7 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
 
 #if CONFIG_MASTER
   message.retries = retries;
-  ESP_LOGI("command",
+  ESP_LOGD(TAG,
            "Message initialized -> address: 0x%02X, command: 0x%02X, source: "
            "0x%02X, retries: %d, seq_num: %d, data: \"%s\"",
            message.address, message.command, message.source, message.retries,
@@ -143,8 +143,8 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
   if (xQueueSend(message_queue, &message, 0) != pdPASS) {
     ESP_LOGE(TAG, "Failed to queue message ( retries %d)", message.retries);
   } else {
-    ESP_LOGD("command", "Message queued: data = %s", message.data);
-    ESP_LOGI("command",
+    ESP_LOGD(TAG, "Message queued: data = %s", message.data);
+    ESP_LOGI(TAG,
              "Queued command 0x%02X to address 0x%02X (attempt %d, "
              "retries %d)",
              command, address, 1, message.retries);
@@ -159,48 +159,6 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
     ESP_LOGI(TAG, "Queued command 0x%02X to address 0x%02X", command, address);
   }
 }
-// // ESP-NOW receive callback
-// static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
-//                            const uint8_t *data, int len) {
-//   if (recv_info == NULL || data == NULL || len <= 0) {
-//     ESP_LOGE(TAG, "Invalid receive callback parameters");
-//     return;
-//   }
-//
-//   int8_t rssi = 0;
-//   if (recv_info->rx_ctrl) {
-//     rssi = recv_info->rx_ctrl->rssi;
-//   }
-//
-//   // ESP_LOGI(TAG, "Received %d bytes from " MACSTR, len,
-//   // MAC2STR(recv_info->src_addr));
-//   ESP_LOGI(TAG, "Received %d bytes from " MACSTR " (RSSI: %d dBm)", len,
-//            MAC2STR(recv_info->src_addr), rssi);
-//
-//   // Parse the received data
-//   // espnow_recv_data_t recv_data;
-//   // memcpy(recv_data.mac, recv_info->src_addr, 6);
-//   recv_data.rssi = rssi; // Store the RSSI value
-//
-//   // Convert data to string for parsing
-//   char recv_str[ESPNOW_MAX_PAYLOAD_SIZE + 1] = {0};
-//   memcpy(recv_str, data,
-//          len > ESPNOW_MAX_PAYLOAD_SIZE ? ESPNOW_MAX_PAYLOAD_SIZE : len);
-//
-//   // Parse the sensor data (format: ID[MAC]S[soil]B[batt]T[temp]D[timestamp])
-//   if (sscanf(recv_str, "N[%hhX]S[%d]B[%f]", &recv_data.node_address,
-//              &recv_data.soil_moisture, &recv_data.battery_level) == 3) {
-//
-//     // Send to receive queue
-//     if (espnow_recv_queue != NULL) {
-//       if (xQueueSend(espnow_recv_queue, &recv_data, 0) != pdTRUE) {
-//         ESP_LOGE(TAG, "Receive queue full");
-//       }
-//     }
-//   } else {
-//     ESP_LOGE(TAG, "Failed to parse received data");
-//   }
-// }
 
 void espnow_recv_init(void) {
   if (espnow_recv_queue == NULL) {
@@ -261,7 +219,7 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
 
     // Send the message
-    ESP_LOGI("command",
+    ESP_LOGD(TAG,
              "Queueing message: valveAddress=0x%02X, command=0x%02X, "
              "source=0x%02X, retry=%d",
              valveAddress, command, source, retry);
@@ -997,21 +955,22 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
     ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
-    ESP_LOGI(TAG, "Signal Strength: %d dBm", recv_data.rssi);
+    ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
     ESP_LOGI(TAG, "==========================\n");
 
     // Update global readings if needed
     if (recv_data.node_address == SOIL_A_ADDRESS) {
-      soil_readings.soil_A = recv_data.soil_moisture;
+      soil_A = recv_data.soil_moisture;
+      // soil_A_Live = recv_data.soil_moisture;
     } else if (recv_data.node_address == SOIL_B_ADDRESS) {
-      soil_readings.soil_B = recv_data.soil_moisture;
+      soil_B = recv_data.soil_moisture;
     }
-    // Now take mutex only for the quick copy operation
-    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-      // Quick memcpy to update the shared readings
-      memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
-      xSemaphoreGive(readings_mutex);
-    }
+    // // Now take mutex only for the quick copy operation
+    // if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+    //   // Quick memcpy to update the shared readings
+    //   memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
+    //   xSemaphoreGive(readings_mutex);
+    // }
     return;
   }
 #endif
@@ -1047,17 +1006,6 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
   ESP_LOGD(TAG, "Ignoring non-command message type: 0x%02X", data[0]);
 }
-
-// // In soil_comm.c
-// bool get_soil_readings(int *soil_a, int *soil_b) {
-//     if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-//         if (soil_a) *soil_a = soil_readings.soil_A;
-//         if (soil_b) *soil_b = soil_readings.soil_B;
-//         xSemaphoreGive(readings_mutex);
-//         return true;
-//     }
-//     return false;
-// }
 
 void processReceivedMessage(comm_t *message) {
   ESP_LOGD(
@@ -1691,11 +1639,13 @@ bool verify_device_mappings(void) {
 
 // Check for critical devices first
 #if CONFIG_MASTER
-  // const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
-  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS,
-  //                                     SOIL_A_ADDRESS,  SOIL_B_ADDRESS};
   const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
-                                      VALVE_B_ADDRESS, PUMP_ADDRESS};
+                                      VALVE_B_ADDRESS, PUMP_ADDRESS,
+                                      SOIL_A_ADDRESS};
+  // const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
+  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS};
+
+  // const uint8_t critical_devices[] = {SOIL_A_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
@@ -1853,47 +1803,6 @@ bool nvs_has_valid_mappings(void) {
   nvs_close(nvs_handle);
   return result;
 }
-
-// #if CONFIG_MASTER
-// void vTaskESPNOW_RX(void *pvParameters) {
-//   ESP_LOGI(TAG, "ESP-NOW RX task started");
-//   espnow_recv_data_t recv_data;
-//   static sensor_readings_t soil_readings = {0}; // Local buffer
-//
-//   while (1) {
-//     // Try to get data from the queue with a timeout
-//     if (receive_sensor_data(&recv_data, 1000)) {
-//       // Process the received data
-//       ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
-//       ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
-//                get_pcb_name(recv_data.node_address));
-//       ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
-//       ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
-//       ESP_LOGD(TAG, "==========================\n");
-//
-//       // Update global readings if needed
-//       if (recv_data.node_address == SOIL_A_ADDRESS) {
-//         soil_readings.soil_A = recv_data.soil_moisture;
-//         ESP_LOGD(TAG, "Soil A reading copied");
-//       } else if (recv_data.node_address == SOIL_B_ADDRESS) {
-//         soil_readings.soil_B = recv_data.soil_moisture;
-//         ESP_LOGD(TAG, "Soil B reading copied");
-//       }
-//       // Now take mutex only for the quick copy operation
-//       if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-//         // Quick memcpy to update the shared readings
-//         memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
-//         ESP_LOGI(TAG, "Soil A and B memcopied");
-//         xSemaphoreGive(readings_mutex);
-//       }
-//     }
-//
-//     // Short delay to prevent tight loop
-//     vTaskDelay(pdMS_TO_TICKS(100));
-//   }
-// }
-//
-// #endif
 
 void vTaskESPNOW(void *pvParameters) {
   // ESP_LOGI(TAG,"inside vtask espnow");

@@ -4,6 +4,8 @@
 #define SOIL_SENSOR_H
 
 #include "define.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -14,8 +16,8 @@
 #define SOIL_ADC_CHANNEL ADC_CHANNEL_3
 
 // Soil moisture calibration values
-#define SOIL_DRY_ADC_VALUE_A 3535
-#define SOIL_MOIST_ADC_VALUE_A 2580
+#define SOIL_DRY_ADC_VALUE_A 3350
+#define SOIL_MOIST_ADC_VALUE_A 1660
 
 #define SOIL_DRY_ADC_VALUE_B 3346
 #define SOIL_MOIST_ADC_VALUE_B 2192
@@ -33,6 +35,15 @@ static float read_battery_voltage(void);
 
 // #define SOIL_DRY_ADC_VALUE_ 3337
 // #define SOIL_MOIST_ADC_VALUE_B 2192
+//
+#define SOIL_BATT_ADC_CHANNEL ADC_CHANNEL_2 // GPIO2
+#define SOIL_BATT_ADC_UNIT ADC_UNIT_1
+#define SOIL_BATT_ADC_ATTEN ADC_ATTEN_DB_12
+#define SOIL_BATT_VOLTAGE_DIVIDER 2.0f
+#define SOIL_BATT_MAX_VOLTAGE 4.15f // Maximum voltage for battery
+#define SOIL_BATT_MIN_VOLTAGE 3.22f // Minimum voltage for battery
+float read_battery_level(void);
+static float read_battery_voltage(void);
 
 // Function prototypes for sensor operations
 void soil_sensor_init(void);
@@ -40,6 +51,11 @@ int read_soil_moisture(void);
 int read_soil_moisture_sensor(void); // Wrapper for compatibility
 int8_t get_current_rssi(void);
 void soil_sensor_task(void *pvParameters);
+
+void init_led_gpio();
+esp_err_t save_calibration_values(int dry, int wet);
+esp_err_t load_calibration_values(int32_t *dry, int32_t *wet);
+void calibration_task(void *pvParameters);
 
 // ESP-NOW transmission functions
 void vTaskESPNOW_TX(void *pvParameters);
