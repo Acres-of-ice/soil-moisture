@@ -11,8 +11,6 @@
 #include "valve_control.h"
 #include "wifi_app.h"
 
-
-
 static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
 static char response_sms[32];
@@ -65,40 +63,40 @@ void a_btn_short_press(void) {
 }
 
 void a_btn_long_press(void) {
-    ValveState currentState = getCurrentState();
-    
-    if (currentState != STATE_IDLE) {
-        ESP_LOGI(TAG, "Cannot start demo - system not in IDLE state");
-        
-        // Show message on LCD if available
-        if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-            lcd_put_cur(1, 0);
-            lcd_send_string("Not idle - abort");
-            xSemaphoreGive(i2c_mutex);
-            vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
-        }
-        return;
-    }
+  ValveState currentState = getCurrentState();
 
-    ESP_LOGI(TAG, "Starting demo mode");
-    demo_mode_active = true;
-    demo_mode_start_time = xTaskGetTickCount();
-    
-    // Start irrigation in demo mode
-    setCurrentState(STATE_VALVE_A_OPEN);
-    
-    // Notify via LCD
+  if (currentState != STATE_IDLE) {
+    ESP_LOGI(TAG, "Cannot start demo - system not in IDLE state");
+
+    // Show message on LCD if available
     if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-        lcd_put_cur(1, 0);
-        lcd_send_string("Demo Mode ON");
-        xSemaphoreGive(i2c_mutex);
+      lcd_put_cur(1, 0);
+      lcd_send_string("Not idle - abort");
+      xSemaphoreGive(i2c_mutex);
+      vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
     }
-    
-    // Optional SMS notification
-    if (gsm_init_success) {
-        snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-    }
+    return;
+  }
+
+  ESP_LOGI(TAG, "Starting demo mode");
+  demo_mode_active = true;
+  demo_mode_start_time = xTaskGetTickCount();
+
+  // Start irrigation in demo mode
+  setCurrentState(STATE_VALVE_A_OPEN);
+
+  // Notify via LCD
+  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    lcd_put_cur(1, 0);
+    lcd_send_string("Demo Mode ON");
+    xSemaphoreGive(i2c_mutex);
+  }
+
+  // Optional SMS notification
+  if (gsm_init_success) {
+    snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
+    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+  }
 }
 
 void b_btn_short_press(void) {
@@ -340,7 +338,6 @@ void button_task(void *pvParameters) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
-    
     if (xQueueReceive(button_events, &ev, pdMS_TO_TICKS(1000))) {
       if (nodeAddress == MASTER_ADDRESS) {
         if (ev.pin == A_btn)
