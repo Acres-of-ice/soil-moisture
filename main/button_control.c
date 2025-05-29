@@ -15,7 +15,7 @@ static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
 static char response_sms[32];
 
-bool demo_mode_active = true;
+bool demo_mode_active = false;
 TickType_t demo_mode_start_time = 0;
 
 typedef struct {
