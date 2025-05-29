@@ -139,22 +139,22 @@ void updateValveState(void *pvParameters) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
     }
-    if (demo_mode_active && 
-        (xTaskGetTickCount() - demo_mode_start_time >= pdMS_TO_TICKS(DEMO_MODE_DURATION_MS))) {
-        ESP_LOGI(TAG, "Demo mode completed");
-        demo_mode_active = false;
-            
-        // Force system back to idle
-        setCurrentState(STATE_IDLE);
-        reset_acknowledgements();
-            
-            // Notify via LCD
-        if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-            lcd_put_cur(1, 0);
-            lcd_send_string("Demo Mode OFF");
-            xSemaphoreGive(i2c_mutex);
-            vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
-        }
+    if (demo_mode_active && (xTaskGetTickCount() - demo_mode_start_time >=
+                             pdMS_TO_TICKS(DEMO_MODE_DURATION_MS))) {
+      ESP_LOGI(TAG, "Demo mode completed");
+      demo_mode_active = false;
+
+      // Force system back to idle
+      setCurrentState(STATE_IDLE);
+      reset_acknowledgements();
+
+      // Notify via LCD
+      if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+        lcd_put_cur(1, 0);
+        lcd_send_string("Demo Mode OFF");
+        xSemaphoreGive(i2c_mutex);
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
+      }
     }
     // Add timeout check
     ValveState newState = getCurrentState(); // Start with current state
@@ -175,24 +175,22 @@ void updateValveState(void *pvParameters) {
       //   current_readings.soil_A = 0;
       //   current_readings.soil_B = 0;
       // }
-    // Skip automatic irrigation if in demo mode
-    if (!demo_mode_active) {
-      get_sensor_readings(&current_readings);
-      ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
-               current_readings.soil_A, current_readings.soil_B);
-      ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
-      vTaskDelay(1000);
-      ESP_LOGD(TAG, "Soil A live reading - Soil A: %d",
-               soil_A_Live);
-      //if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
-      if (soil_A_Live < CONFIG_SOIL_DRY && dripTimer()) {
-        newState = STATE_VALVE_A_OPEN;
-        counter++;
+      // Skip automatic irrigation if in demo mode
+      if (!demo_mode_active) {
+        get_sensor_readings(&current_readings);
+        ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
+                 current_readings.soil_A, current_readings.soil_B);
+        ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
+        vTaskDelay(1000);
+        // ESP_LOGD(TAG, "Soil A live reading - Soil A: %d", soil_A_Live);
+        if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
+          // if (soil_A_Live < CONFIG_SOIL_DRY && dripTimer()) {
+          newState = STATE_VALVE_A_OPEN;
+          counter++;
+        } else {
+          newState = STATE_IDLE;
+        }
       }
-      else {
-        newState = STATE_IDLE;
-      }
-    }
       break;
 
     case STATE_VALVE_A_OPEN:
@@ -232,13 +230,12 @@ void updateValveState(void *pvParameters) {
       break;
 
     case STATE_IRR_START_A:
-      //if (current_readings.soil_A >= CONFIG_SOIL_WET) {
-      if (soil_A_Live >= CONFIG_SOIL_WET) {
-        ESP_LOGD(TAG, "Soil A reached threshold: %d",
-               soil_A_Live);
+      if (current_readings.soil_A >= CONFIG_SOIL_WET) {
+        // if (soil_A_Live >= CONFIG_SOIL_WET) {
+        ESP_LOGD(TAG, "Soil A reached threshold: %d", current_readings.soil_A);
         reset_acknowledgements();
         newState = STATE_PUMP_OFF_A;
-      } 
+      }
       // else if (xTaskGetTickCount() - stateEntryTime >
       //            pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
       //   ESP_LOGW(TAG, "Irrigation timeout for Soil A: %d",
@@ -248,13 +245,12 @@ void updateValveState(void *pvParameters) {
       //   current_readings.soil_A = 90;
       //   current_readings.soil_B = 0;
       //   newState = STATE_PUMP_OFF_A;
-      // } 
+      // }
       else {
         // // Update the sensor readings inside the loop
         get_sensor_readings(&current_readings);
-        //ESP_LOGI(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
-        ESP_LOGD(TAG, "Waiting for Soil A: %d",
-               soil_A_Live);
+        ESP_LOGI(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
+        // ESP_LOGD(TAG, "Waiting for Soil A: %d", soil_A_Live);
         vTaskDelay(pdMS_TO_TICKS(5000));
       }
       break;
@@ -278,7 +274,7 @@ void updateValveState(void *pvParameters) {
         break;
       }
       vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
-      //newState = STATE_IRR_DONE_A;
+      // newState = STATE_IRR_DONE_A;
       newState = STATE_VALVE_B_CLOSE;
       vTaskDelay(1000);
       break;
@@ -289,7 +285,7 @@ void updateValveState(void *pvParameters) {
         vTaskDelay(1000);
         break;
       }
-      //newState = STATE_IRR_DONE_B;
+      // newState = STATE_IRR_DONE_B;
       newState = STATE_IRR_DONE_A;
       vTaskDelay(1000);
       break;
@@ -301,16 +297,15 @@ void updateValveState(void *pvParameters) {
       break;
 
     case STATE_ERROR:
-        ESP_LOGI(TAG, "Exiting error state");
-        errorConditionMet = false; // Reset error flag
-        newState = STATE_IDLE;
+      ESP_LOGI(TAG, "Exiting error state");
+      errorConditionMet = false; // Reset error flag
+      newState = STATE_IDLE;
       break;
     case STATE_UNKNOWN:
-        newState = STATE_IDLE;
+      newState = STATE_IDLE;
       break;
     }
 
-    
     // Update the state if it has changed
     if (newState != getCurrentState()) {
       setCurrentState(newState);

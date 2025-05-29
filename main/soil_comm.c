@@ -41,8 +41,6 @@ extern TaskHandle_t valveTaskHandle;
 static time_t last_conductor_message_time = 0;
 static sensor_readings_t soil_readings = {99, 99}; // Local buffer
 
-int soil_A_Live = 99;
-
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
   uint8_t device_addr;
@@ -56,7 +54,7 @@ static int num_device_mappings = 0;
 // External queue for receiving sensor data
 extern QueueHandle_t espnow_queue;
 
-static const char *TAG = "ESPNOW";
+static const char *TAG = "COMMAND";
 extern char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 extern bool message_received;
 extern char last_message[256];
@@ -136,7 +134,7 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
 
 #if CONFIG_MASTER
   message.retries = retries;
-  ESP_LOGI("command",
+  ESP_LOGD(TAG,
            "Message initialized -> address: 0x%02X, command: 0x%02X, source: "
            "0x%02X, retries: %d, seq_num: %d, data: \"%s\"",
            message.address, message.command, message.source, message.retries,
@@ -145,8 +143,8 @@ void ESPNOW_queueMessage(uint8_t address, uint8_t command, uint8_t source,
   if (xQueueSend(message_queue, &message, 0) != pdPASS) {
     ESP_LOGE(TAG, "Failed to queue message ( retries %d)", message.retries);
   } else {
-    ESP_LOGD("command", "Message queued: data = %s", message.data);
-    ESP_LOGI("command",
+    ESP_LOGD(TAG, "Message queued: data = %s", message.data);
+    ESP_LOGI(TAG,
              "Queued command 0x%02X to address 0x%02X (attempt %d, "
              "retries %d)",
              command, address, 1, message.retries);
@@ -263,7 +261,7 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
 
     // Send the message
-    ESP_LOGI("command",
+    ESP_LOGD(TAG,
              "Queueing message: valveAddress=0x%02X, command=0x%02X, "
              "source=0x%02X, retry=%d",
              valveAddress, command, source, retry);
@@ -1005,7 +1003,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     // Update global readings if needed
     if (recv_data.node_address == SOIL_A_ADDRESS) {
       soil_readings.soil_A = recv_data.soil_moisture;
-      soil_A_Live = recv_data.soil_moisture;
+      // soil_A_Live = recv_data.soil_moisture;
     } else if (recv_data.node_address == SOIL_B_ADDRESS) {
       soil_readings.soil_B = recv_data.soil_moisture;
     }
@@ -1694,13 +1692,13 @@ bool verify_device_mappings(void) {
 
 // Check for critical devices first
 #if CONFIG_MASTER
-  const uint8_t critical_devices[] = {MASTER_ADDRESS,  VALVE_A_ADDRESS,
+  const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
                                       VALVE_B_ADDRESS, PUMP_ADDRESS,
                                       SOIL_A_ADDRESS};
   // const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
   //                                     VALVE_B_ADDRESS, PUMP_ADDRESS};
 
-   //const uint8_t critical_devices[] = {SOIL_A_ADDRESS};
+  // const uint8_t critical_devices[] = {SOIL_A_ADDRESS};
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
