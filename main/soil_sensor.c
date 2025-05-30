@@ -474,7 +474,7 @@ int read_soil_moisture(void) {
   // Calibrate using ratio (adjust dry_ratio/wet_ratio for your sensors)
 
   int calibrated_moisture;
-  
+
 #if CONFIG_SOIL_A
   float dry_ratio = (float)SOIL_DRY_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
   float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
@@ -499,7 +499,7 @@ int read_soil_moisture(void) {
   ESP_LOGI(TAG, "Soil ADC median: %d, Calib: %dmV, Vcc: %.2fV, Ratio: %.3f, Moisture: %d%%",
            raw_moisture, soil_mv, supply_voltage, filtered_ratio, calibrated_moisture);
 
-  return calibrated_moisture;
+    return calibrated_moisture;//   replace 
 }
 
 
