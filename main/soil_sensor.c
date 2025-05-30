@@ -7,6 +7,7 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
 // #include "esp_adc/adc_digi.h"      
+#include "esp_sleep.h"
 #include "esp_log.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
@@ -805,6 +806,13 @@ void soil_sensor_task(void *pvParameters) {
     // Read soil moisture
     int moisture = read_soil_moisture();
     float battery = read_battery_level();
+
+      if (battery <= SOIL_BATT_MIN_VOLTAGE) {
+      ESP_LOGW(TAG, "Battery voltage low (%.2fV)! Entering deep sleep for 1 hour...", battery);
+      vTaskDelay(pdMS_TO_TICKS(100)); 
+      esp_sleep_enable_timer_wakeup(60ULL * 60ULL * 1000000ULL); // 1 hour in microseconds
+      esp_deep_sleep_start();
+    }
 
     if (moisture >= 0) {
       // Prepare ESP-NOW data structure for transmission
