@@ -64,10 +64,10 @@ message(STATUS "Full version: ${PROJECT_VERSION}")
 
 # Optional: Print version information
 # message(STATUS "Flashing webapp")
-# spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
+#  spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
 
 # # Create images directory
-# file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)
+#  file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)
 #
 # # Determine output filename based on configuration
 # set(OUTPUT_BINARY_NAME ${CMAKE_PROJECT_NAME})
