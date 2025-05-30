@@ -3,6 +3,7 @@
 #include "soil_sensor.h"
 #include "define.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
 // #include "esp_adc/adc_digi.h"      
@@ -87,31 +88,55 @@ void soil_sensor_init(void) {
   ESP_ERROR_CHECK(
       adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));     
       // Configure battery ADC channel
-adc_cali_curve_fitting_config_t cali_cfg = {
+#if !CONFIG_IDF_TARGET_ESP32C3
+    adc_cali_line_fitting_config_t cali_cfg = {
         .unit_id = SOIL_BATT_ADC_UNIT,
         .atten = SOIL_BATT_ADC_ATTEN,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
-
-    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {      
+    if (adc_cali_create_scheme_line_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
         cali_enabled = true;
-        ESP_LOGI(TAG, "ADC calibration enabled");
+        ESP_LOGI(TAG, "ADC calibration enabled (line fitting)");
     } else {
         ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
     }
 
-  //ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
-  adc_cali_curve_fitting_config_t cali_cfg_soil = {
-    .unit_id = ADC_UNIT_1,
-    .atten = ADC_ATTEN_DB_11,  // Match attenuation to soil sensor
-    .bitwidth = ADC_BITWIDTH_12,
-};
-if (adc_cali_create_scheme_curve_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
-    cali_enabled_soil = true;
-    ESP_LOGI(TAG, "Soil ADC calibration enabled");
-} else {
-    ESP_LOGW(TAG, "Soil ADC calibration not supported");
-}
+    adc_cali_line_fitting_config_t cali_cfg_soil = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_11,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    if (adc_cali_create_scheme_line_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
+        cali_enabled_soil = true;
+        ESP_LOGI(TAG, "Soil ADC calibration enabled (line fitting)");
+    } else {
+        ESP_LOGW(TAG, "Soil ADC calibration not supported");
+    }
+#else
+    adc_cali_curve_fitting_config_t cali_cfg = {
+        .unit_id = SOIL_BATT_ADC_UNIT,
+        .atten = SOIL_BATT_ADC_ATTEN,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
+        cali_enabled = true;
+        ESP_LOGI(TAG, "ADC calibration enabled (curve fitting)");
+    } else {
+        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+    }
+
+    adc_cali_curve_fitting_config_t cali_cfg_soil = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_11,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
+        cali_enabled_soil = true;
+        ESP_LOGI(TAG, "Soil ADC calibration enabled (curve fitting)");
+    } else {
+        ESP_LOGW(TAG, "Soil ADC calibration not supported");
+    }
+#endif
 
 #if CONFIG_ADC_DIGI_FILTER_ENABLED
     adc_digi_filter_config_t filter_config = {
@@ -447,17 +472,23 @@ int read_soil_moisture(void) {
   float filtered_ratio = kalman_update(&kf, ratio);
 
   // Calibrate using ratio (adjust dry_ratio/wet_ratio for your sensors)
+
+  int calibrated_moisture;
+  
 #if CONFIG_SOIL_A
   float dry_ratio = (float)SOIL_DRY_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
   float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+
 #endif
 
 #if CONFIG_SOIL_B
   float dry_ratio = (float)SOIL_DRY_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
   float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+
 #endif
 
-int calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
 
   // Clamp to valid range
   if (calibrated_moisture < 0)
