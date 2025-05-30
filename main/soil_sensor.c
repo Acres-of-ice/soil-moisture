@@ -3,8 +3,10 @@
 #include "soil_sensor.h"
 #include "define.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
+// #include "esp_adc/adc_digi.h"      
 #include "esp_log.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
@@ -27,6 +29,10 @@ QueueHandle_t sensor_data_queue = NULL;
 
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
+
+// ADC calibration handle for soil moisture sensor
+static adc_cali_handle_t cali_handle_soil = NULL;
+static bool cali_enabled_soil = false;
 
 // Calibration handle and state for battery
 static adc_cali_handle_t cali_handle = NULL;
@@ -72,31 +78,77 @@ void soil_sensor_init(void) {
 
   // Configure ADC channel
   adc_oneshot_chan_cfg_t config = {
-      .bitwidth = ADC_BITWIDTH_DEFAULT,
-      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_12,
+      .atten = ADC_ATTEN_DB_11,
   };
 
   ESP_ERROR_CHECK(
       adc_oneshot_config_channel(adc1_handle, SOIL_ADC_CHANNEL, &config));
-
   // FOR BATTERY MANAGEMENT
   ESP_ERROR_CHECK(
-      adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));
-  // Configure battery ADC channel
-  adc_cali_curve_fitting_config_t cali_cfg = {
-      .unit_id = SOIL_BATT_ADC_UNIT,
-      .atten = SOIL_BATT_ADC_ATTEN,
-      .bitwidth = ADC_BITWIDTH_DEFAULT,
-  };
+      adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));     
+      // Configure battery ADC channel
+#if !CONFIG_IDF_TARGET_ESP32C3
+    adc_cali_line_fitting_config_t cali_cfg = {
+        .unit_id = SOIL_BATT_ADC_UNIT,
+        .atten = SOIL_BATT_ADC_ATTEN,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    if (adc_cali_create_scheme_line_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
+        cali_enabled = true;
+        ESP_LOGI(TAG, "ADC calibration enabled (line fitting)");
+    } else {
+        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+    }
 
-  if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
-    cali_enabled = true;
-    ESP_LOGI(TAG, "ADC calibration enabled");
-  } else {
-    ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
-  }
+    adc_cali_line_fitting_config_t cali_cfg_soil = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_11,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    if (adc_cali_create_scheme_line_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
+        cali_enabled_soil = true;
+        ESP_LOGI(TAG, "Soil ADC calibration enabled (line fitting)");
+    } else {
+        ESP_LOGW(TAG, "Soil ADC calibration not supported");
+    }
+#else
+    adc_cali_curve_fitting_config_t cali_cfg = {
+        .unit_id = SOIL_BATT_ADC_UNIT,
+        .atten = SOIL_BATT_ADC_ATTEN,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
+        cali_enabled = true;
+        ESP_LOGI(TAG, "ADC calibration enabled (curve fitting)");
+    } else {
+        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+    }
 
-  ESP_LOGI(TAG, "Soil moisture sensor initialized successfully");
+    adc_cali_curve_fitting_config_t cali_cfg_soil = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_11,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
+        cali_enabled_soil = true;
+        ESP_LOGI(TAG, "Soil ADC calibration enabled (curve fitting)");
+    } else {
+        ESP_LOGW(TAG, "Soil ADC calibration not supported");
+    }
+#endif
+
+#if CONFIG_ADC_DIGI_FILTER_ENABLED
+    adc_digi_filter_config_t filter_config = {
+        .unit = ADC_UNIT_1,
+        .channel = SOIL_ADC_CHANNEL,
+        .mode = ADC_DIGI_FILTER_IIR_64, // 64-tap IIR filter
+    };
+
+    ESP_ERROR_CHECK(adc_digi_filter_config(&filter_config));
+    ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_UNIT_1, true));
+    ESP_LOGI(TAG, "Enabled ADC digital IIR filter");
+#endif
 }
 
 void init_led_gpio() {
@@ -256,7 +308,7 @@ void calibration_task(void *pvParameters) {
 
 /**
  * @brief Read soil moisture from ADC and convert to percentage
- *
+ * 
  * @return int Moisture percentage (0-100) or -1 on error
  */
 
@@ -309,44 +361,134 @@ void calibration_task(void *pvParameters) {
 //     return calibrated_moisture;
 // }
 
+// int read_soil_moisture(void) {
+//   if (adc1_handle == NULL) {
+//     ESP_LOGE(TAG, "ADC not initialized"); 
+//     return -1;
+//   }
+
+//   // Read multiple samples and average for stability
+//   const int NUM_SAMPLES = 5;
+//   int total = 0;
+//   int raw_value = 0;
+
+//   for (int i = 0; i < NUM_SAMPLES; i++) {
+
+//     esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &raw_value);
+//     if (err != ESP_OK) {
+//       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
+//       return -1;
+//     }
+//     total += raw_value;
+//     vTaskDelay(pdMS_TO_TICKS(10)); // Small delay between readings
+//   }
+
+//   int raw_moisture = total / NUM_SAMPLES;
+
+//   // Calibrate moisture value using pre-defined ranges
+//   int calibrated_moisture;
+// // load_calibration_values(&DRY_STATE, &WET_STATE);
+// //  calibrated_moisture = (DRY_STATE - raw_moisture) * 100 /
+// //                           (DRY_STATE - WET_STATE);
+// #if CONFIG_SOIL_A
+//   calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
+//                         (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+// #endif
+
+// #if CONFIG_SOIL_B
+//   calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
+//                         (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+// #endif
+
+//   // Clamp to valid range
+//   if (calibrated_moisture < 0)
+//     calibrated_moisture = 0;
+//   if (calibrated_moisture > 100)
+//     calibrated_moisture = 100;
+
+//   ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
+//            calibrated_moisture);
+//   return calibrated_moisture;
+//   // return raw_value;
+// }
+
+
+
 int read_soil_moisture(void) {
   if (adc1_handle == NULL) {
     ESP_LOGE(TAG, "ADC not initialized");
     return -1;
   }
 
-  // Read multiple samples and average for stability
-  const int NUM_SAMPLES = 5;
-  int total = 0;
-  int raw_value = 0;
+  const int NUM_SAMPLES = 10;
+  int samples[NUM_SAMPLES];
 
+  // Collect samples for median filtering
   for (int i = 0; i < NUM_SAMPLES; i++) {
-
-    esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &raw_value);
+    esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &samples[i]);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
       return -1;
     }
-    total += raw_value;
-    vTaskDelay(pdMS_TO_TICKS(10)); // Small delay between readings
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 
-  int raw_moisture = total / NUM_SAMPLES;
+  // Median filter
+  for (int i = 0; i < NUM_SAMPLES - 1; i++) {
+    for (int j = i + 1; j < NUM_SAMPLES; j++) {
+      if (samples[j] < samples[i]) {
+        int temp = samples[i];
+        samples[i] = samples[j];
+        samples[j] = temp;
+      }
+    }
+  }
+  int raw_moisture = samples[NUM_SAMPLES / 2];
 
-  // Calibrate moisture value using pre-defined ranges
+  // Convert to calibrated voltage (mV)
+  int soil_mv = 0;
+  if (cali_enabled_soil) {
+    adc_cali_raw_to_voltage(cali_handle_soil, raw_moisture, &soil_mv);
+  } else {
+    soil_mv = raw_moisture * 3300 / 4095;
+  }
+
+  // Ratiometric measurement: compensate for supply voltage
+  float supply_voltage = read_battery_voltage(); // in V
+  float ratio = soil_mv / (supply_voltage * 1000.0f);
+
+  // Kalman filter for smoothing 
+  typedef struct {
+    float q, r, x, p;
+  } kalman_state;
+  static kalman_state kf = {.q = 0.01f, .r = 0.1f, .x = 0, .p = 1};
+  float kalman_update(kalman_state* state, float measurement) {
+    state->p += state->q;
+    float k = state->p / (state->p + state->r);
+    state->x += k * (measurement - state->x);
+    state->p *= (1 - k);
+    return state->x;
+  }
+  float filtered_ratio = kalman_update(&kf, ratio);
+
+  // Calibrate using ratio (adjust dry_ratio/wet_ratio for your sensors)
+
   int calibrated_moisture;
-// load_calibration_values(&DRY_STATE, &WET_STATE);
-//  calibrated_moisture = (DRY_STATE - raw_moisture) * 100 /
-//                           (DRY_STATE - WET_STATE);
+  
 #if CONFIG_SOIL_A
-  calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
-                        (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
+  float dry_ratio = (float)SOIL_DRY_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
+  float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+
 #endif
 
 #if CONFIG_SOIL_B
-  calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
-                        (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
+  float dry_ratio = (float)SOIL_DRY_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
+  float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+
 #endif
+
 
   // Clamp to valid range
   if (calibrated_moisture < 0)
@@ -354,11 +496,16 @@ int read_soil_moisture(void) {
   if (calibrated_moisture > 100)
     calibrated_moisture = 100;
 
-  ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
-           calibrated_moisture);
+  ESP_LOGI(TAG, "Soil ADC median: %d, Calib: %dmV, Vcc: %.2fV, Ratio: %.3f, Moisture: %d%%",
+           raw_moisture, soil_mv, supply_voltage, filtered_ratio, calibrated_moisture);
+
   return calibrated_moisture;
-  // return raw_value;
 }
+
+
+
+
+
 
 /**
  * @brief Get current RSSI value
@@ -384,6 +531,7 @@ int8_t get_current_rssi(void) {
  *
  * @return float Battery level percentage (0-100)
  */
+
 static float read_battery_voltage(void) {
   if (!adc1_handle)
     soil_sensor_init(); // Ensure ADC is initialized

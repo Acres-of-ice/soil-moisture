@@ -212,24 +212,25 @@ void app_main(void) {
   espnow_init2();
 
   // Check if waking up from deep sleep
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+  if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER){
     ESP_LOGI(TAG, "Woke up from deep sleep, checking voltage...");
 
     esp_err_t voltage_init_result = voltage_monitor_init();
-    if (voltage_init_result != ESP_OK) {
+    if(voltage_init_result != ESP_OK) {
       ESP_LOGW(TAG, "Failed to initialize voltage monitor %s ",
                esp_err_to_name(voltage_init_result));
     }
 
     float voltage = measure_voltage();
     ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
-    if (voltage < LOW_CUTOFF_VOLTAGE) {
+    if(voltage < LOW_CUTOFF_VOLTAGE){
       ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
       esp_sleep_enable_timer_wakeup(
           (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
           1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
       gpio_hold_dis(SIM_GPIO);
       esp_deep_sleep_start();
+      gpio_hold_dis(SIM_GPIO); // Release the GPIO hold
     }
     ESP_LOGI(TAG, "Voltage is sufficient, resuming normal operation...");
   }
@@ -358,8 +359,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Measured voltage: %.2fV", voltage);
 
     if (voltage < LOW_CUTOFF_VOLTAGE) {
-      ESP_LOGE(TAG,
-               "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+      ESP_LOGE(TAG, "Voltage below %.2fV, disabling SIM and entering deep sleep...",
                LOW_CUTOFF_VOLTAGE);
 
       // Disable SIM pin
@@ -369,9 +369,7 @@ void app_main(void) {
       gpio_hold_en(SIM_GPIO);
 
       // Enter deep sleep
-      esp_sleep_enable_timer_wakeup(
-          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
-          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_sleep_enable_timer_wakeup((uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 * 1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
       esp_deep_sleep_start();
     }
   }

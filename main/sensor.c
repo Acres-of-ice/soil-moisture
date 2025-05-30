@@ -364,7 +364,7 @@ void parse_flow_temp(const uint8_t *response, int len, float *temp,
 
 void parse_flow_discharge(const uint8_t *response, int len, float *discharge,
                           float *unused) {
-  if (len >= 7) {
+  if (len >= 7) { 
     int16_t raw_discharge = (response[3] << 8) | response[4];
     *discharge = raw_discharge / 100.0f;
     // ESP_LOGD(TAG, "Discharge: %.1f°C", *discharge);
