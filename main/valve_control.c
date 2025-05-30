@@ -140,23 +140,23 @@ void updateValveState(void *pvParameters) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
-    if (demo_mode_active && (xTaskGetTickCount() - demo_mode_start_time >=
-                             pdMS_TO_TICKS(DEMO_MODE_DURATION_MS))) {
-      ESP_LOGI(TAG, "Demo mode completed");
-      demo_mode_active = false;
+    // if (demo_mode_active && (xTaskGetTickCount() - demo_mode_start_time >=
+    //                          pdMS_TO_TICKS(DEMO_MODE_DURATION_MS))) {
+    //   ESP_LOGI(TAG, "Demo mode completed");
+    //   demo_mode_active = false;
 
-      // Force system back to idle
-      setCurrentState(STATE_IDLE);
-      reset_acknowledgements();
+    //   // Force system back to idle
+    //   setCurrentState(STATE_IDLE);
+    //   reset_acknowledgements();
 
-      // Notify via LCD
-      if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-        lcd_put_cur(1, 0);
-        lcd_send_string("Demo Mode OFF");
-        xSemaphoreGive(i2c_mutex);
-        vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
-      }
-    }
+    //   // Notify via LCD
+    //   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    //     lcd_put_cur(1, 0);
+    //     lcd_send_string("Demo Mode OFF");
+    //     xSemaphoreGive(i2c_mutex);
+    //     vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
+    //   }
+    // }
     // Add timeout check
     ValveState newState = getCurrentState(); // Start with current state
     if (isStateTimedOut(newState)) {
@@ -177,10 +177,16 @@ void updateValveState(void *pvParameters) {
                current_readings.soil_A, current_readings.soil_B);
       ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
       vTaskDelay(1000);
+
       if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
         newState = STATE_VALVE_A_OPEN;
         counter++;
-      } else {
+      } 
+      else if(demo_mode_active &&current_readings.soil_A < CONFIG_SOIL_DRY)
+      {
+        newState = STATE_VALVE_A_OPEN;
+        counter++;
+      }else {
         newState = STATE_IDLE;
       }
       break;

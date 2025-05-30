@@ -16,6 +16,7 @@ bool wifi_enabled = true; // WiFi status flag
 static char response_sms[32];
 
 bool demo_mode_active = false;
+bool use_simulated_values = false;
 TickType_t demo_mode_start_time = 0;
 
 typedef struct {
@@ -78,25 +79,26 @@ void a_btn_long_press(void) {
     return;
   }
 
-  ESP_LOGI(TAG, "Starting demo mode");
-  demo_mode_active = true;
-  demo_mode_start_time = xTaskGetTickCount();
-
-  // Start irrigation in demo mode
-  setCurrentState(STATE_VALVE_A_OPEN);
-
-  // Notify via LCD
-  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-    lcd_put_cur(1, 0);
-    lcd_send_string("Demo Mode ON");
-    xSemaphoreGive(i2c_mutex);
-  }
-
-  // Optional SMS notification
-  if (gsm_init_success) {
-    snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-  }
+    if (!demo_mode_active) {
+        ESP_LOGI(TAG, "Starting demo mode");
+        demo_mode_active = true;
+        
+        // Create demo task
+        xTaskCreate(demo_mode_task, "demo_task", 4096, NULL, 5, NULL);
+        
+        // Notify via LCD
+        if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+            lcd_put_cur(1, 0);
+            lcd_send_string("Demo Mode ON");
+            xSemaphoreGive(i2c_mutex);
+        }
+        
+        // Optional SMS notification
+        if (gsm_init_success) {
+            snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
+            sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+        }
+    }
 }
 
 void b_btn_short_press(void) {

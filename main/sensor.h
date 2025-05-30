@@ -106,5 +106,6 @@ void get_sensor_readings(sensor_readings_t *readings);
 esp_err_t voltage_monitor_init(void);
 float get_voltage(void);
 float measure_voltage(void);
+void demo_mode_task(void *pvParameters);
 
 #endif // SENSOR_H

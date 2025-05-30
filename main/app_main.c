@@ -343,7 +343,6 @@ void app_main(void) {
                           HEX_DATA_TASK_STACK_SIZE, NULL,
                           HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
-
   if (site_config.has_voltage_cutoff) {
     // Measure voltage and handle low voltage cutoff
     float voltage = measure_voltage();

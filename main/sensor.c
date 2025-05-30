@@ -14,6 +14,9 @@ sensor_readings_t readings = {.soil_A = 99, .soil_B = 99};
 sensor_readings_t simulated_readings = {.soil_A = 15.0f, .soil_B = 25.0f};
 sensor_readings_t data_readings;
 
+static int simulated_soil_A = 0;
+static int simulated_soil_B = 0;
+
 // Voltage monitoring variables
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
@@ -554,6 +557,11 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->pressure = simulated_readings.pressure;
       output_readings->discharge = simulated_readings.discharge;
       output_readings->voltage = simulated_readings.voltage;
+    } else if(use_simulated_values) {
+            // Use demo values
+      output_readings->soil_A = simulated_soil_A;
+      output_readings->soil_B = simulated_soil_B;
+  
     } else {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;
@@ -580,6 +588,47 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
     // Return last known values if mutex timeout
     ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
   }
+}
+
+void demo_mode_task(void *pvParameters) {
+    const char *TAG = "DemoMode";
+    ESP_LOGI(TAG, "Starting demo mode");
+    
+    // Get mutex if not already created
+    if (readings_mutex == NULL) {
+        readings_mutex = xSemaphoreCreateMutex();
+    }
+    
+    // Step 1: Set low moisture to trigger irrigation
+    ESP_LOGI(TAG, "Setting low moisture to trigger irrigation");
+    use_simulated_values = true;
+    simulated_soil_A = 25;  // Below threshold to start irrigation
+    simulated_soil_B = 25;
+    
+    // Let the system run for 5 minutes with low moisture
+    TickType_t demo_start = xTaskGetTickCount();
+    while (xTaskGetTickCount() - demo_start < pdMS_TO_TICKS(5*60*1000)) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        
+        // Gradually increase moisture during irrigation
+        // simulated_soil_A += 2;
+        // simulated_soil_B += 2;
+        // simulated_soil_A = (simulated_soil_A > 100) ? 100 : simulated_soil_A;
+        // simulated_soil_B = (simulated_soil_B > 100) ? 100 : simulated_soil_B;
+    }
+    
+    // Step 2: Set high moisture to simulate completed irrigation
+    ESP_LOGI(TAG, "Setting high moisture to complete irrigation");
+    simulated_soil_A = 85;  // Above threshold
+    simulated_soil_B = 85;
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+    
+    // Step 3: Return to normal operation
+    ESP_LOGI(TAG, "Ending demo mode, returning to normal operation");
+    use_simulated_values = false;
+    demo_mode_active = false;
+    
+    vTaskDelete(NULL);
 }
 
 void simulation_task(void *pvParameters) {

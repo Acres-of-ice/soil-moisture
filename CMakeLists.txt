@@ -63,8 +63,8 @@ project(soil_moisture VERSION ${BASE_VERSION})
 message(STATUS "Full version: ${PROJECT_VERSION}")
 
 # Optional: Print version information
-# message(STATUS "Flashing webapp")
-#  spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
+#  message(STATUS "Flashing webapp")
+#   spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
 
 # # Create images directory
 #  file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)

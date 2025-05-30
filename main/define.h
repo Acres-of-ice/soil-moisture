@@ -71,6 +71,7 @@ extern int soil_A_Live;
 
 // Irrigation Demo mode
 extern bool demo_mode_active;
+extern bool use_simulated_values;
 extern TickType_t demo_mode_start_time;
 #define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
 
