@@ -39,7 +39,7 @@ extern TaskHandle_t valveTaskHandle;
 #define MAX_RETRIES 10
 
 static time_t last_conductor_message_time = 0;
-static sensor_readings_t soil_readings;
+sensor_readings_t soil_readings = {0};
 
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
@@ -71,9 +71,6 @@ uint8_t sequence_number = 0;
 espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
 
-int soil_A = 999;
-int soil_B = 999;
-
 bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
                           espnow_recv_data_t *data) {
   uint8_t node_addr;
@@ -86,16 +83,16 @@ bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
 
   if (result == 3) {
     data->node_address = node_addr;
-    data->soil_moisture = soil_value;
-    data->battery_level = battery_value;
+    data->soil = soil_value;
+    data->battery = battery_value;
     return true;
   }
 
   // Fallback: if node address wasn't in the message, get it from the MAC
   if (result == 2) {
     data->node_address = get_device_from_mac(mac_addr);
-    data->soil_moisture = soil_value;
-    data->battery_level = battery_value;
+    data->soil = soil_value;
+    data->battery = battery_value;
     return true;
   }
 
@@ -944,33 +941,58 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
   if (s_ptr && b_ptr) {
     int moisture = atoi(s_ptr + 2);
-    float battery = atoi(b_ptr + 2);
+    int battery = atoi(b_ptr + 2); // Changed from float to int
 
-    recv_data.soil_moisture = moisture;
-    recv_data.battery_level = battery;
+    recv_data.soil = moisture;
+    recv_data.battery = battery;
     message_received = true;
 
     // Process the received data
     ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
     ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
-    ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil_moisture);
+    ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil);
+    ESP_LOGI(TAG, "Battery Level: %d%%",
+             recv_data.battery); // Added battery logging
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
     ESP_LOGI(TAG, "==========================\n");
 
-    // Update global readings if needed
-    if (recv_data.node_address == SOIL_A_ADDRESS) {
-      soil_A = recv_data.soil_moisture;
-      // soil_A_Live = recv_data.soil_moisture;
-    } else if (recv_data.node_address == SOIL_B_ADDRESS) {
-      soil_B = recv_data.soil_moisture;
+    // Update sensor readings in the array-based system
+    // Take mutex to safely update readings
+    if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Extract plot index from device address using the addressing scheme
+      int plot_index = -1;
+
+      // Check if this is a soil sensor (high nibble = DEVICE_TYPE_SOIL)
+      if ((recv_data.node_address & 0xF0) == DEVICE_TYPE_SOIL) {
+        // Extract instance ID from low nibble (1-based, use directly as plot
+        // number)
+        uint8_t plot_number = recv_data.node_address & 0x0F;
+        if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+          plot_index = plot_number - 1; // Convert to 0-based array index
+        }
+      }
+
+      // Update the readings array if we have a valid plot index
+      if (plot_index >= 0 && plot_index < CONFIG_NUM_PLOTS) {
+        soil_readings.soil[plot_index] = recv_data.soil;
+        soil_readings.battery[plot_index] = recv_data.battery;
+
+        ESP_LOGI(TAG, "Updated plot %d (0x%02X): Soil=%d%%, Battery=%d%%",
+                 plot_index + 1, recv_data.node_address, recv_data.soil,
+                 recv_data.battery);
+      } else {
+        ESP_LOGW(TAG,
+                 "Received data from non-soil sensor (0x%02X) or plot number "
+                 "out of range",
+                 recv_data.node_address);
+      }
+
+      xSemaphoreGive(readings_mutex);
+    } else {
+      ESP_LOGW(TAG, "Failed to acquire readings mutex, data not updated");
     }
-    // // Now take mutex only for the quick copy operation
-    // if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-    //   // Quick memcpy to update the shared readings
-    //   memcpy(&readings, &soil_readings, sizeof(sensor_readings_t));
-    //   xSemaphoreGive(readings_mutex);
-    // }
+
     return;
   }
 #endif
@@ -978,7 +1000,6 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
   // Check for command messages
   if (sender_device_addr == MASTER_ADDRESS) {
     if (data_len > 0) {
-
       //   ESP_LOGI(TAG, "Raw data (%d bytes):", data_len);
       for (int i = 0; i < 5; i++) {
         ESP_LOGD(TAG, "Byte[%d]: 0x%02X", i, data[i]);

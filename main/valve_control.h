@@ -12,21 +12,18 @@ typedef enum { PRESSURE_NORMAL, PRESSURE_OUT_OF_RANGE } pressure_state_t;
 // ==================== State Machine Definitions ====================
 typedef enum {
   STATE_IDLE,
-  STATE_VALVE_A_OPEN,
-  STATE_PUMP_ON_A,
-  STATE_IRR_START_A,
-  STATE_PUMP_OFF_A,
-  STATE_VALVE_A_CLOSE,
-  STATE_IRR_DONE_A,
-  STATE_VALVE_B_OPEN,
-  STATE_PUMP_ON_B,
-  STATE_IRR_START_B,
-  STATE_PUMP_OFF_B,
-  STATE_VALVE_B_CLOSE,
-  STATE_IRR_DONE_B,
+  STATE_VALVE_OPEN,  // Generic valve open state
+  STATE_PUMP_ON,     // Generic pump on state
+  STATE_IRR_START,   // Generic irrigation start state
+  STATE_PUMP_OFF,    // Generic pump off state
+  STATE_VALVE_CLOSE, // Generic valve close state
+  STATE_IRR_DONE,    // Generic irrigation done state
   STATE_ERROR,
   STATE_UNKNOWN
 } ValveState;
+
+// Global variable to track which plot is currently being irrigated
+static int current_plot = -1; // -1 means no plot active
 
 void update_moisture_readings(int a);
 static bool isStateTimedOut(ValveState state);

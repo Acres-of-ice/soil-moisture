@@ -33,17 +33,6 @@ extern QueueHandle_t wifi_app_queue_handle;
 // Firmware update status
 static int g_fw_update_status = OTA_UPDATE_PENDING;
 
-// const char *DATA_FILE_HEADER =
-//    "moisture, Temp, Battery, Time";
-
-// size_t totalBytes = 0;
-// size_t usedBytes = 0;
-
-// data_statistics_t data_stats = {0};
-
-// HTTP server monitor task handle
-// static TaskHandle_t task_http_server_monitor = NULL;
-
 // Queue handle used to manipulate the main queue of events
 static QueueHandle_t http_server_monitor_queue_handle;
 
@@ -64,273 +53,6 @@ static const char favicon[] = {
     // Simple 16x16 transparent favicon - minimal implementation
     0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01,
     0x00, 0x20, 0x00, 0x68, 0x04, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00};
-
-// static esp_err_t http_server_outputVal_handler(httpd_req_t *req)
-// {
-// 	ESP_LOGD(TAG, "outputVal requested");
-//   // Get the output state as a string
-// 	static char ValveJSON[64];
-//   ValveState nowState = getCurrentState();  // Start with current state
-
-//   // Check if the current state is related to SPRAY or DRAIN
-//   switch (nowState) {
-//         case STATE_SPRAY_START:
-//         case STATE_SPRAY_FEEDBACK_DRAIN_NOTE: // Corrected this state
-//         case STATE_SPRAY_WAIT_AIR_NOTE:
-//         case STATE_SPRAY_WAIT_SOURCE_NOTE:
-//         case STATE_SPRAY_CALIBRATION:
-//         case STATE_SPRAY_DONE:
-//             SPRAY_mode = pdTRUE;
-//             DRAIN_mode = pdFALSE;
-//             break;
-//         case STATE_DRAIN_START:
-//         case STATE_DRAIN_FEEDBACK_DRAIN_NOTE: // Added this state
-//         case STATE_DRAIN_WAIT_SOURCE_NOTE:
-//         case STATE_DRAIN_WAIT_AIR_NOTE:
-//         case STATE_DRAIN_DONE:
-//         case STATE_ERROR:
-//             DRAIN_mode = pdTRUE;
-//             SPRAY_mode = pdFALSE;
-//             break;
-//         case STATE_IDLE:
-//             // SPRAY_mode = pdFALSE;
-//             // DRAIN_mode = pdFALSE;
-//             break;
-//         default:
-//             ESP_LOGW(TAG, "Unexpected valve state: %s",
-//             valveStateToString(nowState)); break;
-//     }
-
-//   sprintf(ValveJSON, "{\"SPRAY\":%s, \"DRAIN\":%s, \"AUTO\":%s,
-//   \"STATE\":\"%s\"}",
-//           SPRAY_mode ? "true" : "false",
-//           DRAIN_mode ? "true" : "false",
-//           AUTO_mode ? "true" : "false",
-//           valveStateToString(nowState));
-
-//   // Send the response with the output state
-// 	httpd_resp_set_type(req, "application/json");
-//   httpd_resp_send(req, ValveJSON, strlen(ValveJSON));
-
-// 	return ESP_OK;
-// }
-
-// static esp_err_t http_server_getInitialState_handler(httpd_req_t *req)
-// {
-//     ESP_LOGD(TAG, "getInitialState requested");
-//     char resp[100];
-//     snprintf(resp, sizeof(resp),
-//              "{\"AUTO_mode\": %s, \"SPRAY_mode\": %s, \"DRAIN_mode\": %s}",
-//              AUTO_mode ? "true" : "false",
-//              SPRAY_mode ? "true" : "false",
-//              DRAIN_mode ? "true" : "false");
-
-//     ESP_LOGD(TAG, "Sending initial state: %s", resp);
-
-//     httpd_resp_set_type(req, "application/json");
-//     httpd_resp_send(req, resp, strlen(resp));
-
-//     return ESP_OK;
-// }
-
-// static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req)
-// {
-//     ESP_LOGD(TAG, "Sensor readings requested");
-//     static sensor_readings_t http_readings;
-//     get_sensor_readings(&http_readings);
-
-//     static char resp[128];  // Increased buffer size
-//     snprintf(resp, sizeof(resp),
-//              "{\"moisture\": %.1f, \"temp\": %.1f, \"battery\": %.1f}",
-//              http_readings.soil_moisture, http_readings.temperature,
-//              http_readings.battery_level);
-
-//     ESP_LOGD(TAG, "Sending sensor readings: %s", resp);
-
-//     httpd_resp_set_type(req, "application/json");
-//     return httpd_resp_sendstr(req, resp);
-// }
-
-// static esp_err_t http_server_site_name_handler(httpd_req_t *req)
-// {
-//     ESP_LOGD(TAG, "Site name requested");
-
-//     char resp[100];
-//     snprintf(resp, sizeof(resp), "{\"siteName\": \"%s\"}", CONFIG_SITE_NAME);
-
-//     ESP_LOGD(TAG, "Sending site name: %s", resp);
-
-//     httpd_resp_set_type(req, "application/json");
-//     httpd_resp_send(req, resp, strlen(resp));
-
-//     return ESP_OK;
-// }
-
-// static esp_err_t http_server_download_handler(httpd_req_t *req)
-// {
-//     ESP_LOGI(TAG, "File download requested");
-//     const char *filepath = "/spiffs/data.csv";
-//     struct stat file_stat;
-
-//     // Try to take mutex with timeout
-//     if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
-//         ESP_LOGW(TAG, "Failed to acquire file mutex for download");
-//         //update_status_message("Download Failed");
-//         return ESP_FAIL;
-//     }
-
-//     if (stat(filepath, &file_stat) == -1) {
-//         ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     FILE *fd = fopen(filepath, "r");
-//     if (!fd) {
-//         ESP_LOGE(TAG, "Failed to open file for reading");
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     // // Prepare for download
-//     // suspend_tasks();
-
-//     ESP_LOGI(TAG, "Starting file transfer: %s (%ld bytes)", filepath,
-//     file_stat.st_size);
-//     // Set response headers
-//     httpd_resp_set_type(req, "text/csv");
-//     // Set filename for download
-//     char filename[64];
-//     char* timeStr = fetchTime();
-//     int year, month, day, hour, minute;
-//     sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-//     snprintf(filename, sizeof(filename), "%s_data_%d-%d.csv",
-//     CONFIG_SITE_NAME, month, day);
-
-//     static char content_disposition[128];
-//     snprintf(content_disposition, sizeof(content_disposition), "attachment;
-//     filename=\"%s\"", filename); httpd_resp_set_hdr(req,
-//     "Content-Disposition", content_disposition);
-
-//     // Send file in chunks
-//     char *chunk = heap_caps_malloc(4096, MALLOC_CAP_DMA);
-//     if (!chunk) {
-//         ESP_LOGE(TAG, "Failed to allocate chunk memory");
-//         fclose(fd);
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     size_t bytes_sent = 0;
-//     size_t chunk_size;
-//     esp_err_t ret = ESP_OK;
-
-//     while ((chunk_size = fread(chunk, 1, 4096, fd)) > 0) {
-//         if (httpd_resp_send_chunk(req, chunk, chunk_size) != ESP_OK) {
-//             ESP_LOGE(TAG, "File send failed at %zu bytes", bytes_sent);
-//             ret = ESP_FAIL;
-//             break;
-//         }
-//         bytes_sent += chunk_size;
-//         ESP_LOGD(TAG, "Sent %zu of %ld bytes", bytes_sent,
-//         file_stat.st_size);
-//     }
-
-//     // Cleanup
-//     free(chunk);
-//     fclose(fd);
-//     xSemaphoreGive(file_mutex);
-
-//     if (ret == ESP_OK) {
-//         httpd_resp_send_chunk(req, NULL, 0);
-//         ESP_LOGI(TAG, "File sent successfully: %zu bytes", bytes_sent);
-//     }
-
-//     return ret;
-// }
-
-// static esp_err_t http_server_logs_handler(httpd_req_t *req)
-// {
-//     ESP_LOGI(TAG, "Logs download requested");
-//     const char *filepath = "/spiffs/log.csv";
-//     struct stat file_stat;
-
-//     // Try to take mutex with timeout
-//     if (xSemaphoreTake(file_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
-//         ESP_LOGW(TAG, "Failed to acquire file mutex for download");
-//         //update_status_message("Download Failed");
-//         return ESP_FAIL;
-//     }
-
-//     if (stat(filepath, &file_stat) == -1) {
-//         ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     FILE *fd = fopen(filepath, "r");
-//     if (!fd) {
-//         ESP_LOGE(TAG, "Failed to open file for reading");
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     // // Prepare for download
-//     // suspend_tasks();
-
-//     ESP_LOGI(TAG, "Starting file transfer: %s (%ld bytes)", filepath,
-//     file_stat.st_size);
-//     // Set response headers
-//     httpd_resp_set_type(req, "text/csv");
-//     // Set filename for download
-//     char filename[64];
-//     char* timeStr = fetchTime();
-//     int year, month, day, hour, minute;
-//     sscanf(timeStr, "%d-%d-%d %d:%d", &year, &month, &day, &hour, &minute);
-//     snprintf(filename, sizeof(filename), "%s_logs_%d-%d.csv",
-//     CONFIG_SITE_NAME, month, day);
-
-//     char content_disposition[128];
-//     snprintf(content_disposition, sizeof(content_disposition), "attachment;
-//     filename=\"%s\"", filename); httpd_resp_set_hdr(req,
-//     "Content-Disposition", content_disposition);
-
-//     // Send file in chunks
-//     char *chunk = heap_caps_malloc(4096, MALLOC_CAP_DMA);
-//     if (!chunk) {
-//         ESP_LOGE(TAG, "Failed to allocate chunk memory");
-//         fclose(fd);
-//         xSemaphoreGive(file_mutex);
-//         return ESP_FAIL;
-//     }
-
-//     size_t bytes_sent = 0;
-//     size_t chunk_size;
-//     esp_err_t ret = ESP_OK;
-
-//     while ((chunk_size = fread(chunk, 1, 4096, fd)) > 0) {
-//         if (httpd_resp_send_chunk(req, chunk, chunk_size) != ESP_OK) {
-//             ESP_LOGE(TAG, "File send failed at %zu bytes", bytes_sent);
-//             ret = ESP_FAIL;
-//             break;
-//         }
-//         bytes_sent += chunk_size;
-//         ESP_LOGD(TAG, "Sent %zu of %ld bytes", bytes_sent,
-//         file_stat.st_size);
-//     }
-
-//     // Cleanup
-//     free(chunk);
-//     fclose(fd);
-//     xSemaphoreGive(file_mutex);
-
-//     if (ret == ESP_OK) {
-//         httpd_resp_send_chunk(req, NULL, 0);
-//         ESP_LOGI(TAG, "File sent successfully: %zu bytes", bytes_sent);
-//     }
-
-//     return ret;
-// }
 
 static esp_err_t send_chunk_with_retry(httpd_req_t *req, const char *chunk,
                                        size_t chunksize) {
@@ -518,20 +240,45 @@ static esp_err_t http_server_logs_handler(httpd_req_t *req) {
 }
 
 static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req) {
-  ESP_LOGD(TAG, "Sensor readings requested");
+  ESP_LOGD(TAG, "Compact sensor readings requested");
   static sensor_readings_t http_readings;
   get_sensor_readings(&http_readings);
 
-  static char resp[128]; // Increased buffer size
-  snprintf(resp, sizeof(resp),
-           "{\"time\": %s,  \"counter\": %d,  \"Soil A\": %d, \"Soil "
-           "B\": %d }",
-           fetchTime(), counter, http_readings.soil_A, http_readings.soil_B);
+  // Simpler version that just returns soil and battery arrays
+  size_t buffer_size = 256 + (CONFIG_NUM_PLOTS * 16);
+  char *resp = malloc(buffer_size);
+  if (!resp) {
+    ESP_LOGE(TAG, "Failed to allocate memory for response");
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
 
-  ESP_LOGD(TAG, "Sending sensor readings: %s", resp);
+  int offset = snprintf(resp, buffer_size,
+                        "{\"time\": \"%s\", \"counter\": %d, \"soil\": [",
+                        fetchTime(), counter);
 
+  // Add soil moisture array
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    offset += snprintf(resp + offset, buffer_size - offset, "%s%d",
+                       (i > 0) ? ", " : "", http_readings.soil[i]);
+  }
+
+  offset += snprintf(resp + offset, buffer_size - offset, "], \"battery\": [");
+
+  // Add battery array
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    offset += snprintf(resp + offset, buffer_size - offset, "%s%d",
+                       (i > 0) ? ", " : "", http_readings.battery[i]);
+  }
+
+  offset += snprintf(resp + offset, buffer_size - offset, "]}");
+
+  ESP_LOGD(TAG, "Sending compact sensor readings: %s", resp);
   httpd_resp_set_type(req, "application/json");
-  return httpd_resp_sendstr(req, resp);
+  esp_err_t ret = httpd_resp_sendstr(req, resp);
+
+  free(resp);
+  return ret;
 }
 
 static esp_err_t http_server_generic_handler(httpd_req_t *req) {
@@ -722,87 +469,10 @@ static esp_err_t http_server_setMode_handler(httpd_req_t *req) {
 
   ESP_LOGD(TAG, "Parsed values: mode=%s, state=%d", mode, state);
 
-  // if (strcmp(mode, "AUTO") == 0) {
-  //     AUTO_mode = (state == 1);
-  //     // No additional handling for AIR mode
-  // }
-  // Handle SPRAY and DRAIN modes
-  // else if (strcmp(mode, "SPRAY") == 0 || strcmp(mode, "DRAIN") == 0) {
-  //     if (AUTO_mode) {
-  //         ESP_LOGW(TAG, "Cannot change SPRAY or DRAIN when AIR mode is
-  //         enabled"); httpd_resp_set_status(req, HTTPD_400);
-  //         httpd_resp_sendstr(req, "Bad Request: AIR mode is enabled");
-  //         return ESP_FAIL;
-  //     } else {
-  //         if (strcmp(valveStateToString(getCurrentState()), "IDLE") == 0) {
-  //           if (strcmp(mode, "SPRAY") == 0) {
-  //               setCurrentState(STATE_SPRAY_START);
-  //           } else {
-  //               setCurrentState(STATE_DRAIN_START);
-  //           }
-  //         }else{
-  //           ESP_LOGW(TAG, "Cannot change when State not idle");
-  //           httpd_resp_set_status(req, HTTPD_400);
-  //           httpd_resp_sendstr(req, "Bad Request: AIR mode is enabled");
-  //           return ESP_FAIL;
-  //         }
-  //     }
-  // } else {
-  //     ESP_LOGW(TAG, "Unknown mode: %s", mode);
-  //     httpd_resp_set_status(req, HTTPD_400);
-  //     httpd_resp_sendstr(req, "Bad Request: Unknown mode");
-  //     return ESP_FAIL;
-  // }
-
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"status\":\"success\"}");
   return ESP_OK;
 }
-
-// void suspend_tasks(void)
-// {
-//     ESP_LOGI(TAG, "Suspending all tasks");
-
-//     // Create semaphore if it doesn't exist
-//     if (ota_semaphore == NULL) {
-//         ota_semaphore = xSemaphoreCreateBinary();
-//     }
-
-//     // Safely suspend tasks with null checks
-//     if (buttonTaskHandle != NULL) vTaskSuspend(buttonTaskHandle);
-//     if (loraTaskHandle != NULL) vTaskSuspend(loraTaskHandle);
-//     if (valveTaskHandle != NULL) vTaskSuspend(valveTaskHandle);
-//     if (sensorTaskHandle != NULL) vTaskSuspend(sensorTaskHandle);
-//     // if (modbusTaskHandle != NULL) vTaskSuspend(modbusTaskHandle);
-//     // if (adcTaskHandle != NULL) vTaskSuspend(adcTaskHandle);
-//     // if (tempTaskHandle != NULL) vTaskSuspend(tempTaskHandle);
-//     if (backupTaskHandle != NULL) vTaskSuspend(backupTaskHandle);
-//     if (dataLoggingTaskHandle != NULL) vTaskSuspend(dataLoggingTaskHandle);
-
-//     // Give some time for tasks to complete suspension
-//     vTaskDelay(pdMS_TO_TICKS(1000));
-// }
-
-// void resume_tasks(void)
-// {
-//     ESP_LOGI(TAG, "Resuming all tasks");
-
-//     // Resume tasks with null checks
-//     if (buttonTaskHandle != NULL) vTaskResume(buttonTaskHandle);
-//     if (loraTaskHandle != NULL) vTaskResume(loraTaskHandle);
-//     if (valveTaskHandle != NULL) vTaskResume(valveTaskHandle);
-//     if (sensorTaskHandle != NULL) vTaskResume(sensorTaskHandle);
-//     // if (modbusTaskHandle != NULL) vTaskResume(modbusTaskHandle);
-//     // if (adcTaskHandle != NULL) vTaskResume(adcTaskHandle);
-//     // if (tempTaskHandle != NULL) vTaskResume(tempTaskHandle);
-//     if (backupTaskHandle != NULL) vTaskResume(backupTaskHandle);
-//     if (dataLoggingTaskHandle != NULL) vTaskResume(dataLoggingTaskHandle);
-
-//     // Give some time for tasks to resume
-//     vTaskDelay(pdMS_TO_TICKS(1000));
-
-//     ESP_LOGI(TAG, "All tasks resumed successfully");
-// }
 
 /**
  * Receives the .bin file fia the web page and handles the firmware update
@@ -1037,23 +707,6 @@ static httpd_handle_t http_server_configure(void) {
 
   return NULL;
 }
-
-// void http_server_start(void)
-// {
-//     if (http_server_handle == NULL) {
-//
-//         // Configure and start HTTP server
-//         http_server_handle = http_server_configure();
-//         // Log available memory
-//         ESP_LOGI(TAG, "Free heap: %lu", esp_get_free_heap_size());
-//         if (http_server_handle == NULL) {
-//             ESP_LOGE(TAG, "Failed to start HTTP server");
-//             return;
-//         }
-//
-//         ESP_LOGI(TAG, "HTTP server started successfully");
-//     }
-// }
 
 void http_server_start(void) {
   // Force cleanup before starting server

@@ -18,11 +18,9 @@
 #include <stdio.h>
 
 extern uint8_t g_nodeAddress;
-extern const char *DATA_FILE_HEADER; // Declaration
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
-extern int soil_A_Live;
 
 // Device type identifiers (high nibble)
 #define DEVICE_TYPE_MASTER 0xA0
@@ -112,10 +110,11 @@ extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
 #define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
+// New calculation: 2 + 17 + 2 + (2*CONFIG_NUM_PLOTS) + (2*CONFIG_NUM_PLOTS) + 2
+// + 2 + 2 + 2
 #define HEX_SIZE                                                               \
-  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
-   sizeof(uint16_t) *                                                          \
-       7) // 2 bytes site name + timestamp + counter + sensor data
+  (23 + (4 * CONFIG_NUM_PLOTS)) // 4 bytes per plot (2 for soil + 2 for battery)
+
 typedef struct {
   uint8_t address;
   uint8_t command;
@@ -225,14 +224,15 @@ typedef struct {
   float pressure;
   float water_temp;
   float discharge;
-  float voltage;                   // Master device voltage
-  int soil[CONFIG_NUM_PLOTS];      // Soil moisture % for each plot
-  float battery[CONFIG_NUM_PLOTS]; // Battery % for each soil sensor
+  float voltage;                 // Master device voltage
+  int soil[CONFIG_NUM_PLOTS];    // Soil moisture % for each plot
+  int battery[CONFIG_NUM_PLOTS]; // Battery % for each soil sensor
 } sensor_readings_t;
 
 // Declare the globals
 extern sensor_readings_t simulated_readings;
 extern sensor_readings_t readings;
+extern sensor_readings_t soil_readings;
 
 extern float mean_pressure;
 extern float tpipe_normal;
@@ -241,10 +241,10 @@ extern float tpipe_hot;
 // ==================== ESP-NOW communication ====================
 typedef struct {
   uint8_t
-      node_address;    // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
-  int soil_moisture;   // Soil moisture percentage (0-100)
-  float battery_level; // Battery level percentage (0-100)
-  int8_t rssi;         // Signal strength in dBm
+      node_address; // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
+  int soil;         // Soil moisture percentage (0-100)
+  int battery;      // Battery level percentage (0-100)
+  int8_t rssi;      // Signal strength in dBm
 } espnow_recv_data_t;
 
 extern espnow_recv_data_t recv_data;
@@ -300,15 +300,15 @@ extern bool http_server_active;
 #define CIRCULAR_BUFFER_SIZE 10
 
 typedef struct {
-  char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
-  char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
-  uint16_t counter;                 // On/off counter
-  uint16_t soil_A;                  // Water temperature * 10
-  uint16_t soil_B;                  // Discharge * 10
-  int16_t temperature; // Temperature * 10 to preserve one decimal place
-  uint16_t pressure;   // Fountain pressure * 10
-  int16_t water_temp;  // Fountain pressure * 10
-  uint16_t discharge;  // Fountain pressure * 10
+  char site_name[SITE_NAME_LENGTH];
+  char timestamp[TIMESTAMP_LENGTH];
+  uint16_t counter;
+  int16_t soil[CONFIG_NUM_PLOTS];    // Changed from soil_A, soil_B
+  int16_t battery[CONFIG_NUM_PLOTS]; // Added battery array
+  int16_t temperature;
+  uint16_t pressure;
+  uint16_t water_temp;
+  uint16_t discharge;
 } hex_data_t;
 
 typedef struct {
@@ -337,7 +337,7 @@ extern HexCircularBuffer hex_buffer;
 // Test case data structure
 typedef struct {
   int soil[2];             // Soil moisture percentage for 2 plots
-  float battery[2];        // Battery percentage for 2 plots
+  int battery[2];          // Battery percentage for 2 plots
   const char *description; // Test case description
 } test_case_t;
 
@@ -345,61 +345,55 @@ typedef struct {
 static const test_case_t test_cases[] = {
     // Low moisture scenarios (should trigger irrigation)
     {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
-     .battery = {85.0f, 87.0f},
+     .battery = {85, 87},
      .description = "Both sensors dry - both should trigger irrigation"},
     {.soil = {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15},
-     .battery = {82.0f, 84.0f},
+     .battery = {82, 84},
      .description = "Sensor A marginal, B dry - B should trigger irrigation"},
     {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
-     .battery = {88.0f, 91.0f},
+     .battery = {88, 91},
      .description = "Sensor A dry, B marginal - A should trigger irrigation"},
-
     // Mixed moisture scenarios
     {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5},
-     .battery = {86.0f, 93.0f},
+     .battery = {86, 93},
      .description = "Sensor A dry, B wet - only A should trigger irrigation"},
     {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10},
-     .battery = {90.0f, 78.0f},
+     .battery = {90, 78},
      .description = "Sensor A wet, B dry - only B should trigger irrigation"},
-
     // High moisture scenarios (should not trigger irrigation)
     {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 10},
-     .battery = {88.0f, 92.0f},
+     .battery = {88, 92},
      .description = "Both sensors wet - neither should trigger irrigation"},
     {.soil = {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20},
-     .battery = {94.0f, 96.0f},
+     .battery = {94, 96},
      .description =
          "Both sensors very wet - neither should trigger irrigation"},
-
     // Edge cases
     {.soil = {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY},
-     .battery = {80.0f, 80.0f},
+     .battery = {80, 80},
      .description = "Both sensors at threshold - edge case"},
     {.soil = {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1},
-     .battery = {75.0f, 95.0f},
+     .battery = {75, 95},
      .description = "Sensor A just below threshold, B just above threshold"},
     {.soil = {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1},
-     .battery = {93.0f, 77.0f},
+     .battery = {93, 77},
      .description = "Sensor A just above threshold, B just below threshold"},
-
     // Extreme cases
     {.soil = {0, 100},
-     .battery = {65.0f, 98.0f},
+     .battery = {65, 98},
      .description = "Sensor A bone dry, B saturated"},
     {.soil = {100, 0},
-     .battery = {99.0f, 60.0f},
+     .battery = {99, 60},
      .description = "Sensor A saturated, B bone dry"},
-
     // Battery testing scenarios
     {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_DRY - 8},
-     .battery = {25.0f, 15.0f},
+     .battery = {25, 15},
      .description = "Low battery levels with dry soil - irrigation with low "
                     "battery warning"},
     {.soil = {CONFIG_SOIL_WET + 10, CONFIG_SOIL_WET + 8},
-     .battery = {5.0f, 8.0f},
+     .battery = {5, 8},
      .description =
          "Critical battery levels with wet soil - battery warning only"}};
-
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
 #define TEST_DELAY_MS (120 * 1000) // 2 minute delay between tests
 

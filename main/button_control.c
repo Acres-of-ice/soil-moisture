@@ -14,6 +14,7 @@
 static const char *TAG = "ButtonControl";
 bool wifi_enabled = true; // WiFi status flag
 static char response_sms[32];
+extern char header_buffer[512];
 
 bool demo_mode_active = false;
 TickType_t demo_mode_start_time = 0;
@@ -40,7 +41,7 @@ void a_btn_short_press(void) {
     ESP_LOGI(TAG, "Counter: %d", counter);
 
     if (counter % 2 == 0) {
-      newState = STATE_VALVE_B_OPEN;
+      newState = STATE_VALVE_OPEN;
       if (gsm_init_success) {
         snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
         sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
@@ -48,7 +49,7 @@ void a_btn_short_press(void) {
 
       ESP_LOGI(TAG, "Force drip sector B");
     } else {
-      newState = STATE_VALVE_A_OPEN;
+      newState = STATE_VALVE_OPEN;
       if (gsm_init_success) {
         snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
         sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
@@ -83,7 +84,7 @@ void a_btn_long_press(void) {
   demo_mode_start_time = xTaskGetTickCount();
 
   // Start irrigation in demo mode
-  setCurrentState(STATE_VALVE_A_OPEN);
+  setCurrentState(STATE_VALVE_OPEN);
 
   // Notify via LCD
   if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
@@ -163,7 +164,7 @@ void c_btn_long_press(void) {
     dataFile = fopen(data_path, "w");
     vTaskDelay(10);
     if (dataFile) {
-      fputs(DATA_FILE_HEADER, dataFile);
+      fputs(header_buffer, dataFile);
       fclose(dataFile);
     }
   }

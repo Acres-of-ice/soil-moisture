@@ -29,6 +29,7 @@ size_t usedBytes = 0;
 static FILE *logFile = NULL;
 spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
+extern char header_buffer[512] = "";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
@@ -239,7 +240,6 @@ esp_err_t init_spiffs(void) {
     dataFile = fopen(data_path, "w");
     vTaskDelay(10);
     if (dataFile) {
-      static char header_buffer[512];
       generate_data_file_header(header_buffer, sizeof(header_buffer));
       fputs(header_buffer, dataFile);
     } else {
@@ -311,7 +311,7 @@ void dataLoggingTask(void *pvParameters) {
 
         // Add battery percentage (formatted to 1 decimal place)
         offset += snprintf(data_entry + offset, sizeof(data_entry) - offset,
-                           ",%.1f", data_readings.battery[i]);
+                           ",%d", data_readings.battery[i]);
       }
     }
 

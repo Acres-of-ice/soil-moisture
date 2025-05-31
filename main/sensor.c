@@ -10,18 +10,16 @@
 static const char *TAG = "SENSOR";
 
 SemaphoreHandle_t readings_mutex;
-sensor_readings_t readings = {.soil_A = 99, .soil_B = 99};
-sensor_readings_t simulated_readings = {.soil_A = 15.0f, .soil_B = 25.0f};
+extern sensor_readings_t soil_readings;
+sensor_readings_t simulated_readings;
 sensor_readings_t data_readings;
+sensor_readings_t readings = {0};
 
 // Voltage monitoring variables
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
 static bool adc_cali_initialized = false;
 static float current_voltage = 0.0f;
-
-extern int soil_A;
-extern int soil_B;
 
 // Initialization Functions
 void sensors_init(void) {
@@ -397,6 +395,12 @@ void sensor_task(void *pvParameters) {
   static sensor_readings_t local_readings = {0}; // Local buffer
   TickType_t last_wake_time;
 
+  // Initialize soil and battery arrays to default values
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    local_readings.soil[i] = 999;    // Default soil moisture
+    local_readings.battery[i] = 999; // Default battery level
+  }
+
   // Initialize ADC if needed
   if (i2c0bus != NULL) {
     i2c_device_add(&i2c0bus, &i2c_dev_ads, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND,
@@ -407,13 +411,6 @@ void sensor_task(void *pvParameters) {
     }
   }
 
-  // // After other initializations but before the main loop
-  // esp_err_t voltage_init_result = voltage_monitor_init();
-  // if (voltage_init_result != ESP_OK) {
-  //   ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
-  //            esp_err_to_name(voltage_init_result));
-  // }
-
   last_wake_time = xTaskGetTickCount();
 
   while (1) {
@@ -421,17 +418,6 @@ void sensor_task(void *pvParameters) {
     if (i2c0bus != NULL) {
       for (int i = 0; i < 4; i++) {
         adc_readings_arr[i] = read_channel(&i2c_dev_ads, &ch1, i);
-        if (i == 2) {
-          adc_readings_arr[i] -= 50;
-          if (IS_SITE("Likir"))
-            adc_readings_arr[i] -= 1.10;
-          else if (IS_SITE("Ursi"))
-            adc_readings_arr[i] -= 0.53;
-          else if (IS_SITE("Tuna"))
-            adc_readings_arr[i] -= 0.14;
-          else if (IS_SITE("Kuri"))
-            adc_readings_arr[i] -= 0.1;
-        }
         vTaskDelay(pdMS_TO_TICKS(10));
       }
 
@@ -445,8 +431,8 @@ void sensor_task(void *pvParameters) {
         local_readings.temperature = temp1;
         local_readings.humidity = humidity;
       } else {
-        local_readings.temperature = 99.0f;
-        local_readings.humidity = 99.0f;
+        local_readings.temperature = 999.0f;
+        local_readings.humidity = 999.0f;
       }
       vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -486,17 +472,29 @@ void sensor_task(void *pvParameters) {
       }
     } else if (!site_config.has_voltage_cutoff) {
       // Default value if voltage cutoff is disabled
-      local_readings.voltage = 0.0f;
+      local_readings.voltage = 12.0f;
     }
 
-    local_readings.soil_A = soil_A;
-    local_readings.soil_B = soil_B;
+    // Update soil and battery data from ESP-NOW received data
+    // This replaces the old soil_A and soil_B assignments
+    // The data is already being updated in custom_recv_cb() function
+    // We'll copy the current values from the global readings structure
+    if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Copy existing soil and battery data from the shared readings
+      for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+        local_readings.soil[i] = soil_readings.soil[i];
+        local_readings.battery[i] = soil_readings.battery[i];
+      }
 
-    // Now take mutex only for the quick copy operation
-    if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
-      // Quick memcpy to update the shared readings
+      // Update the shared readings with all new sensor data
       memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+
       xSemaphoreGive(readings_mutex);
+    } else {
+      ESP_LOGW(TAG, "Failed to acquire readings mutex for soil/battery update");
+
+      // Fallback: keep existing soil/battery values or use defaults
+      // This maintains the last known values if mutex fails
     }
 
     vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
@@ -504,7 +502,7 @@ void sensor_task(void *pvParameters) {
 }
 
 void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
-                          float battery_values[CONFIG_NUM_PLOTS], float temp,
+                          int battery_values[CONFIG_NUM_PLOTS], float temp,
                           float water_temp, float pressure, float discharge) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
     // Update soil moisture for all plots
@@ -522,9 +520,9 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
     } else {
       // Set default battery values if not provided
       for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
-        if (simulated_readings.battery[i] <= 0.0f) {
+        if (simulated_readings.battery[i] <= 0) {
           simulated_readings.battery[i] =
-              85.0f + (i * 2.0f); // Default: 85%, 87%, 89%, etc.
+              85 + (i * 2); // Default: 85%, 87%, 89%, etc.
         }
       }
     }
@@ -557,11 +555,11 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
                    "%s%d%%", (i > 0) ? ", " : "", simulated_readings.soil[i]);
     }
 
-    // Build battery values string
+    // Build battery values string - now using %d for integers
     for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
       battery_offset += snprintf(
           battery_str + battery_offset, sizeof(battery_str) - battery_offset,
-          "%s%.1f%%", (i > 0) ? ", " : "", simulated_readings.battery[i]);
+          "%s%d%%", (i > 0) ? ", " : "", simulated_readings.battery[i]);
     }
 
     ESP_LOGD(TAG,
@@ -615,7 +613,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
                    "%s%d%%", (i > 0) ? ", " : "", output_readings->soil[i]);
       battery_offset += snprintf(
           battery_log + battery_offset, sizeof(battery_log) - battery_offset,
-          "%s%.1f%%", (i > 0) ? ", " : "", output_readings->battery[i]);
+          "%s%d%%", (i > 0) ? ", " : "", output_readings->battery[i]);
     }
 
     ESP_LOGD(TAG,
@@ -653,7 +651,7 @@ void simulation_task(void *pvParameters) {
     // Set test values (only pass 2 values but function expects
     // CONFIG_NUM_PLOTS)
     int soil_values[CONFIG_NUM_PLOTS] = {0};
-    float battery_values[CONFIG_NUM_PLOTS] = {0.0f};
+    int battery_values[CONFIG_NUM_PLOTS] = {0};
 
     // Copy the 2 test values to the array
     for (int i = 0; i < 2 && i < CONFIG_NUM_PLOTS; i++) {
@@ -669,8 +667,8 @@ void simulation_task(void *pvParameters) {
     ESP_LOGI(TAG, "Description: %s", current_test.description);
     ESP_LOGI(TAG, "Soil A: %d%%, Soil B: %d%%", current_test.soil[0],
              current_test.soil[1]);
-    ESP_LOGI(TAG, "Battery A: %.1f%%, Battery B: %.1f%%",
-             current_test.battery[0], current_test.battery[1]);
+    ESP_LOGI(TAG, "Battery A: %d%%, Battery B: %d%%", current_test.battery[0],
+             current_test.battery[1]);
     ESP_LOGI(TAG, "==================");
 
     // Move to next test case
