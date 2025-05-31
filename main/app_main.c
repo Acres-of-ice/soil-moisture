@@ -455,44 +455,44 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "VALVECOMM", COMM_TASK_STACK_SIZE,
+  xTaskCreatePinnedToCore(vTaskESPNOW, "VALVE", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
 #endif
 
-  // #if CONFIG_VALVE
-  //   g_plot_number = CONFIG_PLOT_NUMBER;
-  //   g_nodeAddress = DEVICE_TYPE_VALVE | g_plot_number;
-  //   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
-  //            get_pcb_name(g_nodeAddress), g_plot_number);
-  //
-  //   // Configure valve control pins as outputs
-  //   gpio_config_t valve_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
-  //                                               (1ULL << RELAY_NEGATIVE) |
-  //                                               (1ULL << OE_PIN),
-  //                               .mode = GPIO_MODE_OUTPUT,
-  //                               .pull_up_en = GPIO_PULLUP_DISABLE,
-  //                               .pull_down_en = GPIO_PULLDOWN_DISABLE,
-  //                               .intr_type = GPIO_INTR_DISABLE};
-  //   gpio_config(&valve_conf);
-  //   gpio_set_level(RELAY_POSITIVE, 0);
-  //   gpio_set_level(RELAY_NEGATIVE, 0);
-  //   gpio_set_level(OE_PIN, 0);
-  //
-  //   espnow_init2();
-  //
-  //   xTaskCreatePinnedToCore(
-  //       espnow_discovery_task, "ESP-NOW Discovery",
-  //       COMM_TASK_STACK_SIZE,     // Stack size
-  //       NULL,                     // Parameters
-  //       (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-  //       &discoveryTaskHandle,
-  //       COMM_TASK_CORE_ID // Core ID
-  //   );
-  //   xTaskCreatePinnedToCore(vTaskESPNOW, "VALVECOMM", COMM_TASK_STACK_SIZE,
-  //                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
-  //                           COMM_TASK_CORE_ID);
-  // #endif
+#if CONFIG_SOLENOID
+  g_plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_SOLENOID | g_plot_number;
+  ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress), g_plot_number);
+
+  // Configure valve control pins as outputs
+  gpio_config_t valve_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+                                              (1ULL << RELAY_NEGATIVE) |
+                                              (1ULL << OE_PIN),
+                              .mode = GPIO_MODE_OUTPUT,
+                              .pull_up_en = GPIO_PULLUP_DISABLE,
+                              .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                              .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&valve_conf);
+  gpio_set_level(RELAY_POSITIVE, 0);
+  gpio_set_level(RELAY_NEGATIVE, 0);
+  gpio_set_level(OE_PIN, 0);
+
+  espnow_init2();
+
+  xTaskCreatePinnedToCore(
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
+  xTaskCreatePinnedToCore(vTaskESPNOW, "SOLENOID", COMM_TASK_STACK_SIZE,
+                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+                          COMM_TASK_CORE_ID);
+#endif
 
 #if CONFIG_PUMP
   init_gpio_pump();

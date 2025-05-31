@@ -25,9 +25,10 @@ extern uint8_t sequence_number;
 //// Device Type Constants (High Nibble)
 #define DEVICE_TYPE_MASTER 0x00
 #define DEVICE_TYPE_VALVE 0x10
-#define DEVICE_TYPE_SOIL 0x20
-#define DEVICE_TYPE_WEATHER 0x30
-#define DEVICE_TYPE_PUMP 0x40
+#define DEVICE_TYPE_SOLENOID 0x20
+#define DEVICE_TYPE_SOIL 0x30
+#define DEVICE_TYPE_WEATHER 0x40
+#define DEVICE_TYPE_PUMP 0x50
 
 // Fixed Device Addresses
 #define MASTER_ADDRESS 0x01

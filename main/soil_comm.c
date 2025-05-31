@@ -45,6 +45,9 @@ sensor_readings_t soil_readings = {0};
 static uint8_t current_pump_state = 0;  // 0 = off, 1 = on
 static uint8_t current_valve_state = 0; // 0 = off, 1 = on
 
+static uint8_t device_type = 0;
+static uint8_t plot_number = 0;
+
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
   uint8_t device_addr;
@@ -589,21 +592,26 @@ void processMasterMessage(comm_t *message) {
   case DEVICE_TYPE_VALVE:
     // Handle valve messages based on plot number
     if (plot_number == 1) {
-      processValveAMessage(message, newState);
+      valveAck(message);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve A handler)",
                plot_number);
     } else if (plot_number == 2) {
-      processValveBMessage(message, newState);
+      valveAck(message);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve B handler)",
                plot_number);
-    } else {
-      // For future valve expansion - use generic valve handler or create new
-      // ones
-      ESP_LOGD(TAG,
-               "Message from Valve %d (0x%02X) - using generic valve handler",
-               plot_number, message->source);
-      // For now, use Valve A handler as generic handler
-      processValveAMessage(message, newState);
+    }
+    break;
+
+  case DEVICE_TYPE_SOLENOID:
+    // Handle valve messages based on plot number
+    if (plot_number == 1) {
+      solenoidAck(message, newState);
+      ESP_LOGD(TAG, "Processed message from Valve %d (using Valve A handler)",
+               plot_number);
+    } else if (plot_number == 2) {
+      solenoidAck(message, newState);
+      ESP_LOGD(TAG, "Processed message from Valve %d (using Valve B handler)",
+               plot_number);
     }
     break;
 
@@ -708,7 +716,7 @@ void processPumpMessage(comm_t *message) {
   vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-void processValveMessage(comm_t *message) {
+void processSolenoidMessage(comm_t *message) {
   ESP_LOGD(
       TAG,
       "V%d received command: 0x%02X after %d retries (Current state: 0x%02X)",
@@ -790,7 +798,7 @@ void processValveMessage(comm_t *message) {
 }
 
 // Process messages for valve control
-void processSprayMessage(comm_t *message) {
+void processValveMessage(comm_t *message) {
   ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
            message->address, message->command, message->retries);
   if (message->source != MASTER_ADDRESS) {
@@ -832,36 +840,20 @@ void reset_acknowledgements() {
   xSemaphoreTake(Pump_AckSemaphore, 0);
 }
 
-// Process messages from VALVE A
-void processValveAMessage(comm_t *message, ValveState newState) {
-  if (message->command == 0xFE) { // Feedback command
-    if (!DRAIN_NOTE_feedback &&
-        ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
-      DRAIN_NOTE_feedback = true;
-      ////update_status_message("Valve A Fdbk ack");
-    }
-  } else if (message->command == 0xA1) { // Valve A ON acknowledgment
+void valveAck(comm_t *message) {
+  if (message->command == 0xA1) { // Valve A ON acknowledgment
     Valve_A_Acknowledged = true;
     xSemaphoreGive(Valve_A_AckSemaphore);
-    ////update_status_message("Valve A ON");
   } else if (message->command == 0xA2) { // Valve A OFF acknowledgment
     Valve_A_Acknowledged = false;
     xSemaphoreGive(Valve_A_AckSemaphore);
-    ////update_status_message("Valve A OFF");
   } else {
     ESP_LOGD(TAG, "Ignored command from VALVE A: 0x%02X", message->command);
   }
 }
 
-// Process messages from VALVE B
-void processValveBMessage(comm_t *message, ValveState newState) {
-  if (message->command == 0xFE) { // Feedback command
-    if (!DRAIN_NOTE_feedback &&
-        ((strstr(valveStateToString(newState), "Fdbk") != NULL))) {
-      DRAIN_NOTE_feedback = true;
-      ////update_status_message("Valve B Fdbk ack");
-    }
-  } else if (message->command == 0xB1) { // Valve B ON acknowledgment
+void solenoidAck(comm_t *message) {
+  if (message->command == 0xB1) { // Valve B ON acknowledgment
     Valve_B_Acknowledged = true;
     xSemaphoreGive(Valve_B_AckSemaphore);
     ////update_status_message("Valve B ON");
@@ -923,13 +915,13 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
     // Process the received data
     ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
-    ESP_LOGI(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
+    ESP_LOGD(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
     ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil);
-    ESP_LOGI(TAG, "Battery Level: %d%%",
+    ESP_LOGD(TAG, "Battery Level: %d%%",
              recv_data.battery); // Added battery logging
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
-    ESP_LOGI(TAG, "==========================\n");
+    ESP_LOGD(TAG, "==========================\n");
 
     // Update sensor readings in the array-based system
     // Take mutex to safely update readings
@@ -1030,9 +1022,13 @@ void processReceivedMessage(comm_t *message) {
     processValveMessage(message);
     break;
 
+  case DEVICE_TYPE_SOLENOID:
+    ESP_LOGI(TAG, "Processing valve message (Valve %d)", plot_number);
+    processSolenoidMessage(message);
+    break;
+
   case DEVICE_TYPE_SOIL:
     ESP_LOGD(TAG, "Processing soil sensor message (Soil %d)", plot_number);
-    // Soil sensors typically don't receive commands, but if they do:
     ESP_LOGW(TAG, "Unexpected command message for soil sensor %d", plot_number);
     break;
 

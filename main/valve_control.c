@@ -122,6 +122,13 @@ const char *get_pcb_name(uint8_t nodeAddress) {
     }
     break;
 
+  case DEVICE_TYPE_SOLENOID:
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      snprintf(dynamic_name, sizeof(dynamic_name), "Solenoid %d", plot_number);
+      return dynamic_name;
+    }
+    break;
+
   case DEVICE_TYPE_SOIL:
     if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
       snprintf(dynamic_name, sizeof(dynamic_name), "Soil %d", plot_number);

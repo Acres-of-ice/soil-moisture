@@ -39,6 +39,10 @@ menu "App Configuration"
             bool "Valve Controller"
             help
                 Configure as valve controller. The plot number will be set separately.
+        config SOLENOID
+            bool "Solenoid Controller"
+            help
+                Configure as solenoid controller. The plot number will be set separately.
         config PUMP
             bool "PUMP"
             help
