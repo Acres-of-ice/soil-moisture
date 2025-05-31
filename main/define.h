@@ -11,7 +11,6 @@
 #include <string.h>
 #include <time.h>
 
-// Standard includes
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
@@ -32,7 +31,7 @@ extern uint8_t sequence_number;
 
 // Fixed Device Addresses
 #define MASTER_ADDRESS 0x01
-#define PUMP_ADDRESS 0x41 // Pump with instance 2
+#define PUMP_ADDRESS 0x41
 
 // Helper macros for address calculation
 #define GET_DEVICE_TYPE(addr) ((addr) & 0xF0)

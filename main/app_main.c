@@ -115,11 +115,6 @@ void init_gpio(void) {
   gpio_config(&io_conf);
 }
 
-// esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
-//                               .partition_label = "spiffs_storage",
-//                               .max_files = 5,
-//                               .format_if_mount_failed = true};
-//
 void init_semaphores(void) {
   stateMutex = xSemaphoreCreateMutex();
   message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
