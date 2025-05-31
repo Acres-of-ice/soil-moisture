@@ -25,7 +25,6 @@ QueueHandle_t sensor_data_queue = NULL;
 
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
-static uint8_t plot_number = -1;
 
 // ADC calibration handle for soil moisture sensor
 static adc_cali_handle_t cali_handle_soil = NULL;
@@ -45,9 +44,8 @@ extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
 void soil_sensor_init(void) {
   ESP_LOGI(TAG, "Initializing soil moisture sensor");
   // Set node address based on build configuration
-  plot_number = CONFIG_PLOT_NUMBER;
-  g_nodeAddress = DEVICE_TYPE_SOIL | plot_number;
-  ESP_LOGI(TAG, "Configured as Soil %d sensor (0x%02X)", plot_number,
+  g_nodeAddress = DEVICE_TYPE_SOIL | g_plot_number;
+  ESP_LOGI(TAG, "Configured as Soil %d sensor (0x%02X)", g_plot_number,
            g_nodeAddress);
 
   // Validate plot number

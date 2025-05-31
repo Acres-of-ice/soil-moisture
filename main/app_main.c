@@ -26,6 +26,7 @@
 
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
+uint8_t g_plot_number = 0;
 bool gsm_init_success = false;
 
 SemaphoreHandle_t Valve_A_AckSemaphore = NULL;
@@ -114,10 +115,11 @@ void init_gpio(void) {
   gpio_config(&io_conf);
 }
 
-esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
-                              .partition_label = "spiffs_storage",
-                              .max_files = 5,
-                              .format_if_mount_failed = true};
+// esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
+//                               .partition_label = "spiffs_storage",
+//                               .max_files = 5,
+//                               .format_if_mount_failed = true};
+//
 void init_semaphores(void) {
   stateMutex = xSemaphoreCreateMutex();
   message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
@@ -379,11 +381,10 @@ void app_main(void) {
 #endif
 
 #if CONFIG_SOIL
-  // Initialize as Soil sensor with plot number
-  uint8_t plot_number = CONFIG_PLOT_NUMBER;
-  g_nodeAddress = DEVICE_TYPE_SOIL | plot_number;
+  g_plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_SOIL | g_plot_number;
   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
-           get_pcb_name(g_nodeAddress), plot_number);
+           get_pcb_name(g_nodeAddress), g_plot_number);
 
   // Initialize ESP-NOW communication
   espnow_init2();
@@ -433,12 +434,11 @@ void app_main(void) {
 #endif
 
 #if CONFIG_VALVE
-  // Initialize as Valve controller with plot number
-  uint8_t plot_number = CONFIG_PLOT_NUMBER;
-  g_nodeAddress = DEVICE_TYPE_VALVE | plot_number;
-  init_gpio();
+  g_plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_VALVE | g_plot_number;
   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
-           get_pcb_name(g_nodeAddress), plot_number);
+           get_pcb_name(g_nodeAddress), g_plot_number);
+  // init_gpio();
   espnow_init2();
 
   xTaskCreatePinnedToCore(
@@ -449,9 +449,10 @@ void app_main(void) {
       &discoveryTaskHandle,
       COMM_TASK_CORE_ID // Core ID
   );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
+  xTaskCreatePinnedToCore(vTaskESPNOW, "VALVECOMM", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
+  //
   // if (valve == solenoid){
   //   gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
   //                                            (1ULL << RELAY_NEGATIVE) |

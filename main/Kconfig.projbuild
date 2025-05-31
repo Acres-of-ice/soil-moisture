@@ -75,9 +75,11 @@ menu "App Configuration"
         default "n" if MASTER
         default "n" if VALVE || SOIL || PUMP
 
-    config CONFIG_PARTITION_TABLE_CUSTOM
-        string
-        default "y" if MASTER
+    config PARTITION_TABLE_CUSTOM
+        bool "Use custom partition table"
+        default y
+        help
+            Use custom partition table based on PCB type
 
     config PARTITION_TABLE_CUSTOM_FILENAME
         string

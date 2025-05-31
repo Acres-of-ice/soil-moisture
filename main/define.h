@@ -18,6 +18,7 @@
 #include <stdio.h>
 
 extern uint8_t g_nodeAddress;
+extern uint8_t g_plot_number;
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
