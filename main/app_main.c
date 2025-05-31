@@ -433,7 +433,18 @@ void app_main(void) {
   g_nodeAddress = DEVICE_TYPE_VALVE | g_plot_number;
   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress), g_plot_number);
-  // init_gpio();
+  // Configure RELAY_1, RELAY_2, RELAY_3 as outputs
+  gpio_config_t relay_conf = {
+      .pin_bit_mask = (1ULL << RELAY_1) | (1ULL << RELAY_2) | (1ULL << RELAY_3),
+      .mode = GPIO_MODE_OUTPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&relay_conf);
+  // Initialize all pins to safe state (LOW)
+  gpio_set_level(RELAY_1, 0);
+  gpio_set_level(RELAY_2, 0);
+  gpio_set_level(RELAY_3, 0);
   espnow_init2();
 
   xTaskCreatePinnedToCore(
@@ -447,33 +458,41 @@ void app_main(void) {
   xTaskCreatePinnedToCore(vTaskESPNOW, "VALVECOMM", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
+#endif
+
+  // #if CONFIG_VALVE
+  //   g_plot_number = CONFIG_PLOT_NUMBER;
+  //   g_nodeAddress = DEVICE_TYPE_VALVE | g_plot_number;
+  //   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+  //            get_pcb_name(g_nodeAddress), g_plot_number);
   //
-  // if (valve == solenoid){
-  //   gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
-  //                                            (1ULL << RELAY_NEGATIVE) |
-  //                                            (1ULL << OE_PIN),
-  //                            .mode = GPIO_MODE_OUTPUT,
-  //                            .pull_up_en = GPIO_PULLUP_DISABLE,
-  //                            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-  //                            .intr_type = GPIO_INTR_DISABLE};
-  //   gpio_config(&io_conf);
-  //   // init_gpio();
-  //   gpio_set_level(RELAY_POSITIVE, 0);
-  //   gpio_set_level(RELAY_NEGATIVE, 1);
-  //   vTaskDelay(pdMS_TO_TICKS(100)); // settle time
-  //
-  //   gpio_set_level(OE_PIN, 1);
-  //   vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
-  //   gpio_set_level(OE_PIN, 0);
-  //
-  //   vTaskDelay(pdMS_TO_TICKS(20));
+  //   // Configure valve control pins as outputs
+  //   gpio_config_t valve_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+  //                                               (1ULL << RELAY_NEGATIVE) |
+  //                                               (1ULL << OE_PIN),
+  //                               .mode = GPIO_MODE_OUTPUT,
+  //                               .pull_up_en = GPIO_PULLUP_DISABLE,
+  //                               .pull_down_en = GPIO_PULLDOWN_DISABLE,
+  //                               .intr_type = GPIO_INTR_DISABLE};
+  //   gpio_config(&valve_conf);
   //   gpio_set_level(RELAY_POSITIVE, 0);
   //   gpio_set_level(RELAY_NEGATIVE, 0);
   //   gpio_set_level(OE_PIN, 0);
   //
-  //   }
-
-#endif
+  //   espnow_init2();
+  //
+  //   xTaskCreatePinnedToCore(
+  //       espnow_discovery_task, "ESP-NOW Discovery",
+  //       COMM_TASK_STACK_SIZE,     // Stack size
+  //       NULL,                     // Parameters
+  //       (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+  //       &discoveryTaskHandle,
+  //       COMM_TASK_CORE_ID // Core ID
+  //   );
+  //   xTaskCreatePinnedToCore(vTaskESPNOW, "VALVECOMM", COMM_TASK_STACK_SIZE,
+  //                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
+  //                           COMM_TASK_CORE_ID);
+  // #endif
 
 #if CONFIG_PUMP
   init_gpio_pump();
