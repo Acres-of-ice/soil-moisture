@@ -59,8 +59,34 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 project(soil_moisture VERSION ${BASE_VERSION})
 
-# Optional: Print version information
-message(STATUS "Full version: ${PROJECT_VERSION}")
+function(display_build_config)
+    message(STATUS "")
+    message(STATUS "╔════════════════════════════════════════╗")
+    message(STATUS "║           BUILD CONFIGURATION         ║")
+    message(STATUS "╠════════════════════════════════════════╣")
+    
+    # Device information
+    message(STATUS "║ Version: ${PROJECT_VERSION_FROM_FILE}")
+    message(STATUS "║ Site: ${CONFIG_SITE_NAME}")
+    
+    # Device type with address calculation
+    if(CONFIG_MASTER)
+        message(STATUS "║ Device: MASTER (Address: 0x01)")
+    elseif(CONFIG_SOIL)
+        math(EXPR SOIL_ADDR "32 + ${CONFIG_PLOT_NUMBER}")  # 0x20 + plot
+        message(STATUS "║ Device: SOIL ${CONFIG_PLOT_NUMBER} (Address: 0x${SOIL_ADDR})")
+    elseif(CONFIG_VALVE)
+        math(EXPR VALVE_ADDR "16 + ${CONFIG_PLOT_NUMBER}")  # 0x10 + plot
+        message(STATUS "║ Device: VALVE ${CONFIG_PLOT_NUMBER} (Address: 0x${VALVE_ADDR})")
+    elseif(CONFIG_PUMP)
+        message(STATUS "║ Device: PUMP (Address: 0x42)")
+    endif()
+    
+    message(STATUS "║ Plots: ${CONFIG_NUM_PLOTS}")
+    message(STATUS "╠════════════════════════════════════════╣")
+endfunction()
+
+display_build_config()
 
 # Optional: Print version information
 # message(STATUS "Flashing webapp")

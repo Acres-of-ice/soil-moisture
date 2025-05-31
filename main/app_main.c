@@ -212,18 +212,18 @@ void app_main(void) {
   espnow_init2();
 
   // Check if waking up from deep sleep
-  if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER){
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
     ESP_LOGI(TAG, "Woke up from deep sleep, checking voltage...");
 
     esp_err_t voltage_init_result = voltage_monitor_init();
-    if(voltage_init_result != ESP_OK) {
+    if (voltage_init_result != ESP_OK) {
       ESP_LOGW(TAG, "Failed to initialize voltage monitor %s ",
                esp_err_to_name(voltage_init_result));
     }
 
     float voltage = measure_voltage();
     ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
-    if(voltage < LOW_CUTOFF_VOLTAGE){
+    if (voltage < LOW_CUTOFF_VOLTAGE) {
       ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
       esp_sleep_enable_timer_wakeup(
           (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
@@ -359,7 +359,8 @@ void app_main(void) {
     ESP_LOGI(TAG, "Measured voltage: %.2fV", voltage);
 
     if (voltage < LOW_CUTOFF_VOLTAGE) {
-      ESP_LOGE(TAG, "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+      ESP_LOGE(TAG,
+               "Voltage below %.2fV, disabling SIM and entering deep sleep...",
                LOW_CUTOFF_VOLTAGE);
 
       // Disable SIM pin
@@ -369,17 +370,20 @@ void app_main(void) {
       gpio_hold_en(SIM_GPIO);
 
       // Enter deep sleep
-      esp_sleep_enable_timer_wakeup((uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 * 1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+      esp_sleep_enable_timer_wakeup(
+          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
       esp_deep_sleep_start();
     }
   }
 #endif
 
-#if CONFIG_SOIL_A
-  // Initialize as Soil A sensor
-  g_nodeAddress = SOIL_A_ADDRESS;
-  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
-           get_pcb_name(g_nodeAddress));
+#if CONFIG_SOIL
+  // Initialize as Soil sensor with plot number
+  uint8_t plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_SOIL | plot_number;
+  ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress), plot_number);
 
   // Initialize ESP-NOW communication
   espnow_init2();
@@ -428,56 +432,13 @@ void app_main(void) {
   );
 #endif
 
-#if CONFIG_SOIL_B
-  // Initialize as Soil B sensor
-  g_nodeAddress =
-      SOIL_B_ADDRESS; // Fixed: was incorrectly set to SOIL_A_ADDRESS
-  ESP_LOGI(TAG, "v%s %s %s", PROJECT_VERSION, CONFIG_SITE_NAME,
-           get_pcb_name(g_nodeAddress));
-
-  // Initialize ESP-NOW communication
-  espnow_init2();
-
-  // Start ESP-NOW discovery task
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-
-  // Brief delay to allow discovery to start
-  vTaskDelay(pdMS_TO_TICKS(5000));
-
-  // Initialize soil sensor
-  soil_sensor_init();
-
-  // Start sensor reading task
-  xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c
-              "soil_sensor",    // Task name
-              1024 * 4,         // Stack size
-              NULL, // No parameters needed - node type determined in init
-              3,    // Priority
-              NULL  // No handle needed
-  );
-
-  // Start ESP-NOW transmission task
-  xTaskCreate(vTaskESPNOW_TX, // Transmission task
-              "transmit",     // Task name
-              1024 * 4,       // Stack size
-              NULL,           // No parameters needed
-              5,              // Priority
-              NULL            // No handle needed
-  );
-#endif
-
-#if CONFIG_VALVE_A
-  ESP_LOGI(TAG, "inside valve a");
-  g_nodeAddress = VALVE_A_ADDRESS;
+#if CONFIG_VALVE
+  // Initialize as Valve controller with plot number
+  uint8_t plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_VALVE | plot_number;
   init_gpio();
-  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
+  ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+           get_pcb_name(g_nodeAddress), plot_number);
   espnow_init2();
 
   xTaskCreatePinnedToCore(
@@ -491,56 +452,34 @@ void app_main(void) {
   xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
                           &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                           COMM_TASK_CORE_ID);
-
-#endif
-
-#if CONFIG_VALVE_B
-  g_nodeAddress = VALVE_B_ADDRESS;
-  // Set all LOW initially
-  // gpio_set_level(RELAY_POSITIVE, 0);
-  // gpio_set_level(RELAY_NEGATIVE, 0);
-  // gpio_set_level(OE_PIN, 0);
-  gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
-                                           (1ULL << RELAY_NEGATIVE) |
-                                           (1ULL << OE_PIN),
-                           .mode = GPIO_MODE_OUTPUT,
-                           .pull_up_en = GPIO_PULLUP_DISABLE,
-                           .pull_down_en = GPIO_PULLDOWN_DISABLE,
-                           .intr_type = GPIO_INTR_DISABLE};
-  gpio_config(&io_conf);
-  // init_gpio();
-  gpio_set_level(RELAY_POSITIVE, 0);
-  gpio_set_level(RELAY_NEGATIVE, 1);
-  vTaskDelay(pdMS_TO_TICKS(100)); // settle time
-
-  gpio_set_level(OE_PIN, 1);
-  vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
-  gpio_set_level(OE_PIN, 0);
-
-  vTaskDelay(pdMS_TO_TICKS(20));
-  gpio_set_level(RELAY_POSITIVE, 0);
-  gpio_set_level(RELAY_NEGATIVE, 0);
-  gpio_set_level(OE_PIN, 0);
-
-  ESP_LOGI(TAG, "%s selected", get_pcb_name(g_nodeAddress));
-  espnow_init2();
-
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-  xTaskCreatePinnedToCore(vTaskESPNOW, "Lora SOURCE_NOTE", COMM_TASK_STACK_SIZE,
-                          &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
-                          COMM_TASK_CORE_ID);
+  // if (valve == solenoid){
+  //   gpio_config_t io_conf = {.pin_bit_mask = (1ULL << RELAY_POSITIVE) |
+  //                                            (1ULL << RELAY_NEGATIVE) |
+  //                                            (1ULL << OE_PIN),
+  //                            .mode = GPIO_MODE_OUTPUT,
+  //                            .pull_up_en = GPIO_PULLUP_DISABLE,
+  //                            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+  //                            .intr_type = GPIO_INTR_DISABLE};
+  //   gpio_config(&io_conf);
+  //   // init_gpio();
+  //   gpio_set_level(RELAY_POSITIVE, 0);
+  //   gpio_set_level(RELAY_NEGATIVE, 1);
+  //   vTaskDelay(pdMS_TO_TICKS(100)); // settle time
+  //
+  //   gpio_set_level(OE_PIN, 1);
+  //   vTaskDelay(pdMS_TO_TICKS(30)); // OE pulse
+  //   gpio_set_level(OE_PIN, 0);
+  //
+  //   vTaskDelay(pdMS_TO_TICKS(20));
+  //   gpio_set_level(RELAY_POSITIVE, 0);
+  //   gpio_set_level(RELAY_NEGATIVE, 0);
+  //   gpio_set_level(OE_PIN, 0);
+  //
+  //   }
 
 #endif
 
 #if CONFIG_PUMP
-  printf("\ninside pump\n");
   init_gpio_pump();
   g_nodeAddress = PUMP_ADDRESS;
 

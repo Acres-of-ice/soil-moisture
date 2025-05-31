@@ -31,58 +31,64 @@ menu "App Configuration"
             bool "MASTER as sensor master"
             help
                 Configure MASTER
-        config SOIL_A
-            bool "Soil A as soil sensor A"
+        config SOIL
+            bool "Soil Sensor"
             help
-                Configure SOIL_A the soil sensor.
-        config SOIL_B
-            bool "Soil B as soil sensor B"
+                Configure as soil sensor. The plot number will be set separately.
+        config VALVE
+            bool "Valve Controller"
             help
-                Configure SOIL_B the soil sensor.
-        config VALVE_A
-            bool "Valve A"
-            help
-                Configure VALVE_A the valve A.
-        config VALVE_B
-            bool "Valve B"
-            help
-                Configure VALVE_B the valve B.
+                Configure as valve controller. The plot number will be set separately.
         config PUMP
             bool "PUMP"
             help
                 Configure Pump.
     endchoice
 
+    config PLOT_NUMBER
+        int "Plot Number (1-8)"
+        range 1 8
+        default 1
+        depends on SOIL || VALVE
+        help
+            Set the plot number for this soil sensor or valve.
+            This will determine the device address and PCB name.
+            Plot 1 = Soil 1/Valve 1, Plot 2 = Soil 2/Valve 2, etc.
+
     config ESPTOOLPY_FLASHSIZE
         string
         default "8MB" if MASTER
-        default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "4MB" if VALVE || SOIL || PUMP
 
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
-        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "n" if VALVE || SOIL || PUMP
 
     config ESPTOOLPY_FLASHSIZE_4MB
         string
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default y if VALVE || SOIL || PUMP
 
     config ESPTOOLPY_FLASHSIZE_2MB
         string
         default "n" if MASTER
-        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "n" if VALVE || SOIL || PUMP
+
+    config CONFIG_PARTITION_TABLE_CUSTOM
+        string
+        default "y" if MASTER
 
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
         default "partitions/master.csv" if MASTER
-        default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "partitions/valves.csv" if VALVE || SOIL || PUMP
 
     # CPU Frequency Configuration
     config ESP_DEFAULT_CPU_FREQ_MHZ
         int
         default 240 if MASTER
-        default 80 if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default 80 if VALVE || SOIL || PUMP
         help
             CPU frequency to be set on application startup.
             Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
@@ -90,7 +96,7 @@ menu "App Configuration"
     config ESP_DEFAULT_CPU_FREQ_MHZ_80
         bool
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default y if VALVE || SOIL || PUMP
 
     config ESP_DEFAULT_CPU_FREQ_MHZ_160
         bool
@@ -99,18 +105,18 @@ menu "App Configuration"
     config ESP_DEFAULT_CPU_FREQ_MHZ_240
         bool
         default y if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default n if VALVE || SOIL || PUMP
 
     # Debugging
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
         bool
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default y if VALVE || SOIL || PUMP
 
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
         bool
         default y if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default n if VALVE || SOIL || PUMP
 
 config SMS_RECIPIENT_DATA
   choice

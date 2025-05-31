@@ -22,20 +22,27 @@ extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
 
-// Device type identifiers (high nibble)
-#define DEVICE_TYPE_MASTER 0xA0
-#define DEVICE_TYPE_VALVE 0xB0
-#define DEVICE_TYPE_SOIL 0xC0
-#define DEVICE_TYPE_PUMP 0xD0    // Reserved for future use
-#define DEVICE_TYPE_WEATHER 0xE0 // Reserved for future use
+//// Device Type Constants (High Nibble)
+#define DEVICE_TYPE_MASTER 0x00
+#define DEVICE_TYPE_VALVE 0x10
+#define DEVICE_TYPE_SOIL 0x20
+#define DEVICE_TYPE_WEATHER 0x30
+#define DEVICE_TYPE_PUMP 0x40
 
-// Device addresses (high nibble = type, low nibble = instance ID)
-#define MASTER_ADDRESS (DEVICE_TYPE_MASTER | 0x01) // 0xA1 - Master node
-#define VALVE_A_ADDRESS (DEVICE_TYPE_VALVE | 0x01) // 0xB1 - Valve A
-#define VALVE_B_ADDRESS (DEVICE_TYPE_VALVE | 0x02) // 0xB2 - Valve B
-#define SOIL_A_ADDRESS (DEVICE_TYPE_SOIL | 0x01)   // 0xC1 - Soil sensor A
-#define SOIL_B_ADDRESS (DEVICE_TYPE_SOIL | 0x02)   // 0xC2 - Soil sensor B
-#define PUMP_ADDRESS (DEVICE_TYPE_PUMP | 0x02)     // 0xE2 - Pump
+// Fixed Device Addresses
+#define MASTER_ADDRESS 0x01
+#define PUMP_ADDRESS 0x41 // Pump with instance 2
+
+// Helper macros for address calculation
+#define GET_DEVICE_TYPE(addr) ((addr) & 0xF0)
+#define GET_PLOT_NUMBER(addr) ((addr) & 0x0F)
+#define MAKE_DEVICE_ADDR(type, plot) ((type) | (plot))
+
+// Validation macros
+#define IS_SOIL_SENSOR(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_SOIL)
+#define IS_VALVE_CONTROLLER(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_VALVE)
+#define IS_MASTER_DEVICE(addr) ((addr) == MASTER_ADDRESS)
+#define IS_PUMP_DEVICE(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_PUMP)
 
 // ==================== GPIO Definitions ====================
 #define RELAY_1 GPIO_NUM_16
@@ -341,50 +348,53 @@ typedef struct {
   const char *description; // Test case description
 } test_case_t;
 
-// Test cases for soil moisture simulation (2 plots)
+// Test cases for soil moisture simulation (dynamic plots)
 static const test_case_t test_cases[] = {
     // Low moisture scenarios (should trigger irrigation)
     {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
      .battery = {85, 87},
-     .description = "Both sensors dry - both should trigger irrigation"},
+     .description = "Both plots dry - both should trigger irrigation"},
     {.soil = {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15},
      .battery = {82, 84},
-     .description = "Sensor A marginal, B dry - B should trigger irrigation"},
+     .description =
+         "Plot 1 marginal, Plot 2 dry - Plot 2 should trigger irrigation"},
     {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
      .battery = {88, 91},
-     .description = "Sensor A dry, B marginal - A should trigger irrigation"},
+     .description =
+         "Plot 1 dry, Plot 2 marginal - Plot 1 should trigger irrigation"},
     // Mixed moisture scenarios
     {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5},
      .battery = {86, 93},
-     .description = "Sensor A dry, B wet - only A should trigger irrigation"},
+     .description =
+         "Plot 1 dry, Plot 2 wet - only Plot 1 should trigger irrigation"},
     {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10},
      .battery = {90, 78},
-     .description = "Sensor A wet, B dry - only B should trigger irrigation"},
+     .description =
+         "Plot 1 wet, Plot 2 dry - only Plot 2 should trigger irrigation"},
     // High moisture scenarios (should not trigger irrigation)
     {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 10},
      .battery = {88, 92},
-     .description = "Both sensors wet - neither should trigger irrigation"},
+     .description = "Both plots wet - neither should trigger irrigation"},
     {.soil = {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20},
      .battery = {94, 96},
-     .description =
-         "Both sensors very wet - neither should trigger irrigation"},
+     .description = "Both plots very wet - neither should trigger irrigation"},
     // Edge cases
     {.soil = {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY},
      .battery = {80, 80},
-     .description = "Both sensors at threshold - edge case"},
+     .description = "Both plots at threshold - edge case"},
     {.soil = {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1},
      .battery = {75, 95},
-     .description = "Sensor A just below threshold, B just above threshold"},
+     .description = "Plot 1 just below threshold, Plot 2 just above threshold"},
     {.soil = {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1},
      .battery = {93, 77},
-     .description = "Sensor A just above threshold, B just below threshold"},
+     .description = "Plot 1 just above threshold, Plot 2 just below threshold"},
     // Extreme cases
     {.soil = {0, 100},
      .battery = {65, 98},
-     .description = "Sensor A bone dry, B saturated"},
+     .description = "Plot 1 bone dry, Plot 2 saturated"},
     {.soil = {100, 0},
      .battery = {99, 60},
-     .description = "Sensor A saturated, B bone dry"},
+     .description = "Plot 1 saturated, Plot 2 bone dry"},
     // Battery testing scenarios
     {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_DRY - 8},
      .battery = {25, 15},

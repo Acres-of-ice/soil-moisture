@@ -25,6 +25,7 @@ QueueHandle_t sensor_data_queue = NULL;
 
 // ADC handle
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
+static uint8_t plot_number = -1;
 
 // ADC calibration handle for soil moisture sensor
 static adc_cali_handle_t cali_handle_soil = NULL;
@@ -43,18 +44,18 @@ extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
  */
 void soil_sensor_init(void) {
   ESP_LOGI(TAG, "Initializing soil moisture sensor");
+  // Set node address based on build configuration
+  plot_number = CONFIG_PLOT_NUMBER;
+  g_nodeAddress = DEVICE_TYPE_SOIL | plot_number;
+  ESP_LOGI(TAG, "Configured as Soil %d sensor (0x%02X)", plot_number,
+           g_nodeAddress);
 
-// Set node address based on build configuration
-#if defined(CONFIG_SOIL_A)
-  g_nodeAddress = SOIL_A_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil A sensor (0x%02X)", g_nodeAddress);
-#elif defined(CONFIG_SOIL_B)
-  g_nodeAddress = SOIL_B_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil B sensor (0x%02X)", g_nodeAddress);
-#else
-  ESP_LOGE(TAG, "Invalid soil sensor configuration!");
-  return;
-#endif
+  // Validate plot number
+  if (CONFIG_PLOT_NUMBER < 1 || CONFIG_PLOT_NUMBER > CONFIG_NUM_PLOTS) {
+    ESP_LOGE(TAG, "Invalid plot number: %d (valid range: 1-%d)",
+             CONFIG_PLOT_NUMBER, CONFIG_NUM_PLOTS);
+    return;
+  }
 
   // Initialize ESP-NOW sensor data queue
   if (sensor_data_queue == NULL) {
@@ -460,10 +461,9 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
 
     if (result == ESP_OK) {
       ESP_LOGI(TAG,
-               "Data sent successfully to master (Soil %c): moisture=%d%%, "
+               "Data sent successfully to master (Soil %d): moisture=%d%%, "
                "battery=%d%%",
-               (sensor_data->node_address == SOIL_A_ADDRESS) ? 'A' : 'B',
-               sensor_data->soil, read_battery_level());
+               plot_number, sensor_data->soil, read_battery_level());
       return true;
     } else {
       retry_count++;
@@ -540,8 +540,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
   // Initialize state variables
   uint8_t own_node_address = g_nodeAddress;
-  bool is_soil_sensor = (own_node_address == SOIL_A_ADDRESS ||
-                         own_node_address == SOIL_B_ADDRESS);
+  uint8_t device_type = GET_DEVICE_TYPE(own_node_address);
+  uint8_t plot_number = GET_PLOT_NUMBER(own_node_address);
+  bool is_soil_sensor = (device_type == DEVICE_TYPE_SOIL);
 
   // Master device MAC address
   uint8_t master_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -553,6 +554,12 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
   ESP_LOGI(TAG, "ESP-NOW transmission task started for node 0x%02X (%s)",
            own_node_address, get_pcb_name(own_node_address));
+
+  if (is_soil_sensor) {
+    ESP_LOGI(TAG, "Configured as soil sensor for plot %d", plot_number);
+  } else {
+    ESP_LOGI(TAG, "Device type: 0x%02X, not a soil sensor", device_type);
+  }
 
   // Main task loop
   while (1) {
@@ -569,6 +576,11 @@ void vTaskESPNOW_TX(void *pvParameters) {
                  "Master MAC address not available, retrying in next cycle");
         vTaskDelay(pdMS_TO_TICKS(TRANSMISSION_CYCLE_MS));
         continue;
+      } else {
+        ESP_LOGI(TAG,
+                 "Master MAC address acquired: %02x:%02x:%02x:%02x:%02x:%02x",
+                 master_mac[0], master_mac[1], master_mac[2], master_mac[3],
+                 master_mac[4], master_mac[5]);
       }
     }
 
@@ -579,23 +591,32 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
       // Try to get new data from queue, but don't block if empty
       if (receive_sensor_data(&sensor_data, 0)) {
-        ESP_LOGI(TAG, "Got fresh sensor data from queue: moisture=%d%%",
-                 sensor_data.soil);
+        ESP_LOGI(TAG,
+                 "Got fresh sensor data from queue (Plot %d): moisture=%d%%",
+                 plot_number, sensor_data.soil);
         got_data = true;
       } else {
-        ESP_LOGD(TAG, "No new sensor data in queue, using last known values");
+        ESP_LOGD(
+            TAG,
+            "No new sensor data in queue for plot %d, using last known values",
+            plot_number);
       }
 
       // 4. Send sensor data to master (either new or last known)
       if (got_data || sensor_data.soil > 0) {
+        ESP_LOGD(TAG, "Sending data for plot %d: moisture=%d%%, battery=%d%%",
+                 plot_number, sensor_data.soil, sensor_data.battery);
         send_sensor_data_to_master(&sensor_data, master_mac,
                                    MAX_TRANSMISSION_RETRIES);
       } else {
-        ESP_LOGW(TAG, "No valid sensor data available, skipping transmission");
+        ESP_LOGW(
+            TAG,
+            "No valid sensor data available for plot %d, skipping transmission",
+            plot_number);
       }
     } else {
-      ESP_LOGD(TAG, "Device 0x%02X is not a soil sensor, idling",
-               own_node_address);
+      ESP_LOGD(TAG, "Device 0x%02X (%s) is not a soil sensor, idling",
+               own_node_address, get_pcb_name(own_node_address));
     }
 
     // 5. Wait for next transmission cycle

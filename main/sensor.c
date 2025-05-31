@@ -641,34 +641,53 @@ void simulation_task(void *pvParameters) {
   size_t test_index = 0;
 
   ESP_LOGI(TAG,
-           "Starting automated test sequence with %d test cases for 2 plots",
-           NUM_TEST_CASES);
+           "Starting automated test sequence with %d test cases for %d plots",
+           NUM_TEST_CASES, CONFIG_NUM_PLOTS);
 
   while (1) {
     // Get current test case
     test_case_t current_test = test_cases[test_index];
 
-    // Set test values (only pass 2 values but function expects
-    // CONFIG_NUM_PLOTS)
+    // Set test values for all configured plots
     int soil_values[CONFIG_NUM_PLOTS] = {0};
     int battery_values[CONFIG_NUM_PLOTS] = {0};
 
-    // Copy the 2 test values to the array
-    for (int i = 0; i < 2 && i < CONFIG_NUM_PLOTS; i++) {
-      soil_values[i] = current_test.soil[i];
-      battery_values[i] = current_test.battery[i];
+    // Copy the test values to the array (up to CONFIG_NUM_PLOTS)
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      if (i < 2) {
+        // Use test case values for first 2 plots
+        soil_values[i] = current_test.soil[i];
+        battery_values[i] = current_test.battery[i];
+      } else {
+        // For additional plots beyond 2, use default values
+        soil_values[i] = CONFIG_SOIL_WET + 5; // Well-watered
+        battery_values[i] = 85 + (i * 2);     // Good battery levels
+      }
     }
 
     set_simulated_values(soil_values, battery_values, -999.0f, -999.0f, -999.0f,
                          -999.0f);
 
-    // Log test case details
+    // Log test case details with updated terminology
     ESP_LOGI(TAG, "=== Test case %d ===", test_index + 1);
     ESP_LOGI(TAG, "Description: %s", current_test.description);
-    ESP_LOGI(TAG, "Soil A: %d%%, Soil B: %d%%", current_test.soil[0],
-             current_test.soil[1]);
-    ESP_LOGI(TAG, "Battery A: %d%%, Battery B: %d%%", current_test.battery[0],
-             current_test.battery[1]);
+
+    // Log all configured plots
+    char soil_log[128] = {0};
+    char battery_log[128] = {0};
+    int soil_offset = 0, battery_offset = 0;
+
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      soil_offset += snprintf(soil_log + soil_offset,
+                              sizeof(soil_log) - soil_offset, "%sPlot %d: %d%%",
+                              (i > 0) ? ", " : "", i + 1, soil_values[i]);
+      battery_offset += snprintf(
+          battery_log + battery_offset, sizeof(battery_log) - battery_offset,
+          "%sPlot %d: %d%%", (i > 0) ? ", " : "", i + 1, battery_values[i]);
+    }
+
+    ESP_LOGI(TAG, "Soil - %s", soil_log);
+    ESP_LOGI(TAG, "Battery - %s", battery_log);
     ESP_LOGI(TAG, "==================");
 
     // Move to next test case

@@ -41,6 +41,10 @@ extern TaskHandle_t valveTaskHandle;
 static time_t last_conductor_message_time = 0;
 sensor_readings_t soil_readings = {0};
 
+// Global variable to track current pump state
+static uint8_t current_pump_state = 0;  // 0 = off, 1 = on
+static uint8_t current_valve_state = 0; // 0 = off, 1 = on
+
 // MAC address mapping storage for device addresses to MAC addresses
 typedef struct {
   uint8_t device_addr;
@@ -54,7 +58,7 @@ static int num_device_mappings = 0;
 // External queue for receiving sensor data
 extern QueueHandle_t espnow_queue;
 
-static const char *TAG = "COMMAND";
+static const char *TAG = "ESPNOW";
 extern char last_sender_pcb_name[ESPNOW_MAX_PCB_NAME_LENGTH];
 extern bool message_received;
 extern char last_message[256];
@@ -83,14 +87,6 @@ bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
 
   if (result == 3) {
     data->node_address = node_addr;
-    data->soil = soil_value;
-    data->battery = battery_value;
-    return true;
-  }
-
-  // Fallback: if node address wasn't in the message, get it from the MAC
-  if (result == 2) {
-    data->node_address = get_device_from_mac(mac_addr);
     data->soil = soil_value;
     data->battery = battery_value;
     return true;
@@ -178,35 +174,62 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
                           uint8_t source) {
   clearMessageQueue();
   ESP_LOGI(TAG, "inside sendcommandwithretry");
-  // Determine which semaphore we're waiting on (keep your existing logic)
+
+  // Determine which semaphore we're waiting on
   SemaphoreHandle_t ackSemaphore = NULL;
-  if (valveAddress == VALVE_A_ADDRESS) {
-    if (!Valve_A_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = valve A ack");
+  uint8_t device_type = GET_DEVICE_TYPE(valveAddress);
+
+  // Handle valve devices (any valve, not just A and B)
+  if (device_type == DEVICE_TYPE_VALVE) {
+    uint8_t plot_number = GET_PLOT_NUMBER(valveAddress);
+    if (plot_number == 1 && !Valve_A_Acknowledged) {
+      ESP_LOGD(TAG, "acksemaphore = valve %d ack", plot_number);
       ackSemaphore = Valve_A_AckSemaphore;
-    }
-  } else if (valveAddress == VALVE_B_ADDRESS) {
-    if (!Valve_B_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = valve B ack");
+    } else if (plot_number == 2 && !Valve_B_Acknowledged) {
+      ESP_LOGD(TAG, "acksemaphore = valve %d ack", plot_number);
       ackSemaphore = Valve_B_AckSemaphore;
     }
-  } else if (valveAddress == PUMP_ADDRESS) {
+    // For plot numbers > 2, you might need additional semaphores or use a
+    // shared one
+  }
+  // Handle pump device
+  else if (valveAddress == PUMP_ADDRESS) {
     if (!Pump_Acknowledged) {
       ESP_LOGD(TAG, "acksemaphore = Pump ack");
       ackSemaphore = Pump_AckSemaphore;
     }
-  } else if (valveAddress == SOIL_A_ADDRESS) {
+  }
+  // Handle soil sensor devices (any soil sensor)
+  else if (device_type == DEVICE_TYPE_SOIL) {
     if (!Soil_pcb_Acknowledged) {
-      ackSemaphore = Soil_AckSemaphore;
-    }
-  } else if (valveAddress == SOIL_B_ADDRESS) {
-    if (!Soil_pcb_Acknowledged) {
+      ESP_LOGD(TAG, "acksemaphore = soil sensor ack");
       ackSemaphore = Soil_AckSemaphore;
     }
   }
+  // // Legacy compatibility - keep existing hardcoded checks as fallback
+  // else if (valveAddress == VALVE_A_ADDRESS) {
+  //   if (!Valve_A_Acknowledged) {
+  //     ESP_LOGD(TAG, "acksemaphore = valve A ack (legacy)");
+  //     ackSemaphore = Valve_A_AckSemaphore;
+  //   }
+  // } else if (valveAddress == VALVE_B_ADDRESS) {
+  //   if (!Valve_B_Acknowledged) {
+  //     ESP_LOGD(TAG, "acksemaphore = valve B ack (legacy)");
+  //     ackSemaphore = Valve_B_AckSemaphore;
+  //   }
+  // } else if (valveAddress == SOIL_A_ADDRESS) {
+  //   if (!Soil_pcb_Acknowledged) {
+  //     ackSemaphore = Soil_AckSemaphore;
+  //   }
+  // } else if (valveAddress == SOIL_B_ADDRESS) {
+  //   if (!Soil_pcb_Acknowledged) {
+  //     ackSemaphore = Soil_AckSemaphore;
+  //   }
+  // }
+
   if (ackSemaphore == NULL) {
-    ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X",
-             valveAddress);
+    ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X (%s)",
+             valveAddress, get_pcb_name(valveAddress));
     return false;
   }
 
@@ -222,15 +245,13 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
              valveAddress, command, source, retry);
 
     ESPNOW_queueMessage(valveAddress, command, source, retry);
-    // ESPNOW_queueMessage(valveAddress, command, source, 1);
 
     // Wait for the message to be sent from queue
     while (!ESPNOW_isQueueEmpty()) {
       vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    // Wait for acknowledgment via semaphore (the espnow_send_cb will give
-    // semaphore on success)
+    // Wait for acknowledgment via semaphore
     if (xSemaphoreTake(ackSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE) {
       commandAcknowledged = true;
       ESP_LOGI(TAG, "%s acknowledged command 0x%02X from %s on attempt %d",
@@ -398,6 +419,7 @@ bool is_peer_authenticated(uint8_t device_addr) {
 
 uint8_t get_device_from_mac(const uint8_t *mac_addr) {
   // ESP_LOGI(TAG,"inside get device from mac");
+
   // Handle special case for broadcast address
   if (memcmp(mac_addr, ESPNOW_BROADCAST_MAC, ESP_NOW_ETH_ALEN) == 0) {
     ESP_LOGD(TAG, "Broadcast address detected, using special broadcast value");
@@ -410,37 +432,60 @@ uint8_t get_device_from_mac(const uint8_t *mac_addr) {
   if (pcb_name != NULL && pcb_name[0] != '\0' &&
       strncmp(pcb_name, "Unknown-", 8) != 0) {
 
-    // Check for known PCB names
-    if (strcasecmp(pcb_name, "Master") == 0) {
-      ESP_LOGD(TAG, "Identified as MASTER by PCB name");
-      return MASTER_ADDRESS;
-    } else if (strcasecmp(pcb_name, "Valve A") == 0) {
-      ESP_LOGD(TAG, "Identified as VALVE_A by PCB name");
-      return VALVE_A_ADDRESS;
-    } else if (strcasecmp(pcb_name, "Valve B") == 0) {
-      ESP_LOGD(TAG, "Identified as VALVE_B by PCB name");
-      return VALVE_B_ADDRESS;
-    } else if (strcasecmp(pcb_name, "Soil A") == 0) {
-      ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
-      return SOIL_A_ADDRESS;
-    } else if (strcasecmp(pcb_name, "Soil B") == 0) {
-      ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
-      return SOIL_B_ADDRESS;
-    } else if (strcasecmp(pcb_name, "Pump") == 0) {
-      ESP_LOGD(TAG, "Identified as PUMP by PCB name");
-      return PUMP_ADDRESS;
-    }
+    // Use the updated get_device_from_pcb_name function for all PCB name
+    // parsing
+    uint8_t device_addr = get_device_from_pcb_name(pcb_name);
 
-    ESP_LOGW(TAG, "PCB name '%s' doesn't match any known device", pcb_name);
+    if (device_addr != 0xFF) {
+      // Successfully identified device by PCB name
+      ESP_LOGD(TAG,
+               "Identified MAC " MACSTR " as device 0x%02X (%s) by PCB name",
+               MAC2STR(mac_addr), device_addr, pcb_name);
+      return device_addr;
+    } else {
+      ESP_LOGW(TAG, "PCB name '%s' doesn't match any known device pattern",
+               pcb_name);
+    }
+  } else {
+    ESP_LOGD(TAG,
+             "No valid PCB name available for MAC " MACSTR " (pcb_name: %s)",
+             MAC2STR(mac_addr), pcb_name ? pcb_name : "NULL");
   }
 
   // If still not found, try pattern matching as a last resort
   if (mac_addr[4] == 0xAA) {
     // This looks like one of our generated MACs
+    uint8_t potential_addr = mac_addr[5];
     ESP_LOGI(TAG,
-             "Using deterministic mapping based on MAC pattern for " MACSTR,
-             MAC2STR(mac_addr));
-    return mac_addr[5];
+             "Using deterministic mapping based on MAC pattern for " MACSTR
+             " -> 0x%02X",
+             MAC2STR(mac_addr), potential_addr);
+
+    // Validate that this looks like a valid device address
+    uint8_t device_type = GET_DEVICE_TYPE(potential_addr);
+    uint8_t plot_number = GET_PLOT_NUMBER(potential_addr);
+
+    // Check if it's a valid device type and plot number
+    if ((device_type == DEVICE_TYPE_MASTER &&
+         potential_addr == MASTER_ADDRESS) ||
+        (device_type == DEVICE_TYPE_VALVE && plot_number >= 1 &&
+         plot_number <= CONFIG_NUM_PLOTS) ||
+        (device_type == DEVICE_TYPE_SOIL && plot_number >= 1 &&
+         plot_number <= CONFIG_NUM_PLOTS) ||
+        (device_type == DEVICE_TYPE_PUMP && potential_addr == PUMP_ADDRESS) ||
+        (device_type == DEVICE_TYPE_WEATHER && plot_number >= 1 &&
+         plot_number <= 8)) {
+
+      ESP_LOGI(TAG,
+               "Validated deterministic address 0x%02X (%s) from MAC pattern",
+               potential_addr, get_pcb_name(potential_addr));
+      return potential_addr;
+    } else {
+      ESP_LOGW(TAG,
+               "Invalid device address 0x%02X from MAC pattern - type:0x%02X, "
+               "plot:%d",
+               potential_addr, device_type, plot_number);
+    }
   }
 
   ESP_LOGW(TAG, "Unknown MAC address: " MACSTR, MAC2STR(mac_addr));
@@ -468,25 +513,41 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
              device_addr);
 
-    // Process acknowledgment based on device address
-    switch (device_addr) {
-    case VALVE_A_ADDRESS:
-      if (!Valve_A_Acknowledged) {
+    // Process acknowledgment based on device type and address
+    uint8_t device_type = GET_DEVICE_TYPE(device_addr);
+    uint8_t plot_number = GET_PLOT_NUMBER(device_addr);
+
+    switch (device_type) {
+    case DEVICE_TYPE_VALVE:
+      // Handle valve acknowledgments
+      if (plot_number == 1 && !Valve_A_Acknowledged) {
         Valve_A_Acknowledged = true;
         xSemaphoreGive(Valve_A_AckSemaphore);
-        ESP_LOGD(TAG, "Gave Valve_A_AckSemaphore (Valve A)");
-      }
-      break;
-
-    case VALVE_B_ADDRESS:
-      if (!Valve_B_Acknowledged) {
+        ESP_LOGD(TAG, "Gave Valve_A_AckSemaphore (Valve %d)", plot_number);
+      } else if (plot_number == 2 && !Valve_B_Acknowledged) {
         Valve_B_Acknowledged = true;
         xSemaphoreGive(Valve_B_AckSemaphore);
-        ESP_LOGD(TAG, "Gave Valve_B_AckSemaphore (Valve A)");
+        ESP_LOGD(TAG, "Gave Valve_B_AckSemaphore (Valve %d)", plot_number);
+      } else {
+        // For future valve expansion (plots 3, 4, etc.)
+        ESP_LOGD(TAG,
+                 "ACK from Valve %d (0x%02X) - no specific semaphore defined",
+                 plot_number, device_addr);
       }
       break;
 
-    case PUMP_ADDRESS:
+    case DEVICE_TYPE_SOIL:
+      // Handle soil sensor acknowledgments (all use same semaphore for now)
+      if (!Soil_pcb_Acknowledged) {
+        Soil_pcb_Acknowledged = true;
+        xSemaphoreGive(Soil_AckSemaphore);
+        ESP_LOGD(TAG, "Gave Soil_AckSemaphore (Soil %d)", plot_number);
+      } else {
+        ESP_LOGD(TAG, "Soil %d already acknowledged", plot_number);
+      }
+      break;
+
+    case DEVICE_TYPE_PUMP:
       if (!Pump_Acknowledged) {
         Pump_Acknowledged = true;
         xSemaphoreGive(Pump_AckSemaphore);
@@ -494,31 +555,23 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
       }
       break;
 
-    case SOIL_A_ADDRESS:
-      if (!Soil_pcb_Acknowledged) {
-        Soil_pcb_Acknowledged = true;
-        xSemaphoreGive(Soil_AckSemaphore);
-        ESP_LOGD(TAG, "Soil PCB A semaphore");
-      }
-      break;
-
-    case SOIL_B_ADDRESS:
-      if (!Soil_pcb_Acknowledged) {
-        Soil_pcb_Acknowledged = true;
-        xSemaphoreGive(Soil_AckSemaphore);
-        ESP_LOGD(TAG, "Soil PCB B semaphore");
-      }
-      break;
-
-    case MASTER_ADDRESS:
+    case DEVICE_TYPE_MASTER:
       ESP_LOGD(TAG, "Master ACK");
       break;
-    case 0xFE:
-      ESP_LOGD(TAG, "Broadcast message");
+
+    case DEVICE_TYPE_WEATHER:
+      ESP_LOGD(TAG, "Weather station %d ACK (0x%02X)", plot_number,
+               device_addr);
       break;
 
     default:
-      ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X", device_addr);
+      // Handle special cases and legacy addresses
+      if (device_addr == 0xFE) {
+        ESP_LOGD(TAG, "Broadcast message");
+      } else {
+        ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X (%s)",
+                 device_addr, get_pcb_name(device_addr));
+      }
       break;
     }
   } else {
@@ -529,68 +582,67 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void processMasterMessage(comm_t *message) {
   ValveState newState = getCurrentState();
+  uint8_t device_type = GET_DEVICE_TYPE(message->source);
+  uint8_t plot_number = GET_PLOT_NUMBER(message->source);
 
-  if (message->source == VALVE_A_ADDRESS) {
-    processValveAMessage(message, newState);
-  } else if (message->source == VALVE_B_ADDRESS) {
-    processValveBMessage(message, newState);
-  } else if (message->source == PUMP_ADDRESS) {
-    processPumpMessage(message);
-  } else {
-    ESP_LOGW(TAG, "Unexpected source for Conductor message: 0x%02X",
+  switch (device_type) {
+  case DEVICE_TYPE_VALVE:
+    // Handle valve messages based on plot number
+    if (plot_number == 1) {
+      processValveAMessage(message, newState);
+      ESP_LOGD(TAG, "Processed message from Valve %d (using Valve A handler)",
+               plot_number);
+    } else if (plot_number == 2) {
+      processValveBMessage(message, newState);
+      ESP_LOGD(TAG, "Processed message from Valve %d (using Valve B handler)",
+               plot_number);
+    } else {
+      // For future valve expansion - use generic valve handler or create new
+      // ones
+      ESP_LOGD(TAG,
+               "Message from Valve %d (0x%02X) - using generic valve handler",
+               plot_number, message->source);
+      // For now, use Valve A handler as generic handler
+      processValveAMessage(message, newState);
+    }
+    break;
+
+  case DEVICE_TYPE_SOIL:
+    // Handle soil sensor messages (if any are sent to master)
+    ESP_LOGD(TAG, "Message from Soil sensor %d (0x%02X)", plot_number,
              message->source);
+    // Soil sensors typically don't send command messages to master, only data
+    // But if they do, you could add a processSoilMessage function here
+    ESP_LOGW(TAG, "Unexpected command message from Soil sensor %d",
+             plot_number);
+    break;
+
+  case DEVICE_TYPE_PUMP:
+    processPumpMessage(message);
+    ESP_LOGD(TAG, "Processed message from Pump (0x%02X)", message->source);
+    break;
+
+  case DEVICE_TYPE_WEATHER:
+    // Handle weather station messages (future expansion)
+    ESP_LOGD(TAG, "Message from Weather station %d (0x%02X)", plot_number,
+             message->source);
+    // Add processWeatherMessage function when needed
+    ESP_LOGW(TAG, "Weather station messages not yet implemented");
+    break;
+
+  case DEVICE_TYPE_MASTER:
+    // Handle messages from other masters (if multiple masters exist)
+    ESP_LOGD(TAG, "Message from another Master device (0x%02X)",
+             message->source);
+    ESP_LOGW(TAG, "Master-to-master communication not implemented");
+    break;
+
+  default:
+    ESP_LOGW(TAG, "Unexpected source for Master message: 0x%02X (%s)",
+             message->source, get_pcb_name(message->source));
+    break;
   }
 }
-
-// void processPumpMessage(comm_t *message) {
-//   ESP_LOGD(TAG, "Pump received command: 0x%02X from 0x%02X after %d retries",
-//            message->command, message->source, message->retries);
-
-//   if (message->source != MASTER_ADDRESS) {
-//     ESP_LOGW(TAG, "Unexpected source for Pump message: 0x%02X",
-//              message->source);
-//     return;
-//   }
-
-//   uint8_t relay = (message->command >> 4) & 0x0F;
-//   uint8_t state = message->command & 0x0F;
-
-//   if (relay != 1) {
-//     ESP_LOGE(TAG, "Invalid relay for pump: %d", relay);
-//     return;
-//   }
-
-//   if (state == 1) {
-//     ESP_LOGI(TAG, "Turning ON pump (OUT_START ON)");
-//     gpio_set_level(PUMP_STOP, 0);  // Ensure STOP is off
-//     gpio_set_level(PUMP_START, 1); // Turn ON
-//     vTaskDelay(pdMS_TO_TICKS(100));
-//     gpio_set_level(PUMP_START, 0);
-//   } else if (state == 0) {
-//     ESP_LOGI(TAG, "Turning OFF pump (PUMP_START OFF, pulse OUT_STOP)");
-//     gpio_set_level(PUMP_START, 0); // Turn OFF
-//     gpio_set_level(PUMP_STOP, 1);
-//     vTaskDelay(pdMS_TO_TICKS(100));
-//     gpio_set_level(PUMP_STOP, 0);
-//   } else {
-//     ESP_LOGE(TAG, "Unknown state for pump: %d", state);
-//     return;
-//   }
-
-//   // Send ACK back
-//   uint8_t ack_cmd = 0xB1; // You can change this if needed
-//   for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
-//     ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
-//                         message->retries);
-//     vTaskDelay(pdMS_TO_TICKS(20));
-//   }
-
-//   ESP_LOGI(TAG, "Pump ACK sent for seq %d", message->seq_num);
-//   vTaskDelay(pdMS_TO_TICKS(100));
-// }
-
-// Global variable to track current pump state
-static uint8_t current_pump_state = 0; // 0 = off, 1 = on
 
 void processPumpMessage(comm_t *message) {
   ESP_LOGD(TAG,
@@ -655,84 +707,6 @@ void processPumpMessage(comm_t *message) {
   ESP_LOGI(TAG, "Pump ACK sent for seq %d", message->seq_num);
   vTaskDelay(pdMS_TO_TICKS(100));
 }
-
-// void processValveMessage(comm_t *message) {
-//   ESP_LOGD(TAG, "V%d received command: 0x%02X after %d retries",
-//            message->address, message->command, message->retries);
-
-//   if (message->source != MASTER_ADDRESS) {
-//     ESP_LOGW(TAG, "Unexpected source for Valve message: 0x%02X",
-//              message->source);
-//     return;
-//   }
-
-//   last_conductor_message_time = time(NULL);
-
-//   // Interpret relay and state from the command
-//   uint8_t relay = (message->command >> 4) & 0x0F;
-//   uint8_t state = message->command & 0x0F;
-
-//   // Only relay 1 and 2 supported
-//   if (relay == 1) { // Only supporting POSITIVE (1)
-//     if (state == 1) {
-//       // VALVE ON: POSITIVE polarity + OE pulse (long)
-//       ESP_LOGI(TAG, "Turning ON valve");
-
-//       gpio_set_level(RELAY_POSITIVE, 1);
-//       gpio_set_level(RELAY_NEGATIVE, 0);
-//       vTaskDelay(pdMS_TO_TICKS(1000)); // ON pulse duration
-
-//       gpio_set_level(OE_PIN, 1);
-//       vTaskDelay(pdMS_TO_TICKS(30)); // ON pulse duration
-//       gpio_set_level(OE_PIN, 0);
-
-//       // gpio_set_level(RELAY_POSITIVE, 0);
-//       // gpio_set_level(RELAY_NEGATIVE, 1);
-//       // vTaskDelay(pdMS_TO_TICKS(1000)); // ON pulse duration
-
-//       ESP_LOGI(TAG, "Valve ON complete");
-//     } else if (state == 0) {
-//       // VALVE OFF: NEGATIVE polarity + OE pulse (short)
-//       ESP_LOGI(TAG, "Turning OFF valve");
-
-//       gpio_set_level(RELAY_POSITIVE, 0);
-//       gpio_set_level(RELAY_NEGATIVE, 1);
-//       vTaskDelay(pdMS_TO_TICKS(1000)); // ON pulse duration
-
-//       gpio_set_level(OE_PIN, 1);
-//       vTaskDelay(pdMS_TO_TICKS(30)); // OFF pulse duration
-//       gpio_set_level(OE_PIN, 0);
-
-//       ESP_LOGI(TAG, "Valve OFF complete");
-//     } else {
-//       ESP_LOGE(TAG, "Unknown state: %d", state);
-//     }
-
-//     // Cleanup: turn off both relays after pulse
-//     vTaskDelay(pdMS_TO_TICKS(20)); // small delay before reset
-//     gpio_set_level(RELAY_POSITIVE, 0);
-//     gpio_set_level(RELAY_NEGATIVE, 0);
-//     gpio_set_level(OE_PIN, 0);
-//     // Acknowledge back to conductor
-//     uint8_t ack_cmd = (relay == 1) ? 0xA1 : 0xA2;
-//     for (int retry = 0; retry < MAX_RETRIES / 2; retry++) {
-//       ESPNOW_queueMessage(MASTER_ADDRESS, ack_cmd, message->address,
-//                           message->retries);
-//       vTaskDelay(pdMS_TO_TICKS(20));
-//     }
-
-//     ESP_LOGI(TAG, "Sent acknowledgment for seq %d", message->seq_num);
-//   } else {
-//     ESP_LOGE(TAG, "Invalid relay number in command: 0x%02X",
-//     message->command);
-//   }
-
-//   vTaskDelay(pdMS_TO_TICKS(100));
-// }
-
-// Global variables to track current valve state
-static uint8_t current_valve_state =
-    0; // 0 = off, 0x10 = negative, 0x11 = positive
 
 void processValveMessage(comm_t *message) {
   ESP_LOGD(
@@ -1037,26 +1011,51 @@ void processReceivedMessage(comm_t *message) {
       message->retries, (message->command == 0xA3) ? message->data : "N/A",
       (message->command == 0xA3 && strlen(message->data) > 20) ? "..." : "");
 
-  switch (message->address) {
-  case MASTER_ADDRESS:
-    processMasterMessage(message);
+  // Extract device type and plot number for routing
+  uint8_t device_type = GET_DEVICE_TYPE(message->address);
+  uint8_t plot_number = GET_PLOT_NUMBER(message->address);
+
+  switch (device_type) {
+  case DEVICE_TYPE_MASTER:
+    if (message->address == MASTER_ADDRESS) {
+      processMasterMessage(message);
+    } else {
+      ESP_LOGW(TAG, "Message for unknown master device: 0x%02X",
+               message->address);
+    }
     break;
 
-  case VALVE_A_ADDRESS:
-    ESP_LOGI(TAG, "inside process valve A message");
-    processSprayMessage(message);
-    break;
-  case VALVE_B_ADDRESS:
-    ESP_LOGI(TAG, "inside process valve B message");
+  case DEVICE_TYPE_VALVE:
+    ESP_LOGI(TAG, "Processing valve message (Valve %d)", plot_number);
     processValveMessage(message);
     break;
-  case PUMP_ADDRESS:
-    processPumpMessage(message);
+
+  case DEVICE_TYPE_SOIL:
+    ESP_LOGD(TAG, "Processing soil sensor message (Soil %d)", plot_number);
+    // Soil sensors typically don't receive commands, but if they do:
+    ESP_LOGW(TAG, "Unexpected command message for soil sensor %d", plot_number);
+    break;
+
+  case DEVICE_TYPE_PUMP:
+    if (message->address == PUMP_ADDRESS) {
+      ESP_LOGI(TAG, "Processing pump message");
+      processPumpMessage(message);
+    } else {
+      ESP_LOGW(TAG, "Message for unknown pump device: 0x%02X",
+               message->address);
+    }
+    break;
+
+  case DEVICE_TYPE_WEATHER:
+    ESP_LOGI(TAG, "Processing weather station message (Weather %d)",
+             plot_number);
+    // Add weather station message handler when needed
+    ESP_LOGW(TAG, "Weather station message handling not implemented");
     break;
 
   default:
-    ESP_LOGW(TAG, "Received message from unknown address: 0x%02X",
-             message->address);
+    ESP_LOGW(TAG, "Received message from unknown device type: 0x%02X (%s)",
+             message->address, get_pcb_name(message->address));
     break;
   }
 }
@@ -1112,27 +1111,59 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
     return 0xFF; // Invalid address
   }
 
-  // Check for known PCB names
+  // Check for fixed device names
   if (strcasecmp(pcb_name, "Master") == 0) {
     ESP_LOGD(TAG, "Identified as MASTER by PCB name");
     return MASTER_ADDRESS;
-  } else if (strcasecmp(pcb_name, "Valve A") == 0) {
-    ESP_LOGD(TAG, "Identified as VALVE_A by PCB name");
-    return VALVE_A_ADDRESS;
-  } else if (strcasecmp(pcb_name, "Valve B") == 0) {
-    ESP_LOGD(TAG, "Identified as VALVE_B by PCB name");
-    return VALVE_B_ADDRESS;
-  } else if (strcasecmp(pcb_name, "Soil A") == 0) {
-    ESP_LOGD(TAG, "Identified as SOIL_PCB_A by PCB name");
-    return SOIL_A_ADDRESS;
-  } else if (strcasecmp(pcb_name, "Soil B") == 0) {
-    ESP_LOGD(TAG, "Identified as SOIL_PCB_B by PCB name");
-    return SOIL_B_ADDRESS;
   } else if (strcasecmp(pcb_name, "Pump") == 0) {
     ESP_LOGD(TAG, "Identified as PUMP by PCB name");
     return PUMP_ADDRESS;
   }
 
+  // Check for dynamic valve names: "Valve 1", "Valve 2", etc.
+  if (strncasecmp(pcb_name, "Valve ", 6) == 0) {
+    int plot_number = atoi(pcb_name + 6); // Extract number after "Valve "
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      uint8_t valve_addr = DEVICE_TYPE_VALVE | plot_number;
+      ESP_LOGD(TAG, "Identified as VALVE %d (0x%02X) by PCB name", plot_number,
+               valve_addr);
+      return valve_addr;
+    } else {
+      ESP_LOGW(TAG, "Invalid valve plot number: %d (valid range: 1-%d)",
+               plot_number, CONFIG_NUM_PLOTS);
+    }
+  }
+
+  // Check for dynamic soil sensor names: "Soil 1", "Soil 2", etc.
+  if (strncasecmp(pcb_name, "Soil ", 5) == 0) {
+    int plot_number = atoi(pcb_name + 5); // Extract number after "Soil "
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      uint8_t soil_addr = DEVICE_TYPE_SOIL | plot_number;
+      ESP_LOGD(TAG, "Identified as SOIL %d (0x%02X) by PCB name", plot_number,
+               soil_addr);
+      return soil_addr;
+    } else {
+      ESP_LOGW(TAG, "Invalid soil plot number: %d (valid range: 1-%d)",
+               plot_number, CONFIG_NUM_PLOTS);
+    }
+  }
+
+  // Check for dynamic weather station names: "Weather 1", "Weather 2", etc.
+  if (strncasecmp(pcb_name, "Weather ", 8) == 0) {
+    int plot_number = atoi(pcb_name + 8); // Extract number after "Weather "
+    if (plot_number >= 1 &&
+        plot_number <= 8) { // Weather stations can go up to 8
+      uint8_t weather_addr = DEVICE_TYPE_WEATHER | plot_number;
+      ESP_LOGD(TAG, "Identified as WEATHER %d (0x%02X) by PCB name",
+               plot_number, weather_addr);
+      return weather_addr;
+    } else {
+      ESP_LOGW(TAG, "Invalid weather station number: %d (valid range: 1-8)",
+               plot_number);
+    }
+  }
+
+  ESP_LOGW(TAG, "Unknown PCB name: '%s'", pcb_name);
   return 0xFF; // Unknown PCB name
 }
 
@@ -1319,166 +1350,6 @@ esp_err_t register_loaded_mappings_with_espnow(void) {
 }
 
 /**
- * Function to handle ESP-NOW device discovery with NVS support
- */
-void espnow_discovery_task(void *pvParameters) {
-  ESP_LOGI(TAG, "Starting ESP-NOW device discovery task");
-
-  // Suspend valve control task during discovery/mapping
-  if (valveTaskHandle != NULL) {
-    ESP_LOGI(TAG, "Suspending valve control task during discovery/mapping");
-    vTaskSuspend(valveTaskHandle);
-  } else {
-    ESP_LOGW(TAG, "Valve task handle is NULL, cannot suspend");
-  }
-
-  bool run_discovery = true;
-  bool devices_initialized = false;
-
-#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
-  // Check if we should try to load mappings from NVS
-  ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
-
-#ifdef CONFIG_ESPNOW_FORCE_DISCOVERY
-  ESP_LOGI(TAG, "Force discovery enabled - will run discovery regardless of "
-                "stored mappings");
-  run_discovery = true;
-#else
-  // Try to load mappings from NVS
-  if (nvs_has_valid_mappings()) {
-    ESP_LOGI(TAG, "Found valid device mappings in NVS, loading...");
-    esp_err_t err = load_device_mappings_from_nvs();
-
-    if (err == ESP_OK) {
-
-      register_loaded_mappings_with_espnow();
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      // Verify loaded mappings
-      if (verify_device_mappings()) {
-        ESP_LOGI(TAG,
-                 "Successfully loaded and verified device mappings from NVS");
-        run_discovery = false; // Skip discovery
-        devices_initialized = true;
-        update_status_message("Using stored mappings");
-      } else {
-        ESP_LOGW(
-            TAG,
-            "Loaded mappings failed verification, falling back to discovery");
-        run_discovery = true;
-      }
-    } else {
-      ESP_LOGW(TAG, "Failed to load device mappings from NVS: %s",
-               esp_err_to_name(err));
-      run_discovery = true;
-    }
-  } else {
-    ESP_LOGI(TAG, "No valid device mappings found in NVS, will run discovery");
-    run_discovery = true;
-  }
-#endif // CONFIG_ESPNOW_FORCE_DISCOVERY
-#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
-
-  if (run_discovery) {
-    // Start with a delay before discovery
-    ESP_LOGD(TAG, "Wait 3 seconds before starting discovery...");
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    // Start discovery with authentication broadcasts
-    ESP_LOGI(TAG, "Starting peer discovery...");
-    espnow_start_discovery(20000); // 20 second discovery timeout
-
-    // Broadcast authentication multiple times during discovery
-    for (int i = 0; i < 5; i++) {
-      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
-      espnow_broadcast_auth();
-      vTaskDelay(pdMS_TO_TICKS(
-          CONFIG_ESPNOW_SEND_DELAY)); // Wait 2 seconds between broadcasts
-    }
-
-    // Wait for discovery to complete
-    ESP_LOGD(TAG, "Waiting for discovery to complete...");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
-
-    // Update device mappings based on discovered peers
-    update_device_mappings_from_discovered_peers();
-
-    // Check if all required devices are found
-    bool all_devices_found = verify_device_mappings();
-
-    // Continue indefinitely until all devices are found
-    int attempt = 1;
-
-    while (!all_devices_found) {
-      ESP_LOGW(TAG, "Not all required devices found. Attempt %d to rediscover",
-               attempt);
-
-      // Show status message on LCD
-      update_status_message("Finding devices %d", attempt);
-
-      // Try again with longer discovery period
-      espnow_start_discovery(30000); // 30 second discovery timeout
-
-      // More authentication broadcasts
-      for (int i = 0; i < 5; i++) {
-        ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...",
-                 i + 1);
-        espnow_broadcast_auth();
-        vTaskDelay(pdMS_TO_TICKS(3000));
-      }
-
-      // Brief delay before retry
-      vTaskDelay(pdMS_TO_TICKS(10000));
-
-      // Update device mappings based on discovered peers
-      update_device_mappings_from_discovered_peers();
-
-      // Try verification again
-      all_devices_found = verify_device_mappings();
-      attempt++;
-
-      // Every 5 attempts, log a more detailed message
-      if (attempt % 5 == 0) {
-        ESP_LOGW(TAG, "Still searching for devices after %d attempts", attempt);
-        // Refresh the status message periodically
-        update_status_message("Still searching %d", attempt);
-      }
-    }
-
-    ESP_LOGI(TAG, "All required devices found successfully after %d attempts",
-             attempt);
-    update_status_message("All devices found");
-    devices_initialized = true;
-
-#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
-    // Save the final device mappings to NVS for future use
-    ESP_LOGD(TAG, "Saving device mappings to NVS for future use");
-    esp_err_t err = save_device_mappings_to_nvs();
-    if (err != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to save device mappings to NVS: %s",
-               esp_err_to_name(err));
-    } else {
-      ESP_LOGI(TAG, "Device mappings successfully saved to NVS");
-    }
-#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
-  }
-
-  // Resume valve control task now that discovery is complete
-  if (valveTaskHandle != NULL && devices_initialized) {
-    ESP_LOGI(TAG, "Resuming valve control task after discovery/mapping");
-    vTaskResume(valveTaskHandle);
-  } else if (!devices_initialized) {
-    ESP_LOGE(TAG, "Device initialization failed, valve task not resumed");
-  } else {
-    ESP_LOGW(TAG, "Valve task handle is NULL, cannot resume");
-  }
-
-  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
-
-  // Task completed, delete itself
-  vTaskDelete(NULL);
-}
-
-/**
  * @brief Save the current device-to-MAC mappings to NVS
  *
  * This function stores all device mappings in NVS for future use
@@ -1642,9 +1513,173 @@ esp_err_t load_device_mappings_from_nvs(void) {
   return ESP_OK;
 }
 
-// Enhanced version that checks for proper PCB names
+/**
+ * Function to handle ESP-NOW device discovery with NVS support
+ * Updated to discover devices based on CONFIG_NUM_PLOTS
+ */
+void espnow_discovery_task(void *pvParameters) {
+  ESP_LOGI(TAG, "Starting ESP-NOW device discovery task for %d plots",
+           CONFIG_NUM_PLOTS);
+
+  // Suspend valve control task during discovery/mapping
+  if (valveTaskHandle != NULL) {
+    ESP_LOGI(TAG, "Suspending valve control task during discovery/mapping");
+    vTaskSuspend(valveTaskHandle);
+  } else {
+    ESP_LOGW(TAG, "Valve task handle is NULL, cannot suspend");
+  }
+
+  bool run_discovery = true;
+  bool devices_initialized = false;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  // Check if we should try to load mappings from NVS
+  ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
+
+#ifdef CONFIG_ESPNOW_FORCE_DISCOVERY
+  ESP_LOGI(TAG, "Force discovery enabled - will run discovery regardless of "
+                "stored mappings");
+  run_discovery = true;
+#else
+  // Try to load mappings from NVS
+  if (nvs_has_valid_mappings()) {
+    ESP_LOGI(TAG, "Found valid device mappings in NVS, loading...");
+    esp_err_t err = load_device_mappings_from_nvs();
+
+    if (err == ESP_OK) {
+      register_loaded_mappings_with_espnow();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      // Verify loaded mappings
+      if (verify_device_mappings()) {
+        ESP_LOGI(TAG,
+                 "Successfully loaded and verified device mappings from NVS");
+        run_discovery = false; // Skip discovery
+        devices_initialized = true;
+        update_status_message("Using stored mappings");
+      } else {
+        ESP_LOGW(
+            TAG,
+            "Loaded mappings failed verification, falling back to discovery");
+        run_discovery = true;
+      }
+    } else {
+      ESP_LOGW(TAG, "Failed to load device mappings from NVS: %s",
+               esp_err_to_name(err));
+      run_discovery = true;
+    }
+  } else {
+    ESP_LOGI(TAG, "No valid device mappings found in NVS, will run discovery");
+    run_discovery = true;
+  }
+#endif // CONFIG_ESPNOW_FORCE_DISCOVERY
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+
+  if (run_discovery) {
+    // Start with a delay before discovery
+    ESP_LOGD(TAG, "Wait 3 seconds before starting discovery...");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    // Start discovery with authentication broadcasts
+    ESP_LOGI(TAG,
+             "Starting peer discovery for %d plots (need %d valves + %d soil "
+             "sensors + 1 pump)...",
+             CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS);
+    espnow_start_discovery(20000); // 20 second discovery timeout
+
+    // Broadcast authentication multiple times during discovery
+    for (int i = 0; i < 5; i++) {
+      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
+      espnow_broadcast_auth();
+      vTaskDelay(pdMS_TO_TICKS(
+          CONFIG_ESPNOW_SEND_DELAY)); // Wait 2 seconds between broadcasts
+    }
+
+    // Wait for discovery to complete
+    ESP_LOGD(TAG, "Waiting for discovery to complete...");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+
+    // Update device mappings based on discovered peers
+    update_device_mappings_from_discovered_peers();
+
+    // Check if all required devices are found
+    bool all_devices_found = verify_device_mappings();
+
+    // Continue indefinitely until all devices are found
+    int attempt = 1;
+
+    while (!all_devices_found) {
+      ESP_LOGW(TAG, "Not all required devices found. Attempt %d to rediscover",
+               attempt);
+
+      // Show status message on LCD
+      update_status_message("Finding devices %d", attempt);
+
+      // Try again with longer discovery period
+      espnow_start_discovery(30000); // 30 second discovery timeout
+
+      // More authentication broadcasts
+      for (int i = 0; i < 5; i++) {
+        ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...",
+                 i + 1);
+        espnow_broadcast_auth();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+      }
+
+      // Brief delay before retry
+      vTaskDelay(pdMS_TO_TICKS(10000));
+
+      // Update device mappings based on discovered peers
+      update_device_mappings_from_discovered_peers();
+
+      // Try verification again
+      all_devices_found = verify_device_mappings();
+      attempt++;
+
+      // Every 5 attempts, log a more detailed message
+      if (attempt % 5 == 0) {
+        ESP_LOGW(TAG, "Still searching for devices after %d attempts", attempt);
+        // Refresh the status message periodically
+        update_status_message("Still searching %d", attempt);
+      }
+    }
+
+    ESP_LOGI(TAG, "All required devices found successfully after %d attempts",
+             attempt);
+    update_status_message("All devices found");
+    devices_initialized = true;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+    // Save the final device mappings to NVS for future use
+    ESP_LOGD(TAG, "Saving device mappings to NVS for future use");
+    esp_err_t err = save_device_mappings_to_nvs();
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to save device mappings to NVS: %s",
+               esp_err_to_name(err));
+    } else {
+      ESP_LOGI(TAG, "Device mappings successfully saved to NVS");
+    }
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  }
+
+  // Resume valve control task now that discovery is complete
+  if (valveTaskHandle != NULL && devices_initialized) {
+    ESP_LOGI(TAG, "Resuming valve control task after discovery/mapping");
+    vTaskResume(valveTaskHandle);
+  } else if (!devices_initialized) {
+    ESP_LOGE(TAG, "Device initialization failed, valve task not resumed");
+  } else {
+    ESP_LOGW(TAG, "Valve task handle is NULL, cannot resume");
+  }
+
+  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
+
+  // Task completed, delete itself
+  vTaskDelete(NULL);
+}
+
+// Updated verify_device_mappings function for dynamic plots
 bool verify_device_mappings(void) {
-  ESP_LOGI(TAG, "Verifying all device mappings:");
+  ESP_LOGI(TAG, "Verifying device mappings for %d plots:", CONFIG_NUM_PLOTS);
 
   // Get own MAC address
   uint8_t own_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -1658,27 +1693,48 @@ bool verify_device_mappings(void) {
   const char *self_pcb_name =
       espnow_get_peer_name(NULL); // NULL returns own PCB name
 
-// Check for critical devices first
-#if CONFIG_MASTER
-  const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
-                                      VALVE_B_ADDRESS, PUMP_ADDRESS,
-                                      SOIL_A_ADDRESS};
-  // const uint8_t critical_devices[] = {MASTER_ADDRESS, VALVE_A_ADDRESS,
-  //                                     VALVE_B_ADDRESS, PUMP_ADDRESS};
+  // Build list of required devices based on CONFIG_NUM_PLOTS
+  int total_required_devices =
+      1 + (2 * CONFIG_NUM_PLOTS) + 1; // Master + (Valve + Soil) * plots + Pump
+  uint8_t *required_devices = malloc(total_required_devices * sizeof(uint8_t));
 
-  // const uint8_t critical_devices[] = {SOIL_A_ADDRESS};
+  if (!required_devices) {
+    ESP_LOGE(TAG, "Failed to allocate memory for required devices list");
+    return false;
+  }
+
+  int device_index = 0;
+
+#if CONFIG_MASTER
+  // Add master address
+  required_devices[device_index++] = MASTER_ADDRESS;
+
+  // Add valve and soil addresses for each plot
+  for (int plot = 1; plot <= CONFIG_NUM_PLOTS; plot++) {
+    required_devices[device_index++] =
+        DEVICE_TYPE_VALVE | plot; // Valve for this plot
+    required_devices[device_index++] =
+        DEVICE_TYPE_SOIL | plot; // Soil sensor for this plot
+  }
+
+  // Add pump address
+  required_devices[device_index++] = PUMP_ADDRESS;
 #endif
 
 #if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
     CONFIG_PUMP
-  const uint8_t critical_devices[] = {MASTER_ADDRESS};
+  // For non-master devices, only need to find master
+  required_devices[device_index++] = MASTER_ADDRESS;
+  total_required_devices = 1;
 #endif
-  const int num_critical_devices = sizeof(critical_devices);
+
   int found_devices = 0;
   bool all_names_valid = true;
 
-  for (int i = 0; i < num_critical_devices; i++) {
-    uint8_t device_addr = critical_devices[i];
+  ESP_LOGI(TAG, "Looking for %d required devices:", total_required_devices);
+
+  for (int i = 0; i < total_required_devices; i++) {
+    uint8_t device_addr = required_devices[i];
     bool found = false;
     uint8_t mac_addr[ESP_NOW_ETH_ALEN] = {0};
 
@@ -1739,7 +1795,6 @@ bool verify_device_mappings(void) {
         ESP_LOGW(TAG,
                  "  Invalid PCB name for device 0x%02X - needs rediscovery",
                  device_addr);
-
         // Try to authenticate to get PCB name
         espnow_authenticate_peer(mac_addr);
       }
@@ -1769,24 +1824,26 @@ bool verify_device_mappings(void) {
   }
 
   // Check if all critical devices were found
-  bool all_found = (found_devices == num_critical_devices);
+  bool all_found = (found_devices == total_required_devices);
 
   if (all_found) {
     if (all_names_valid) {
       ESP_LOGI(TAG,
-               "All critical devices found and verified successfully with "
+               "All required devices found and verified successfully with "
                "valid PCB names (%d/%d)",
-               found_devices, num_critical_devices);
+               found_devices, total_required_devices);
     } else {
       ESP_LOGW(
           TAG,
-          "All critical devices found (%d/%d) but some have invalid PCB names",
-          found_devices, num_critical_devices);
+          "All required devices found (%d/%d) but some have invalid PCB names",
+          found_devices, total_required_devices);
     }
   } else {
-    ESP_LOGW(TAG, "Not all critical devices were found (%d/%d)", found_devices,
-             num_critical_devices);
+    ESP_LOGW(TAG, "Not all required devices were found (%d/%d)", found_devices,
+             total_required_devices);
   }
+
+  free(required_devices);
 
   // Return success only if all devices are found AND have valid names
   return (all_found && all_names_valid);
