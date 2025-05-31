@@ -225,9 +225,9 @@ typedef struct {
   float pressure;
   float water_temp;
   float discharge;
-  float voltage;
-  int soil_A;
-  int soil_B;
+  float voltage;                   // Master device voltage
+  int soil[CONFIG_NUM_PLOTS];      // Soil moisture % for each plot
+  float battery[CONFIG_NUM_PLOTS]; // Battery % for each soil sensor
 } sensor_readings_t;
 
 // Declare the globals
@@ -336,45 +336,71 @@ extern HexCircularBuffer hex_buffer;
 // ==================== Simulation mode ====================
 // Test case data structure
 typedef struct {
-  int soil_A;              // Soil moisture A percentage
-  int soil_B;              // Soil moisture B percentage
+  int soil[2];             // Soil moisture percentage for 2 plots
+  float battery[2];        // Battery percentage for 2 plots
   const char *description; // Test case description
 } test_case_t;
 
-// Test cases for soil moisture simulation
+// Test cases for soil moisture simulation (2 plots)
 static const test_case_t test_cases[] = {
     // Low moisture scenarios (should trigger irrigation)
-    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
-     "Both sensors dry - both should trigger irrigation"},
-    {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15,
-     "Sensor A marginal, B dry - B should trigger irrigation"},
-    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
-     "Sensor A dry, B marginal - A should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
+     .battery = {85.0f, 87.0f},
+     .description = "Both sensors dry - both should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15},
+     .battery = {82.0f, 84.0f},
+     .description = "Sensor A marginal, B dry - B should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
+     .battery = {88.0f, 91.0f},
+     .description = "Sensor A dry, B marginal - A should trigger irrigation"},
 
     // Mixed moisture scenarios
-    {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5,
-     "Sensor A dry, B wet - only A should trigger irrigation"},
-    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10,
-     "Sensor A wet, B dry - only B should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5},
+     .battery = {86.0f, 93.0f},
+     .description = "Sensor A dry, B wet - only A should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10},
+     .battery = {90.0f, 78.0f},
+     .description = "Sensor A wet, B dry - only B should trigger irrigation"},
 
     // High moisture scenarios (should not trigger irrigation)
-    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 5,
-     "Both sensors wet - neither should trigger irrigation"},
-    {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20,
-     "Both sensors very wet - neither should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 10},
+     .battery = {88.0f, 92.0f},
+     .description = "Both sensors wet - neither should trigger irrigation"},
+    {.soil = {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20},
+     .battery = {94.0f, 96.0f},
+     .description =
+         "Both sensors very wet - neither should trigger irrigation"},
 
     // Edge cases
-    {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY, "Both sensors at threshold - edge case"},
-    {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1,
-     "Sensor A just below threshold, B just above threshold"},
-    {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1,
-     "Sensor A just above threshold, B just below threshold"},
+    {.soil = {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY},
+     .battery = {80.0f, 80.0f},
+     .description = "Both sensors at threshold - edge case"},
+    {.soil = {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1},
+     .battery = {75.0f, 95.0f},
+     .description = "Sensor A just below threshold, B just above threshold"},
+    {.soil = {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1},
+     .battery = {93.0f, 77.0f},
+     .description = "Sensor A just above threshold, B just below threshold"},
 
     // Extreme cases
-    {0, 100, "Sensor A bone dry, B saturated"},
-    {100, 0, "Sensor A saturated, B bone dry"}};
+    {.soil = {0, 100},
+     .battery = {65.0f, 98.0f},
+     .description = "Sensor A bone dry, B saturated"},
+    {.soil = {100, 0},
+     .battery = {99.0f, 60.0f},
+     .description = "Sensor A saturated, B bone dry"},
+
+    // Battery testing scenarios
+    {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_DRY - 8},
+     .battery = {25.0f, 15.0f},
+     .description = "Low battery levels with dry soil - irrigation with low "
+                    "battery warning"},
+    {.soil = {CONFIG_SOIL_WET + 10, CONFIG_SOIL_WET + 8},
+     .battery = {5.0f, 8.0f},
+     .description =
+         "Critical battery levels with wet soil - battery warning only"}};
 
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
-#define TEST_DELAY_MS (120 * 1000) // 5 second delay between tests
+#define TEST_DELAY_MS (120 * 1000) // 2 minute delay between tests
 
 #endif // DEFINE_H

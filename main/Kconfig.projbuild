@@ -14,6 +14,15 @@ menu "App Configuration"
         default "Test" if SITE_TEST
         default "Skuast" if SITE_SKUAST
 
+    config NUM_PLOTS
+        int "Number of irrigation plots"
+        range 1 8
+        default 1
+        help
+            Set the number of irrigation plots (soil sensors + valves).
+            Each plot has one soil sensor and one valve.
+            Default is 2 for backward compatibility.
+
     choice PCB
         prompt "Select PCB Configuration"
         help

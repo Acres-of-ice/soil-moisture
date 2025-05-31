@@ -516,6 +516,7 @@ static esp_err_t http_server_logs_handler(httpd_req_t *req) {
 
   return ret;
 }
+
 static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req) {
   ESP_LOGD(TAG, "Sensor readings requested");
   static sensor_readings_t http_readings;
@@ -533,69 +534,6 @@ static esp_err_t http_server_sensor_readings_handler(httpd_req_t *req) {
   return httpd_resp_sendstr(req, resp);
 }
 
-// Initialize SPIFFS
-// esp_err_t init_spiffs() {
-//     esp_err_t ret = ESP_OK;
-//     esp_vfs_spiffs_conf_t conf = {
-//         .base_path = "/spiffs",
-//         .partition_label = NULL,
-//         .max_files = 10,
-//         .format_if_mount_failed = true
-//     };
-
-//      ret = esp_vfs_spiffs_register(&conf);
-
-//     // Check if the file exists and its size
-//     FILE *dataFile = fopen(data_path, "r");
-//     if (!dataFile) {
-//       ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
-
-//       dataFile = fopen(data_path, "w");
-//       vTaskDelay(10);
-//       if (dataFile) {
-//         fputs(DATA_FILE_HEADER, dataFile);
-//         fclose(dataFile);
-//       } else {
-//         ESP_LOGI("SYSTEM",
-//                  "Error opening sensor_data.csv for initialization. Errno:
-//                  %d", errno);
-//         char err_buf[100];
-//         strerror_r(errno, err_buf, sizeof(err_buf));
-//         ESP_LOGE(TAG, "Error details: %s", err_buf);
-//       }
-//     } else {
-//       ESP_LOGI("SYSTEM", "Sensor data file already exists");
-//       fclose(dataFile);
-//     }
-
-//     // Check if the file exists and its size
-//     FILE *logFile = fopen(log_path, "r");
-//     if (!logFile) {
-//       ESP_LOGI("SYSTEM", "Initialising empty log file");
-
-//       logFile = fopen(log_path, "w");
-//       vTaskDelay(10);
-//       if (logFile) {
-//         const char *header = "Time,Level,Tag,Message\n";
-//         fputs(header, logFile);
-//         fclose(logFile);
-//       } else {
-//         ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
-//                  errno);
-//         char err_buf[100];
-//         strerror_r(errno, err_buf, sizeof(err_buf));
-//         ESP_LOGE(TAG, "Error details: %s", err_buf);
-//       }
-//     } else {
-//       ESP_LOGI("SYSTEM", "Log file already exists");
-//       fclose(logFile);
-//     }
-
-//     ESP_LOGW("SPIFFS", "Spiffs Partition size: total: %d, used: %d",
-//     totalBytes,
-//              usedBytes);
-//     return ESP_OK;
-//   }
 static esp_err_t http_server_generic_handler(httpd_req_t *req) {
 
   // esp_err_t ret = init_spiffs();
