@@ -16,8 +16,8 @@
 #define SOIL_ADC_CHANNEL ADC_CHANNEL_3
 
 // Soil moisture calibration values
-#define SOIL_DRY_ADC_VALUE_A 3350
-#define SOIL_MOIST_ADC_VALUE_A 1660
+#define SOIL_DRY_ADC_VALUE_A 1000
+#define SOIL_MOIST_ADC_VALUE_A 700
 
 #define SOIL_DRY_ADC_VALUE_B 3346
 #define SOIL_MOIST_ADC_VALUE_B 2192
@@ -33,17 +33,7 @@ float read_battery_level(void);
 static float read_battery_voltage(void);
 
 
-// #define SOIL_DRY_ADC_VALUE_ 3337
-// #define SOIL_MOIST_ADC_VALUE_B 2192
-//
-#define SOIL_BATT_ADC_CHANNEL ADC_CHANNEL_2 // GPIO2
-#define SOIL_BATT_ADC_UNIT ADC_UNIT_1
-#define SOIL_BATT_ADC_ATTEN ADC_ATTEN_DB_12
-#define SOIL_BATT_VOLTAGE_DIVIDER 2.0f
-#define SOIL_BATT_MAX_VOLTAGE 4.15f // Maximum voltage for battery
-#define SOIL_BATT_MIN_VOLTAGE 3.22f // Minimum voltage for battery
-float read_battery_level(void);
-static float read_battery_voltage(void);
+
 
 // Function prototypes for sensor operations
 void soil_sensor_init(void);
