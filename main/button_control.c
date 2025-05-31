@@ -17,7 +17,9 @@ static char response_sms[32];
 
 bool demo_mode_active = false;
 bool use_simulated_values = false;
-TickType_t demo_mode_start_time = 0;
+TickType_t demo_start_time = 0;
+int demo_soil_A_value = 0;
+int demo_soil_B_value = 0;
 
 typedef struct {
   void (*short_press_action)(void);
@@ -82,9 +84,11 @@ void a_btn_long_press(void) {
     if (!demo_mode_active) {
         ESP_LOGI(TAG, "Starting demo mode");
         demo_mode_active = true;
+        demo_start_time = xTaskGetTickCount();
         
-        // Create demo task
-        xTaskCreate(demo_mode_task, "demo_task", 4096, NULL, 5, NULL);
+        // Set initial low values to trigger irrigation
+        // demo_soil_A_value = 25;
+        // demo_soil_B_value = 25;
         
         // Notify via LCD
         if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {

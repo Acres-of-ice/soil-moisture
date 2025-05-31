@@ -331,7 +331,7 @@ int read_soil_moisture(void) {
   if (calibrated_moisture > 100)
     calibrated_moisture = 100;
 
-  ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
+  ESP_LOGI(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
            calibrated_moisture);
   return calibrated_moisture;
   //return raw_value;
@@ -614,7 +614,7 @@ void soil_sensor_task(void *pvParameters) {
 
       // Queue the ESP-NOW data
       if (queue_sensor_data(&espnow_data)) {
-        ESP_LOGD(TAG,
+        ESP_LOGI(TAG,
                  "Queued data: Moisture: %d%%, Battery: %.1f%%, RSSI: %d "
                  "(Node: 0x%02X)",
                  espnow_data.soil_moisture, espnow_data.battery_level,
