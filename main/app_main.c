@@ -344,11 +344,9 @@ void app_main(void) {
                           HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
 
-  ESP_LOGI(TAG, "Starting demo mode");
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  // ESP_LOGI(TAG, "Starting demo mode");
+  // vTaskDelay(pdMS_TO_TICKS(1000));
 
-    demo_mode_active = true;
-    demo_start_time = xTaskGetTickCount();
 
   if (site_config.has_voltage_cutoff) {
     // Measure voltage and handle low voltage cutoff
@@ -381,17 +379,17 @@ void app_main(void) {
            get_pcb_name(g_nodeAddress));
 
   // Initialize ESP-NOW communication
- // espnow_init2();
+ espnow_init2();
 
-  // Start ESP-NOW discovery task
-  // xTaskCreatePinnedToCore(
-  //     espnow_discovery_task, "ESP-NOW Discovery",
-  //     COMM_TASK_STACK_SIZE,     // Stack size
-  //     NULL,                     // Parameters
-  //     (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-  //     &discoveryTaskHandle,
-  //     COMM_TASK_CORE_ID // Core ID
-  // );
+  //Start ESP-NOW discovery task
+  xTaskCreatePinnedToCore(
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
+  );
 
   // Brief delay to allow discovery to start
   vTaskDelay(pdMS_TO_TICKS(5000));
