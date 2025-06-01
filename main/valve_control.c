@@ -296,7 +296,7 @@ void updateValveState(void *pvParameters) {
       } else {
         ESP_LOGI(TAG, "Waiting for plot %d: %d%%", current_plot + 1,
                  current_readings.soil[current_plot]);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
       }
       break;
 
