@@ -54,7 +54,7 @@ menu "App Configuration"
         int "Plot Number (1-8)"
         range 1 8
         default 1
-        depends on SOIL || VALVE
+        depends on SOIL || VALVE || SOLENOID
         help
             Set the plot number for this soil sensor or valve.
             This will determine the device address and PCB name.
@@ -63,22 +63,22 @@ menu "App Configuration"
     config ESPTOOLPY_FLASHSIZE
         string
         default "8MB" if MASTER
-        default "4MB" if VALVE || SOIL || PUMP
+        default "4MB" if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
-        default "n" if VALVE || SOIL || PUMP
+        default "n" if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_4MB
         string
         default n if MASTER
-        default y if VALVE || SOIL || PUMP
+        default y if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_2MB
         string
         default "n" if MASTER
-        default "n" if VALVE || SOIL || PUMP
+        default "n" if VALVE || SOIL || PUMP || SOLENOID
 
     # config PARTITION_TABLE_SINGLE_APP
     #     bool
