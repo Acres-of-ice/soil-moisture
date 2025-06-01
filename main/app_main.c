@@ -244,6 +244,21 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
+  if (site_config.has_valve) {
+    ESP_LOGI(TAG, "About to create discovery task...");
+
+    BaseType_t result = xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery", COMM_TASK_STACK_SIZE, NULL,
+        (COMM_TASK_PRIORITY + 1), &discoveryTaskHandle, COMM_TASK_CORE_ID);
+
+    if (result == pdPASS) {
+      ESP_LOGI(TAG, "Discovery task created successfully");
+    } else {
+      ESP_LOGE(TAG, "Failed to create discovery task: %d", result);
+    }
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
@@ -296,14 +311,6 @@ void app_main(void) {
   }
 
   if (site_config.has_valve) {
-    xTaskCreatePinnedToCore(
-        espnow_discovery_task, "ESP-NOW Discovery",
-        COMM_TASK_STACK_SIZE,     // Stack size
-        NULL,                     // Parameters
-        (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-        &discoveryTaskHandle,
-        COMM_TASK_CORE_ID // Core ID
-    );
     xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,
                             &g_nodeAddress, COMM_TASK_PRIORITY, NULL,
                             COMM_TASK_CORE_ID);
@@ -391,15 +398,6 @@ void app_main(void) {
 
   // Initialize soil sensor
   soil_sensor_init();
-
-  // if (load_calibration_values(&DRY_STATE, &WET_STATE) != ESP_OK) {
-  //     ESP_LOGI(TAG, "No calibration found - starting calibration task");
-  //     xTaskCreate(calibration_task, "calibration_task", 4096, NULL, 5, NULL);
-  //     vTaskDelay(pdMS_TO_TICKS(80000));
-  // } else {
-  //       ESP_LOGI(TAG, "Calibration values - Dry: %" PRId32 ", Wet: %" PRId32,
-  //       DRY_STATE, WET_STATE);
-  //   }
 
   // Start sensor reading task
   xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c

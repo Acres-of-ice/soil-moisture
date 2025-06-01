@@ -1368,6 +1368,13 @@ esp_err_t load_device_mappings_from_nvs(void) {
  * Updated to discover devices based on CONFIG_NUM_PLOTS
  */
 void espnow_discovery_task(void *pvParameters) {
+  // Add these lines at the VERY TOP
+  ESP_LOGI(TAG, "=== DISCOVERY TASK ENTRY ===");
+  vTaskDelay(pdMS_TO_TICKS(10)); // Small delay to ensure log prints
+
+  ESP_LOGI(TAG, "Task stack high water mark: %d",
+           uxTaskGetStackHighWaterMark(NULL));
+  // ESP_LOGI(TAG, "Free heap: %d", esp_get_free_heap_size());
   ESP_LOGI(TAG, "Starting ESP-NOW device discovery task for %d plots",
            CONFIG_NUM_PLOTS);
 

@@ -98,27 +98,25 @@ menu "App Configuration"
     #     default "partitions/valves.csv" if VALVE || SOIL || PUMP || SOLENOID
 
     # CPU Frequency Configuration
+    config ESP_DEFAULT_CPU_FREQ_MHZ_80
+        bool
+        default y if (VALVE || SOIL || PUMP || SOLENOID)
+        default n if MASTER
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_160  
+        bool
+        default n
+        
+    config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool  
+        default y if MASTER
+        default n if (VALVE || SOIL || PUMP || SOLENOID)
+
+    # Also set the main frequency value to match
     config ESP_DEFAULT_CPU_FREQ_MHZ
         int
         default 240 if MASTER
-        default 80 if VALVE || SOIL || PUMP
-        help
-            CPU frequency to be set on application startup.
-            Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_80
-        bool
-        default n if MASTER
-        default y if VALVE || SOIL || PUMP || SOLENOID
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_160
-        bool
-        default n
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_240
-        bool
-        default y if MASTER
-        default n if VALVE || SOIL || PUMP
+        default 80 if (VALVE || SOIL || PUMP || SOLENOID)
 
     # Debugging
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
