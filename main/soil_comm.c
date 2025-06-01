@@ -196,7 +196,7 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
       if (last_send_device == valveAddress && !callback_received) {
         callback_received = true;
         TickType_t callback_time = xTaskGetTickCount() - start_time;
-        ESP_LOGI(TAG,
+        ESP_LOGD(TAG,
                  "Callback received for device 0x%02X after %dms, success: %s",
                  valveAddress, (int)(callback_time * portTICK_PERIOD_MS),
                  last_send_success ? "true" : "false");
@@ -235,8 +235,8 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
 
     // Longer delay before retry
     if (retry < MAX_SEND_RETRIES - 1) {
-      ESP_LOGD(TAG, "Waiting 2 seconds before retry %d...", retry + 2);
-      vTaskDelay(pdMS_TO_TICKS(2000)); // 2 second delay between retries
+      ESP_LOGD(TAG, "Waiting 1 seconds before retry %d...", retry + 2);
+      vTaskDelay(pdMS_TO_TICKS(1000)); // 2 second delay between retries
     }
   }
 
