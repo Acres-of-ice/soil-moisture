@@ -1335,6 +1335,16 @@ bool verify_device_mappings(void) {
 
   // Add pump address
   required_devices[device_index++] = PUMP_ADDRESS;
+  // Also check for solenoid controllers (they function as valves)
+  // We'll add them to the list but not require all of them
+  // This allows the system to work with either valve or solenoid controllers
+  int solenoid_devices_start = device_index;
+  for (int plot = 1; plot <= CONFIG_NUM_PLOTS; plot++) {
+    required_devices[device_index++] = DEVICE_TYPE_SOLENOID | plot;
+  }
+  // Update total to include solenoids for checking, but we'll handle this
+  // specially
+  int total_with_solenoids = device_index;
 #endif
 
 #if CONFIG_SOIL || CONFIG_SOLENOID || CONFIG_VALVE || CONFIG_PUMP
