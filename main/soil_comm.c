@@ -1566,8 +1566,8 @@ bool verify_device_mappings(void) {
         DEVICE_TYPE_SOIL | plot; // Soil sensor for this plot
   }
 
-  // // Add pump address
-  // required_devices[device_index++] = PUMP_ADDRESS;
+  // Add pump address
+  required_devices[device_index++] = PUMP_ADDRESS;
 #endif
 
 #if CONFIG_SOIL || CONFIG_SOLENOID || CONFIG_VALVE || CONFIG_PUMP

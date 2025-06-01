@@ -111,7 +111,7 @@ function(display_build_config)
         set(DEVICE_ADDR "${SOLENOID_ADDR_HEX}")
     elseif(CONFIG_PUMP)
         set(DEVICE_INFO "PUMP")
-        set(DEVICE_ADDR "0x42")
+        set(DEVICE_ADDR "0x51")
     endif()
     
     # Hardware features detection

@@ -116,7 +116,6 @@ void init_semaphores(void) {
   message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
   i2c_mutex = xSemaphoreCreateMutex();
   readings_mutex = xSemaphoreCreateMutex();
-  init_message_ack_tracking();
 }
 
 void pump_button_task(void *arg) {
