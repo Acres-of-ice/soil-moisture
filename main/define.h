@@ -139,7 +139,6 @@ extern QueueHandle_t message_queue;
 #define POLL_INTERVAL_MS (CONFIG_POLL_INTERVAL_S * 1000)
 #define MODE_TIMEOUT_MS (CONFIG_MODE_TIMEOUT_M * 60000)
 #define VALVE_TIMEOUT_MS (CONFIG_VALVE_TIMEOUT_S * 1000)
-#define RETRY_DELAY_MS (CONFIG_RETRY_DELAY_S * 1000)
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 #define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
@@ -342,63 +341,141 @@ typedef struct {
   const char *description; // Test case description
 } test_case_t;
 
-// Test cases for soil moisture simulation (dynamic plots)
+// Test cases for sequential irrigation simulation
 static const test_case_t test_cases[] = {
-    // Low moisture scenarios (should trigger irrigation)
+    // Sequential irrigation priority tests
     {.soil = {CONFIG_PLOT_DRY - 15, CONFIG_PLOT_DRY - 5},
      .battery = {85, 87},
-     .description = "Both plots dry - both should trigger irrigation"},
-    {.soil = {CONFIG_PLOT_DRY - 5, CONFIG_PLOT_DRY - 15},
-     .battery = {82, 84},
      .description =
-         "Plot 1 marginal, Plot 2 dry - Plot 2 should trigger irrigation"},
-    {.soil = {CONFIG_PLOT_DRY - 15, CONFIG_PLOT_DRY - 5},
+         "Both plots dry - Plot 1 should irrigate first (sequential priority)"},
+
+    {.soil = {CONFIG_PLOT_DRY - 5, CONFIG_PLOT_DRY - 20},
+     .battery = {82, 84},
+     .description = "Plot 2 drier than Plot 1 - Plot 1 still irrigates first "
+                    "(priority by number)"},
+
+    {.soil = {CONFIG_PLOT_WET + 5, CONFIG_PLOT_DRY - 15},
      .battery = {88, 91},
      .description =
-         "Plot 1 dry, Plot 2 marginal - Plot 1 should trigger irrigation"},
-    // Mixed moisture scenarios
-    {.soil = {CONFIG_PLOT_DRY - 10, CONFIG_PLOT_WET + 5},
+         "Only Plot 2 dry - Plot 2 should irrigate after Plot 1 check"},
+
+    // Single plot irrigation scenarios
+    {.soil = {CONFIG_PLOT_DRY - 10, CONFIG_PLOT_WET + 10},
      .battery = {86, 93},
      .description =
-         "Plot 1 dry, Plot 2 wet - only Plot 1 should trigger irrigation"},
-    {.soil = {CONFIG_PLOT_WET + 5, CONFIG_PLOT_DRY - 10},
+         "Only Plot 1 dry - Plot 1 should complete full irrigation cycle"},
+
+    {.soil = {CONFIG_PLOT_WET + 15, CONFIG_PLOT_DRY - 8},
      .battery = {90, 78},
      .description =
-         "Plot 1 wet, Plot 2 dry - only Plot 2 should trigger irrigation"},
-    // High moisture scenarios (should not trigger irrigation)
+         "Only Plot 2 dry - Plot 2 should irrigate after Plot 1 deemed wet"},
+
+    // State machine transition tests
+    {.soil = {CONFIG_PLOT_DRY - 12, CONFIG_PLOT_WET + 5},
+     .battery = {88, 92},
+     .description =
+         "Test complete irrigation cycle: "
+         "IDLE→VALVE_OPEN→PUMP_ON→IRR_START→PUMP_OFF→VALVE_CLOSE→IRR_DONE"},
+
+    // Threshold boundary testing
+    {.soil = {CONFIG_PLOT_DRY - 1, CONFIG_PLOT_DRY},
+     .battery = {80, 80},
+     .description = "Plot 1 just below threshold, Plot 2 at threshold - only "
+                    "Plot 1 should irrigate"},
+
+    {.soil = {CONFIG_PLOT_DRY, CONFIG_PLOT_DRY - 1},
+     .battery = {75, 95},
+     .description = "Both plots at/near threshold - Plot 1 has priority"},
+
+    {.soil = {CONFIG_PLOT_WET, CONFIG_PLOT_WET - 1},
+     .battery = {93, 77},
+     .description = "Both plots at wet threshold - no irrigation should occur"},
+
+    // No irrigation scenarios
     {.soil = {CONFIG_PLOT_WET + 5, CONFIG_PLOT_WET + 10},
      .battery = {88, 92},
-     .description = "Both plots wet - neither should trigger irrigation"},
+     .description =
+         "Both plots adequately watered - system should remain IDLE"},
+
     {.soil = {CONFIG_PLOT_WET + 15, CONFIG_PLOT_WET + 20},
      .battery = {94, 96},
-     .description = "Both plots very wet - neither should trigger irrigation"},
-    // Edge cases
-    {.soil = {CONFIG_PLOT_DRY, CONFIG_PLOT_DRY},
-     .battery = {80, 80},
-     .description = "Both plots at threshold - edge case"},
-    {.soil = {CONFIG_PLOT_DRY - 1, CONFIG_PLOT_WET + 1},
-     .battery = {75, 95},
-     .description = "Plot 1 just below threshold, Plot 2 just above threshold"},
-    {.soil = {CONFIG_PLOT_WET + 1, CONFIG_PLOT_DRY - 1},
-     .battery = {93, 77},
-     .description = "Plot 1 just above threshold, Plot 2 just below threshold"},
-    // Extreme cases
-    {.soil = {0, 100},
+     .description = "Both plots very wet - system should stay in IDLE state"},
+
+    // Extreme moisture conditions
+    {.soil = {5, 95},
      .battery = {65, 98},
-     .description = "Plot 1 bone dry, Plot 2 saturated"},
-    {.soil = {100, 0},
+     .description = "Plot 1 extremely dry, Plot 2 saturated - Plot 1 should "
+                    "get immediate irrigation"},
+
+    {.soil = {95, 5},
      .battery = {99, 60},
-     .description = "Plot 1 saturated, Plot 2 bone dry"},
-    // Battery testing scenarios
+     .description = "Plot 1 saturated, Plot 2 extremely dry - Plot 2 should "
+                    "irrigate after Plot 1 check"},
+
+    {.soil = {0, 0},
+     .battery = {70, 75},
+     .description = "Both plots bone dry - Plot 1 should irrigate first, then "
+                    "Plot 2 in next cycle"},
+
+    // Battery level monitoring during irrigation
     {.soil = {CONFIG_PLOT_DRY - 10, CONFIG_PLOT_DRY - 8},
      .battery = {25, 15},
-     .description = "Low battery levels with dry soil - irrigation with low "
-                    "battery warning"},
-    {.soil = {CONFIG_PLOT_WET + 10, CONFIG_PLOT_WET + 8},
-     .battery = {5, 8},
      .description =
-         "Critical battery levels with wet soil - battery warning only"}};
+         "Sequential irrigation with low battery monitoring - Plot 1 first"},
+
+    {.soil = {CONFIG_PLOT_DRY - 5, CONFIG_PLOT_WET + 5},
+     .battery = {10, 85},
+     .description = "Plot 1 dry with critical battery, Plot 2 wet - test low "
+                    "battery during irrigation"},
+
+    {.soil = {CONFIG_PLOT_WET + 8, CONFIG_PLOT_DRY - 12},
+     .battery = {90, 8},
+     .description = "Plot 2 dry with critical battery - test battery "
+                    "monitoring for Plot 2"},
+
+    // Irrigation completion testing
+    {.soil = {CONFIG_PLOT_DRY - 8, CONFIG_PLOT_DRY - 6},
+     .battery = {85, 88},
+     .description = "Both plots need irrigation - verify Plot 1 completes "
+                    "before Plot 2 starts"},
+
+    // System recovery scenarios
+    {.soil = {CONFIG_PLOT_WET + 2, CONFIG_PLOT_WET + 3},
+     .battery = {82, 85},
+     .description =
+         "Just above wet threshold - test system returns to IDLE properly"},
+
+    // Drip timer interaction (if enabled)
+    {.soil = {CONFIG_PLOT_DRY - 15, CONFIG_PLOT_DRY - 10},
+     .battery = {88, 90},
+     .description = "Both plots dry during timer window - sequential "
+                    "irrigation with timer check"},
+
+    // Mixed scenarios for comprehensive testing
+    {.soil = {CONFIG_PLOT_DRY - 3, CONFIG_PLOT_DRY - 18},
+     .battery = {92, 85},
+     .description =
+         "Plot 1 slightly dry, Plot 2 very dry - priority system test"},
+
+    {.soil = {50, 30},
+     .battery = {70, 65},
+     .description =
+         "Mid-range moisture levels - both need irrigation, Plot 1 priority"},
+
+    // Error condition simulation
+    {.soil = {CONFIG_PLOT_DRY - 20, CONFIG_PLOT_DRY - 25},
+     .battery = {40, 35},
+     .description = "Both plots critically dry with moderate battery - stress "
+                    "test irrigation sequence"},
+
+    // Final validation test
+    {.soil = {CONFIG_PLOT_WET + 12, CONFIG_PLOT_WET + 15},
+     .battery = {95, 98},
+     .description =
+         "System healthy state - all sensors good, no irrigation needed"}};
+
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
-#define TEST_DELAY_MS (120 * 1000) // 2 minute delay between tests
+#define TEST_DELAY_MS                                                          \
+  (60 * 1000) // 3 minute delay between tests to allow full irrigation cycles
 
 #endif // DEFINE_H
