@@ -32,7 +32,7 @@ extern uint8_t sequence_number;
 
 // Fixed Device Addresses
 #define MASTER_ADDRESS 0x01
-#define PUMP_ADDRESS 0x41
+#define PUMP_ADDRESS 0x51
 
 // Helper macros for address calculation
 #define GET_DEVICE_TYPE(addr) ((addr) & 0xF0)

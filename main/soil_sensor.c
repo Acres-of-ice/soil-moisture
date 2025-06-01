@@ -631,6 +631,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
  * @param pvParameters Task parameters (not used)
  */
 void soil_sensor_task(void *pvParameters) {
+
+  int soil = 999;
+  int battery = 999;
   // Ensure sensor is initialized
   if (adc1_handle == NULL) {
     soil_sensor_init();
@@ -657,8 +660,8 @@ void soil_sensor_task(void *pvParameters) {
 
   while (1) {
     // Read soil moisture
-    int soil = read_soil_moisture();
-    int battery = read_battery_level();
+    soil = read_soil_moisture();
+    battery = read_battery_level();
 
     if (soil >= 0) {
       // Prepare ESP-NOW data structure for transmission

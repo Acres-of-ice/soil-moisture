@@ -98,21 +98,6 @@ bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
   return false;
 }
 
-// // ESP-NOW send callback
-// static void espnow_send_cb(const uint8_t *mac_addr,
-//                            esp_now_send_status_t status) {
-//   if (mac_addr == NULL) {
-//     ESP_LOGE(TAG, "Send callback with NULL MAC address");
-//     return;
-//   }
-//
-//   if (status == ESP_NOW_SEND_SUCCESS) {
-//     ESP_LOGD(TAG, "Message delivered to " MACSTR, MAC2STR(mac_addr));
-//   } else {
-//     ESP_LOGW(TAG, "Message failed to deliver to " MACSTR, MAC2STR(mac_addr));
-//   }
-// }
-
 bool ESPNOW_isQueueEmpty() {
   return (message_queue == NULL || uxQueueMessagesWaiting(message_queue) == 0);
 }
@@ -176,7 +161,6 @@ bool espnow_get_received_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
 bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
                           uint8_t source) {
   clearMessageQueue();
-  ESP_LOGI(TAG, "inside sendcommandwithretry");
 
   // Determine which semaphore we're waiting on
   SemaphoreHandle_t ackSemaphore = NULL;
@@ -209,26 +193,6 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
       ackSemaphore = Soil_AckSemaphore;
     }
   }
-  // // Legacy compatibility - keep existing hardcoded checks as fallback
-  // else if (valveAddress == VALVE_A_ADDRESS) {
-  //   if (!Valve_A_Acknowledged) {
-  //     ESP_LOGD(TAG, "acksemaphore = valve A ack (legacy)");
-  //     ackSemaphore = Valve_A_AckSemaphore;
-  //   }
-  // } else if (valveAddress == VALVE_B_ADDRESS) {
-  //   if (!Valve_B_Acknowledged) {
-  //     ESP_LOGD(TAG, "acksemaphore = valve B ack (legacy)");
-  //     ackSemaphore = Valve_B_AckSemaphore;
-  //   }
-  // } else if (valveAddress == SOIL_A_ADDRESS) {
-  //   if (!Soil_pcb_Acknowledged) {
-  //     ackSemaphore = Soil_AckSemaphore;
-  //   }
-  // } else if (valveAddress == SOIL_B_ADDRESS) {
-  //   if (!Soil_pcb_Acknowledged) {
-  //     ackSemaphore = Soil_AckSemaphore;
-  //   }
-  // }
 
   if (ackSemaphore == NULL) {
     ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X (%s)",
@@ -237,7 +201,6 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   }
 
   bool commandAcknowledged = false;
-  const TickType_t retryDelay = pdMS_TO_TICKS(5000);
 
   for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
 
@@ -585,8 +548,8 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void processMasterMessage(comm_t *message) {
   ValveState newState = getCurrentState();
-  uint8_t device_type = GET_DEVICE_TYPE(message->source);
-  uint8_t plot_number = GET_PLOT_NUMBER(message->source);
+  device_type = GET_DEVICE_TYPE(message->source);
+  plot_number = GET_PLOT_NUMBER(message->source);
 
   switch (device_type) {
   case DEVICE_TYPE_VALVE:

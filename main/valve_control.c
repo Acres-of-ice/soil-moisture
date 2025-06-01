@@ -221,16 +221,6 @@ void updateValveState(void *pvParameters) {
       current_plot = -1; // No active plot
       ESP_LOGI(TAG, "IDLE");
 
-      // Reset sensor readings if it's reset time
-      if (isResetTime()) {
-        if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-          for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
-            current_readings.soil[i] = 0;
-          }
-          xSemaphoreGive(readings_mutex);
-        }
-      }
-
       // Get current sensor readings
       get_sensor_readings(&current_readings);
 
@@ -329,12 +319,6 @@ void updateValveState(void *pvParameters) {
         ESP_LOGW(TAG, "Irrigation timeout for plot %d: %d%%", current_plot + 1,
                  current_readings.soil[current_plot]);
         reset_acknowledgements();
-
-        // Set the current plot to wet value to indicate irrigation completion
-        if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-          current_readings.soil[current_plot] = 90;
-          xSemaphoreGive(readings_mutex);
-        }
         newState = STATE_PUMP_OFF;
       } else {
         ESP_LOGI(TAG, "Waiting for plot %d: %d%%", current_plot + 1,

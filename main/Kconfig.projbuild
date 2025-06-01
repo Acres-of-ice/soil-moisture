@@ -5,6 +5,7 @@ menu "App Configuration"
         
         config SITE_SKUAST
             bool "Skuast"
+
         config SITE_TEST
             bool "Test"
     endchoice
@@ -88,7 +89,7 @@ menu "App Configuration"
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
         default "partitions/master.csv" if MASTER
-        default "partitions/valves.csv" if VALVE || SOIL || PUMP
+        default "partitions/valves.csv" if VALVE || SOIL || PUMP || SOLENOID
 
     # CPU Frequency Configuration
     config ESP_DEFAULT_CPU_FREQ_MHZ
@@ -102,7 +103,7 @@ menu "App Configuration"
     config ESP_DEFAULT_CPU_FREQ_MHZ_80
         bool
         default n if MASTER
-        default y if VALVE || SOIL || PUMP
+        default y if VALVE || SOIL || PUMP || SOLENOID
 
     config ESP_DEFAULT_CPU_FREQ_MHZ_160
         bool
@@ -117,12 +118,12 @@ menu "App Configuration"
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
         bool
         default n if MASTER
-        default y if VALVE || SOIL || PUMP
+        default y if VALVE || SOIL || PUMP || SOLENOID
 
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
         bool
         default y if MASTER
-        default n if VALVE || SOIL || PUMP
+        default n if VALVE || SOIL || PUMP || SOLENOID
 
 config SMS_RECIPIENT_DATA
   choice
@@ -383,16 +384,16 @@ menu "Time Configuration"
 
     config POLL_INTERVAL_S
         int "Poll interval (seconds)"
-        default 1 if SITE_TEST
-        default 3
-        range 1 60
+        default 3 if SITE_TEST
+        default 60
+        range 1 600
         help
             Set the interval in seconds between sensor readings.
 
     config SMS_CHECK_M
         int "SMS Check Interval (minutes)"
         default 1 if SITE_TEST
-        default 3
+        default 10
         range 1 60
         help
             Set the interval in minutes to check for new data to send via SMS.
@@ -405,9 +406,9 @@ config ENABLE_SIMULATION_MODE
     help
         Enable simulation mode which uses fixed simulated sensor readings instead of real sensor data.
 
-menu "Soil Moisture Thresholds"
-    config SOIL_DRY
-        int "Soil Dry Threshold (%)"
+menu "Plot Moisture Thresholds"
+    config PLOT_DRY
+        int "Plot Dry Threshold (%)"
         range 0 100
         default 40
         help
@@ -415,8 +416,8 @@ menu "Soil Moisture Thresholds"
             Value is a percentage (0-100). Lower values mean drier soil.
             Example: 40 means irrigation starts when moisture falls below 40%.
             
-    config SOIL_WET
-        int "Soil Wet Threshold (%)"
+    config PLOT_WET
+        int "Plot Wet Threshold (%)"
         range 0 100
         default 70
         help
