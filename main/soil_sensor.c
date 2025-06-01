@@ -38,6 +38,10 @@ static bool cali_enabled = false;
 extern uint8_t g_nodeAddress;
 extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
 
+static int32_t soil_dry_adc_value = 0;
+static int32_t soil_wet_adc_value = 0;
+static int8_t plot_number = -1;
+
 /**
  * @brief Initialize soil moisture sensor ADC and data structures
  */
@@ -688,27 +692,4 @@ void soil_sensor_task(void *pvParameters) {
     // Delay before next reading (3 seconds)
     vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
   }
-}
-
-/**
- * @brief Creates and starts the soil sensor and communication tasks
- *
- * This function initializes the soil sensor and starts the necessary tasks.
- * The soil_sensor_task reads sensor data and queues it for transmission.
- * The vTaskESPNOW_TX task picks data from the queue and sends it via ESP-NOW.
- */
-void start_soil_sensor_tasks(void) {
-  // Initialize sensor hardware
-  soil_sensor_init();
-
-  // Start sensor reading task
-  xTaskCreate(soil_sensor_task, "soil_sensor", 4096, NULL, 5, NULL);
-
-// Start ESP-NOW transmission task if this is a soil sensor
-#if defined(CONFIG_SOIL_A) || defined(CONFIG_SOIL_B)
-  xTaskCreate(vTaskESPNOW_TX, "espnow_tx", 4096, NULL, 5, NULL);
-  ESP_LOGI(TAG, "ESP-NOW TX transmission task started");
-#endif
-
-  ESP_LOGI(TAG, "Soil sensor tasks started");
 }

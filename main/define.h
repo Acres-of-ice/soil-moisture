@@ -165,6 +165,8 @@ extern TaskHandle_t smsTaskHandle;
 extern TaskHandle_t smsReceiveTaskHandle;
 extern TaskHandle_t smsManagerTaskHandle;
 extern TaskHandle_t simulationTaskHandle;
+extern TaskHandle_t soilTaskHandle;
+extern TaskHandle_t TXTaskHandle;
 
 // ==================== UART Definitions ====================
 #define UART_NUM UART_NUM_0

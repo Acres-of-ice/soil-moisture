@@ -41,6 +41,8 @@ TaskHandle_t smsTaskHandle = NULL;
 TaskHandle_t simulationTaskHandle = NULL;
 TaskHandle_t sensorTaskHandle = NULL;
 TaskHandle_t buttonTaskHandle = NULL;
+TaskHandle_t soilTaskHandle = NULL;
+TaskHandle_t TXTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
@@ -173,9 +175,9 @@ void app_main(void) {
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
 
-  if (site_config.simulate) {
-    esp_log_level_set("ESPNOW", ESP_LOG_NONE);
-  }
+  // if (site_config.simulate) {
+  //   esp_log_level_set("ESPNOW", ESP_LOG_NONE);
+  // }
 
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
@@ -244,21 +246,6 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
-  if (site_config.has_valve) {
-    ESP_LOGI(TAG, "About to create discovery task...");
-
-    BaseType_t result = xTaskCreatePinnedToCore(
-        espnow_discovery_task, "ESP-NOW Discovery", COMM_TASK_STACK_SIZE, NULL,
-        (COMM_TASK_PRIORITY + 1), &discoveryTaskHandle, COMM_TASK_CORE_ID);
-
-    if (result == pdPASS) {
-      ESP_LOGI(TAG, "Discovery task created successfully");
-    } else {
-      ESP_LOGE(TAG, "Failed to create discovery task: %d", result);
-    }
-    vTaskDelay(pdMS_TO_TICKS(2000));
-  }
-
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
@@ -321,6 +308,10 @@ void app_main(void) {
                             VALVE_TASK_PRIORITY, &valveTaskHandle,
                             VALVE_TASK_CORE_ID);
     vTaskDelay(pdMS_TO_TICKS(2000));
+
+    xTaskCreatePinnedToCore(
+        espnow_discovery_task, "ESP-NOW Discovery", COMM_TASK_STACK_SIZE, NULL,
+        (COMM_TASK_PRIORITY + 1), &discoveryTaskHandle, COMM_TASK_CORE_ID);
   }
 
   if (site_config.simulate) {
@@ -383,19 +374,6 @@ void app_main(void) {
   // Initialize ESP-NOW communication
   espnow_init2();
 
-  // Start ESP-NOW discovery task
-  xTaskCreatePinnedToCore(
-      espnow_discovery_task, "ESP-NOW Discovery",
-      COMM_TASK_STACK_SIZE,     // Stack size
-      NULL,                     // Parameters
-      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
-      &discoveryTaskHandle,
-      COMM_TASK_CORE_ID // Core ID
-  );
-
-  // Brief delay to allow discovery to start
-  vTaskDelay(pdMS_TO_TICKS(5000));
-
   // Initialize soil sensor
   soil_sensor_init();
 
@@ -405,7 +383,7 @@ void app_main(void) {
               1024 * 4,         // Stack size
               NULL, // No parameters needed - node type determined in init
               3,    // Priority
-              NULL  // No handle needed
+              &soilTaskHandle // No handle needed
   );
 
   // Start ESP-NOW transmission task
@@ -414,7 +392,17 @@ void app_main(void) {
               1024 * 4,       // Stack size
               NULL,           // No parameters needed
               5,              // Priority
-              NULL            // No handle needed
+              &TXTaskHandle   // No handle needed
+  );
+
+  // Start ESP-NOW discovery task
+  xTaskCreatePinnedToCore(
+      espnow_discovery_task, "ESP-NOW Discovery",
+      COMM_TASK_STACK_SIZE,     // Stack size
+      NULL,                     // Parameters
+      (COMM_TASK_PRIORITY + 1), // Priority (higher than valve task)
+      &discoveryTaskHandle,
+      COMM_TASK_CORE_ID // Core ID
   );
 #endif
 

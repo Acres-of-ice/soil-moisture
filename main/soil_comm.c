@@ -67,75 +67,6 @@ uint8_t sequence_number = 0;
 
 espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
-// Message acknowledgment tracking
-typedef struct {
-  uint8_t seq_num;
-  uint8_t device_addr;
-  bool acknowledged;
-  TickType_t send_time;
-} message_ack_t;
-
-#define MAX_PENDING_MESSAGES 10
-static message_ack_t pending_messages[MAX_PENDING_MESSAGES];
-static SemaphoreHandle_t ack_mutex = NULL;
-
-// Initialize acknowledgment tracking
-void init_message_ack_tracking(void) {
-  if (ack_mutex == NULL) {
-    ack_mutex = xSemaphoreCreateMutex();
-  }
-  memset(pending_messages, 0, sizeof(pending_messages));
-}
-
-// Add message to tracking
-void track_message(uint8_t seq_num, uint8_t device_addr) {
-  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
-      if (!pending_messages[i].acknowledged &&
-          pending_messages[i].seq_num == 0) {
-        pending_messages[i].seq_num = seq_num;
-        pending_messages[i].device_addr = device_addr;
-        pending_messages[i].acknowledged = false;
-        pending_messages[i].send_time = xTaskGetTickCount();
-        break;
-      }
-    }
-    xSemaphoreGive(ack_mutex);
-  }
-}
-
-// Mark message as acknowledged
-void mark_message_acknowledged(uint8_t device_addr) {
-  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
-      if (pending_messages[i].device_addr == device_addr &&
-          !pending_messages[i].acknowledged) {
-        pending_messages[i].acknowledged = true;
-        break;
-      }
-    }
-    xSemaphoreGive(ack_mutex);
-  }
-}
-
-// Check if latest message to device was acknowledged
-bool is_latest_message_acknowledged(uint8_t device_addr) {
-  bool acknowledged = false;
-  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
-      if (pending_messages[i].device_addr == device_addr) {
-        acknowledged = pending_messages[i].acknowledged;
-        if (acknowledged) {
-          // Clear the acknowledged message
-          memset(&pending_messages[i], 0, sizeof(message_ack_t));
-        }
-        break;
-      }
-    }
-    xSemaphoreGive(ack_mutex);
-  }
-  return acknowledged;
-}
 
 bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
                           espnow_recv_data_t *data) {
@@ -481,7 +412,7 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
   const char *pcb_name = espnow_get_peer_name(mac_addr);
 
   if (status == ESP_NOW_SEND_SUCCESS) {
-    ESP_LOGI(TAG, "✓ %s acknowledged", pcb_name);
+    ESP_LOGD(TAG, "✓ %s acknowledged", pcb_name);
   } else {
     ESP_LOGW(TAG, "✗ %s send failed", pcb_name);
   }
@@ -1363,177 +1294,6 @@ esp_err_t load_device_mappings_from_nvs(void) {
   return ESP_OK;
 }
 
-/**
- * Function to handle ESP-NOW device discovery with NVS support
- * Updated to discover devices based on CONFIG_NUM_PLOTS
- */
-void espnow_discovery_task(void *pvParameters) {
-  // Add these lines at the VERY TOP
-  ESP_LOGI(TAG, "=== DISCOVERY TASK ENTRY ===");
-  vTaskDelay(pdMS_TO_TICKS(10)); // Small delay to ensure log prints
-
-  ESP_LOGI(TAG, "Task stack high water mark: %d",
-           uxTaskGetStackHighWaterMark(NULL));
-  // ESP_LOGI(TAG, "Free heap: %d", esp_get_free_heap_size());
-  ESP_LOGI(TAG, "Starting ESP-NOW device discovery task for %d plots",
-           CONFIG_NUM_PLOTS);
-
-  // Suspend valve control task during discovery/mapping
-  if (valveTaskHandle != NULL) {
-    ESP_LOGI(TAG, "Suspending valve control task during discovery/mapping");
-    vTaskSuspend(valveTaskHandle);
-  } else {
-    ESP_LOGW(TAG, "Valve task handle is NULL, cannot suspend");
-  }
-
-  bool run_discovery = true;
-  bool devices_initialized = false;
-
-#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
-  // Check if we should try to load mappings from NVS
-  ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
-
-#ifdef CONFIG_ESPNOW_FORCE_DISCOVERY
-  ESP_LOGI(TAG, "Force discovery enabled - will run discovery regardless of "
-                "stored mappings");
-  run_discovery = true;
-#else
-  // Try to load mappings from NVS
-  if (nvs_has_valid_mappings()) {
-    ESP_LOGI(TAG, "Found valid device mappings in NVS, loading...");
-    esp_err_t err = load_device_mappings_from_nvs();
-
-    if (err == ESP_OK) {
-      register_loaded_mappings_with_espnow();
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      // Verify loaded mappings
-      if (verify_device_mappings()) {
-        ESP_LOGI(TAG,
-                 "Successfully loaded and verified device mappings from NVS");
-        run_discovery = false; // Skip discovery
-        devices_initialized = true;
-        update_status_message("Using stored mappings");
-      } else {
-        ESP_LOGW(
-            TAG,
-            "Loaded mappings failed verification, falling back to discovery");
-        run_discovery = true;
-      }
-    } else {
-      ESP_LOGW(TAG, "Failed to load device mappings from NVS: %s",
-               esp_err_to_name(err));
-      run_discovery = true;
-    }
-  } else {
-    ESP_LOGI(TAG, "No valid device mappings found in NVS, will run discovery");
-    run_discovery = true;
-  }
-#endif // CONFIG_ESPNOW_FORCE_DISCOVERY
-#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
-
-  if (run_discovery) {
-    // Start with a delay before discovery
-    ESP_LOGD(TAG, "Wait 3 seconds before starting discovery...");
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    // Start discovery with authentication broadcasts
-    ESP_LOGI(TAG,
-             "Starting peer discovery for %d plots (need %d valves + %d soil "
-             "sensors + 1 pump)...",
-             CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS);
-    espnow_start_discovery(20000); // 20 second discovery timeout
-
-    // Broadcast authentication multiple times during discovery
-    for (int i = 0; i < 5; i++) {
-      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
-      espnow_broadcast_auth();
-      vTaskDelay(pdMS_TO_TICKS(
-          CONFIG_ESPNOW_SEND_DELAY)); // Wait 2 seconds between broadcasts
-    }
-
-    // Wait for discovery to complete
-    ESP_LOGD(TAG, "Waiting for discovery to complete...");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
-
-    // Update device mappings based on discovered peers
-    update_device_mappings_from_discovered_peers();
-
-    // Check if all required devices are found
-    bool all_devices_found = verify_device_mappings();
-
-    // Continue indefinitely until all devices are found
-    int attempt = 1;
-
-    while (!all_devices_found) {
-      ESP_LOGW(TAG, "Not all required devices found. Attempt %d to rediscover",
-               attempt);
-
-      // Show status message on LCD
-      update_status_message("Finding devices %d", attempt);
-
-      // Try again with longer discovery period
-      espnow_start_discovery(30000); // 30 second discovery timeout
-
-      // More authentication broadcasts
-      for (int i = 0; i < 5; i++) {
-        ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...",
-                 i + 1);
-        espnow_broadcast_auth();
-        vTaskDelay(pdMS_TO_TICKS(3000));
-      }
-
-      // Brief delay before retry
-      vTaskDelay(pdMS_TO_TICKS(10000));
-
-      // Update device mappings based on discovered peers
-      update_device_mappings_from_discovered_peers();
-
-      // Try verification again
-      all_devices_found = verify_device_mappings();
-      attempt++;
-
-      // Every 5 attempts, log a more detailed message
-      if (attempt % 5 == 0) {
-        ESP_LOGW(TAG, "Still searching for devices after %d attempts", attempt);
-        // Refresh the status message periodically
-        update_status_message("Still searching %d", attempt);
-      }
-    }
-
-    ESP_LOGI(TAG, "All required devices found successfully after %d attempts",
-             attempt);
-    update_status_message("All devices found");
-    devices_initialized = true;
-
-#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
-    // Save the final device mappings to NVS for future use
-    ESP_LOGD(TAG, "Saving device mappings to NVS for future use");
-    esp_err_t err = save_device_mappings_to_nvs();
-    if (err != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to save device mappings to NVS: %s",
-               esp_err_to_name(err));
-    } else {
-      ESP_LOGI(TAG, "Device mappings successfully saved to NVS");
-    }
-#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
-  }
-
-  // Resume valve control task now that discovery is complete
-  if (valveTaskHandle != NULL && devices_initialized) {
-    ESP_LOGI(TAG, "Resuming valve control task after discovery/mapping");
-    vTaskResume(valveTaskHandle);
-  } else if (!devices_initialized) {
-    ESP_LOGE(TAG, "Device initialization failed, valve task not resumed");
-  } else {
-    ESP_LOGW(TAG, "Valve task handle is NULL, cannot resume");
-  }
-
-  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
-
-  // Task completed, delete itself
-  vTaskDelete(NULL);
-}
-
 // Updated verify_device_mappings function for dynamic plots
 bool verify_device_mappings(void) {
   ESP_LOGI(TAG, "Verifying device mappings for %d plots:", CONFIG_NUM_PLOTS);
@@ -1702,6 +1462,232 @@ bool verify_device_mappings(void) {
 
   // Return success only if all devices are found AND have valid names
   return (all_found && all_names_valid);
+}
+
+/**
+ * Function to handle ESP-NOW device discovery with selective task suspension
+ * Suspends only specific tasks, not the entire scheduler
+ */
+void espnow_discovery_task(void *pvParameters) {
+  ESP_LOGI(TAG, "Starting ESP-NOW device discovery task for %d plots",
+           CONFIG_NUM_PLOTS);
+
+  // List of task handles to suspend during discovery (exclude critical
+  // communication tasks)
+  TaskHandle_t tasks_to_suspend[] = {
+      valveTaskHandle,       // Suspend valve control
+      dataLoggingTaskHandle, // Suspend data logging
+      smsTaskHandle,         // Suspend SMS
+      simulationTaskHandle,  // Suspend simulation
+      sensorTaskHandle,      // Suspend sensor readings
+      soilTaskHandle,        // Suspend sensor readings
+      TXTaskHandle,          // Suspend sensor readings
+      buttonTaskHandle       // Suspend button handling
+      // NOTE: Do NOT suspend wifiTaskHandle or any ESP-NOW related tasks
+  };
+  const int num_tasks_to_suspend =
+      sizeof(tasks_to_suspend) / sizeof(TaskHandle_t);
+
+  // Track which tasks were actually suspended
+  bool task_was_suspended[num_tasks_to_suspend];
+
+  // Initialize the array manually
+  for (int i = 0; i < num_tasks_to_suspend; i++) {
+    task_was_suspended[i] = false;
+  }
+
+  // Suspend only the specific tasks that might interfere with discovery
+  ESP_LOGI(TAG, "Suspending non-critical tasks during discovery/mapping");
+  for (int i = 0; i < num_tasks_to_suspend; i++) {
+    if (tasks_to_suspend[i] != NULL) {
+      // Check if task is not already suspended
+      eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
+      if (task_state != eSuspended && task_state != eDeleted) {
+        vTaskSuspend(tasks_to_suspend[i]);
+        task_was_suspended[i] = true;
+        ESP_LOGI(TAG, "Suspended task %d", i);
+      } else {
+        ESP_LOGD(TAG, "Task %d already suspended or deleted, skipping", i);
+      }
+    } else {
+      ESP_LOGD(TAG, "Task handle %d is NULL, skipping suspension", i);
+    }
+  }
+
+  bool run_discovery = true;
+  bool devices_initialized = false;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  // Check if we should try to load mappings from NVS
+  ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
+
+#ifdef CONFIG_ESPNOW_FORCE_DISCOVERY
+  ESP_LOGI(TAG, "Force discovery enabled - will run discovery regardless of "
+                "stored mappings");
+  run_discovery = true;
+#else
+  // Try to load mappings from NVS
+  if (nvs_has_valid_mappings()) {
+    ESP_LOGI(TAG, "Found valid device mappings in NVS, loading...");
+    esp_err_t err = load_device_mappings_from_nvs();
+
+    if (err == ESP_OK) {
+      register_loaded_mappings_with_espnow();
+      vTaskDelay(pdMS_TO_TICKS(1000));
+
+      // Verify loaded mappings
+      if (verify_device_mappings()) {
+        ESP_LOGI(TAG,
+                 "Successfully loaded and verified device mappings from NVS");
+        run_discovery = false; // Skip discovery
+        devices_initialized = true;
+        update_status_message("Using stored mappings");
+      } else {
+        ESP_LOGW(
+            TAG,
+            "Loaded mappings failed verification, falling back to discovery");
+        run_discovery = true;
+      }
+    } else {
+      ESP_LOGW(TAG, "Failed to load device mappings from NVS: %s",
+               esp_err_to_name(err));
+      run_discovery = true;
+    }
+  } else {
+    ESP_LOGI(TAG, "No valid device mappings found in NVS, will run discovery");
+    run_discovery = true;
+  }
+#endif // CONFIG_ESPNOW_FORCE_DISCOVERY
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+
+  if (run_discovery) {
+    // Start with a delay before discovery
+    ESP_LOGD(TAG, "Wait 3 seconds before starting discovery...");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    // Start discovery with authentication broadcasts
+    ESP_LOGI(TAG,
+             "Starting peer discovery for %d plots (need %d valves + %d soil "
+             "sensors + 1 pump)...",
+             CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS, CONFIG_NUM_PLOTS);
+    espnow_start_discovery(20000); // 20 second discovery timeout
+
+    // Broadcast authentication multiple times during discovery
+    for (int i = 0; i < 5; i++) {
+      ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...", i + 1);
+      espnow_broadcast_auth();
+      vTaskDelay(pdMS_TO_TICKS(
+          CONFIG_ESPNOW_SEND_DELAY)); // Wait 2 seconds between broadcasts
+    }
+
+    // Wait for discovery to complete
+    ESP_LOGD(TAG, "Waiting for discovery to complete...");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds
+
+    // Update device mappings based on discovered peers
+    update_device_mappings_from_discovered_peers();
+
+    // Check if all required devices are found
+    bool all_devices_found = verify_device_mappings();
+
+    // Continue indefinitely until all devices are found
+    int attempt = 1;
+
+    while (!all_devices_found) {
+      ESP_LOGW(TAG, "Not all required devices found. Attempt %d to rediscover",
+               attempt);
+
+      // Show status message on LCD
+      update_status_message("Finding devices %d", attempt);
+
+      // Try again with longer discovery period
+      espnow_start_discovery(30000); // 30 second discovery timeout
+
+      // More authentication broadcasts
+      for (int i = 0; i < 5; i++) {
+        ESP_LOGI(TAG, "Broadcasting authentication information (%d/5)...",
+                 i + 1);
+        espnow_broadcast_auth();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+      }
+
+      // Brief delay before retry
+      vTaskDelay(pdMS_TO_TICKS(10000));
+
+      // Update device mappings based on discovered peers
+      update_device_mappings_from_discovered_peers();
+
+      // Try verification again
+      all_devices_found = verify_device_mappings();
+      attempt++;
+
+      // Every 5 attempts, log a more detailed message
+      if (attempt % 5 == 0) {
+        ESP_LOGW(TAG, "Still searching for devices after %d attempts", attempt);
+        // Refresh the status message periodically
+        update_status_message("Still searching %d", attempt);
+      }
+    }
+
+    ESP_LOGI(TAG, "All required devices found successfully after %d attempts",
+             attempt);
+    update_status_message("All devices found");
+    devices_initialized = true;
+
+#ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
+    // Save the final device mappings to NVS for future use
+    ESP_LOGD(TAG, "Saving device mappings to NVS for future use");
+    esp_err_t err = save_device_mappings_to_nvs();
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to save device mappings to NVS: %s",
+               esp_err_to_name(err));
+    } else {
+      ESP_LOGI(TAG, "Device mappings successfully saved to NVS");
+    }
+#endif // CONFIG_ESPNOW_USE_STORED_MAPPINGS
+  }
+
+  // Resume all previously suspended tasks now that discovery is complete
+  if (devices_initialized) {
+    ESP_LOGI(TAG,
+             "Resuming all suspended tasks after successful discovery/mapping");
+    for (int i = 0; i < num_tasks_to_suspend; i++) {
+      if (task_was_suspended[i] && tasks_to_suspend[i] != NULL) {
+        // Double-check task is still valid before resuming
+        eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
+        if (task_state == eSuspended) {
+          vTaskResume(tasks_to_suspend[i]);
+          ESP_LOGI(TAG, "Resumed task %d", i);
+        } else {
+          ESP_LOGW(TAG, "Task %d is not in suspended state (%d), cannot resume",
+                   i, task_state);
+        }
+      } else if (tasks_to_suspend[i] == NULL) {
+        ESP_LOGD(TAG, "Task handle %d is NULL, cannot resume", i);
+      } else {
+        ESP_LOGD(TAG, "Task %d was not suspended by discovery, not resuming",
+                 i);
+      }
+    }
+  } else {
+    ESP_LOGE(TAG, "Device initialization failed, resuming tasks anyway to "
+                  "prevent deadlock");
+    // Resume tasks even on failure to prevent permanent suspension
+    for (int i = 0; i < num_tasks_to_suspend; i++) {
+      if (task_was_suspended[i] && tasks_to_suspend[i] != NULL) {
+        eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
+        if (task_state == eSuspended) {
+          vTaskResume(tasks_to_suspend[i]);
+          ESP_LOGI(TAG, "Emergency resumed task %d", i);
+        }
+      }
+    }
+  }
+
+  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
+
+  // Task completed, delete itself
+  vTaskDelete(NULL);
 }
 
 /**
