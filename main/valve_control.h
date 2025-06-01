@@ -22,9 +22,6 @@ typedef enum {
   STATE_UNKNOWN
 } ValveState;
 
-// Global variable to track which plot is currently being irrigated
-static int current_plot = -1; // -1 means no plot active
-
 void update_moisture_readings(int a);
 static bool isStateTimedOut(ValveState state);
 void updateValveState(void *pvParameters);

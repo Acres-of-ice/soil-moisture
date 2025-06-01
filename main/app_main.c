@@ -29,10 +29,6 @@ uint8_t g_nodeAddress = 0x00;
 uint8_t g_plot_number = 0;
 bool gsm_init_success = false;
 
-SemaphoreHandle_t Valve_A_AckSemaphore = NULL;
-SemaphoreHandle_t Valve_B_AckSemaphore = NULL;
-SemaphoreHandle_t Pump_AckSemaphore = NULL;
-SemaphoreHandle_t Soil_AckSemaphore = NULL;
 SemaphoreHandle_t spi_mutex = NULL; // Mutex for SPI bus access
 SemaphoreHandle_t stateMutex = NULL;
 SemaphoreHandle_t i2c_mutex = NULL;
@@ -118,12 +114,9 @@ void init_gpio(void) {
 void init_semaphores(void) {
   stateMutex = xSemaphoreCreateMutex();
   message_queue = xQueueCreate(MAX_QUEUE_SIZE, sizeof(comm_t));
-  Valve_A_AckSemaphore = xSemaphoreCreateBinary();
-  Valve_B_AckSemaphore = xSemaphoreCreateBinary();
-  Pump_AckSemaphore = xSemaphoreCreateBinary();
-  Soil_AckSemaphore = xSemaphoreCreateBinary();
   i2c_mutex = xSemaphoreCreateMutex();
   readings_mutex = xSemaphoreCreateMutex();
+  init_message_ack_tracking();
 }
 
 void pump_button_task(void *arg) {
@@ -206,6 +199,8 @@ void app_main(void) {
     ESP_LOGE(TAG, "data module Failed to initialize ");
   }
 
+  init_semaphores();
+  vTaskDelay(100);
   espnow_init2();
 
   // Check if waking up from deep sleep
@@ -234,8 +229,6 @@ void app_main(void) {
 
   vTaskDelay(pdMS_TO_TICKS(2000));
   i2c_master_init_(&i2c0bus);
-  vTaskDelay(100);
-  init_semaphores();
   vTaskDelay(100);
   modbus_init();
   vTaskDelay(100);

@@ -24,16 +24,6 @@
 #define NVS_MAPPING_PREFIX "map_"
 
 extern uint8_t g_nodeAddress;
-extern bool Valve_A_Acknowledged;
-extern bool Valve_B_Acknowledged;
-extern bool Pump_Acknowledged;
-extern bool Soil_pcb_Acknowledged;
-extern bool DRAIN_NOTE_feedback;
-
-extern SemaphoreHandle_t Valve_A_AckSemaphore;
-extern SemaphoreHandle_t Valve_B_AckSemaphore;
-extern SemaphoreHandle_t Pump_AckSemaphore;
-extern SemaphoreHandle_t Soil_AckSemaphore;
 extern TaskHandle_t valveTaskHandle;
 
 #define MAX_RETRIES 10
@@ -77,6 +67,75 @@ uint8_t sequence_number = 0;
 
 espnow_recv_data_t recv_data;
 static QueueHandle_t espnow_recv_queue = NULL;
+// Message acknowledgment tracking
+typedef struct {
+  uint8_t seq_num;
+  uint8_t device_addr;
+  bool acknowledged;
+  TickType_t send_time;
+} message_ack_t;
+
+#define MAX_PENDING_MESSAGES 10
+static message_ack_t pending_messages[MAX_PENDING_MESSAGES];
+static SemaphoreHandle_t ack_mutex = NULL;
+
+// Initialize acknowledgment tracking
+void init_message_ack_tracking(void) {
+  if (ack_mutex == NULL) {
+    ack_mutex = xSemaphoreCreateMutex();
+  }
+  memset(pending_messages, 0, sizeof(pending_messages));
+}
+
+// Add message to tracking
+void track_message(uint8_t seq_num, uint8_t device_addr) {
+  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
+      if (!pending_messages[i].acknowledged &&
+          pending_messages[i].seq_num == 0) {
+        pending_messages[i].seq_num = seq_num;
+        pending_messages[i].device_addr = device_addr;
+        pending_messages[i].acknowledged = false;
+        pending_messages[i].send_time = xTaskGetTickCount();
+        break;
+      }
+    }
+    xSemaphoreGive(ack_mutex);
+  }
+}
+
+// Mark message as acknowledged
+void mark_message_acknowledged(uint8_t device_addr) {
+  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
+      if (pending_messages[i].device_addr == device_addr &&
+          !pending_messages[i].acknowledged) {
+        pending_messages[i].acknowledged = true;
+        break;
+      }
+    }
+    xSemaphoreGive(ack_mutex);
+  }
+}
+
+// Check if latest message to device was acknowledged
+bool is_latest_message_acknowledged(uint8_t device_addr) {
+  bool acknowledged = false;
+  if (xSemaphoreTake(ack_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    for (int i = 0; i < MAX_PENDING_MESSAGES; i++) {
+      if (pending_messages[i].device_addr == device_addr) {
+        acknowledged = pending_messages[i].acknowledged;
+        if (acknowledged) {
+          // Clear the acknowledged message
+          memset(&pending_messages[i], 0, sizeof(message_ack_t));
+        }
+        break;
+      }
+    }
+    xSemaphoreGive(ack_mutex);
+  }
+  return acknowledged;
+}
 
 bool parse_sensor_message(const uint8_t *mac_addr, const char *message,
                           espnow_recv_data_t *data) {
@@ -162,87 +221,47 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
                           uint8_t source) {
   clearMessageQueue();
 
-  // Determine which semaphore we're waiting on
-  SemaphoreHandle_t ackSemaphore = NULL;
-  uint8_t device_type = GET_DEVICE_TYPE(valveAddress);
+  const int MAX_SEND_RETRIES = 3;
+  const int ACK_TIMEOUT_MS = 1000;
 
-  // Handle valve devices (any valve, not just A and B)
-  if (device_type == DEVICE_TYPE_VALVE) {
-    uint8_t plot_number = GET_PLOT_NUMBER(valveAddress);
-    if (plot_number == 1 && !Valve_A_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = valve %d ack", plot_number);
-      ackSemaphore = Valve_A_AckSemaphore;
-    } else if (plot_number == 2 && !Valve_B_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = valve %d ack", plot_number);
-      ackSemaphore = Valve_B_AckSemaphore;
-    }
-    // For plot numbers > 2, you might need additional semaphores or use a
-    // shared one
-  }
-  // Handle pump device
-  else if (valveAddress == PUMP_ADDRESS) {
-    if (!Pump_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = Pump ack");
-      ackSemaphore = Pump_AckSemaphore;
-    }
-  }
-  // Handle soil sensor devices (any soil sensor)
-  else if (device_type == DEVICE_TYPE_SOIL) {
-    if (!Soil_pcb_Acknowledged) {
-      ESP_LOGD(TAG, "acksemaphore = soil sensor ack");
-      ackSemaphore = Soil_AckSemaphore;
-    }
-  }
+  for (int retry = 0; retry < MAX_SEND_RETRIES; retry++) {
+    ESP_LOGD(TAG, "Sending command 0x%02X to 0x%02X (%s), attempt %d/%d",
+             command, valveAddress, get_pcb_name(valveAddress), retry + 1,
+             MAX_SEND_RETRIES);
 
-  if (ackSemaphore == NULL) {
-    ESP_LOGI(TAG, "No valid semaphore selected for address 0x%02X (%s)",
-             valveAddress, get_pcb_name(valveAddress));
-    return false;
-  }
-
-  bool commandAcknowledged = false;
-
-  for (int retry = 0; retry < MAX_RETRIES && !commandAcknowledged; retry++) {
-
-    // Send the message
-    ESP_LOGD(TAG,
-             "Queueing message: valveAddress=0x%02X, command=0x%02X, "
-             "source=0x%02X, retry=%d",
-             valveAddress, command, source, retry);
+    // Track this message for acknowledgment
+    uint8_t seq_num = sequence_number;
+    track_message(seq_num, valveAddress);
 
     ESPNOW_queueMessage(valveAddress, command, source, retry);
 
     // Wait for the message to be sent from queue
-    while (!ESPNOW_isQueueEmpty()) {
+    int wait_cycles = 0;
+    while (!ESPNOW_isQueueEmpty() && wait_cycles < 50) {
       vTaskDelay(pdMS_TO_TICKS(20));
+      wait_cycles++;
     }
 
-    // Wait for acknowledgment via semaphore
-    if (xSemaphoreTake(ackSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE) {
-      commandAcknowledged = true;
-      ESP_LOGI(TAG, "%s acknowledged command 0x%02X from %s on attempt %d",
-               get_pcb_name(valveAddress), command, get_pcb_name(source),
-               retry + 1);
-
-      // Give the semaphore back immediately after successful take
-      xSemaphoreGive(ackSemaphore);
-      break;
+    // Wait for acknowledgment
+    TickType_t start_time = xTaskGetTickCount();
+    while ((xTaskGetTickCount() - start_time) < pdMS_TO_TICKS(ACK_TIMEOUT_MS)) {
+      if (is_latest_message_acknowledged(valveAddress)) {
+        ESP_LOGI(TAG, "%s acknowledged command 0x%02X from %s on attempt %d",
+                 get_pcb_name(valveAddress), command, get_pcb_name(source),
+                 retry + 1);
+        return true;
+      }
+      vTaskDelay(pdMS_TO_TICKS(50));
     }
 
-    if (!commandAcknowledged) {
-      ESP_LOGI(TAG,
-               "No acknowledgment received for %s, command 0x%02X. Retry %d/%d",
-               get_pcb_name(valveAddress), command, retry + 1, MAX_RETRIES);
-    }
+    ESP_LOGW(TAG, "No acknowledgment from %s for command 0x%02X, retry %d/%d",
+             get_pcb_name(valveAddress), command, retry + 1, MAX_SEND_RETRIES);
   }
 
-  if (!commandAcknowledged) {
-    ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
-             get_pcb_name(valveAddress), MAX_RETRIES);
-    update_status_message("No ack %s", get_pcb_name(valveAddress));
-  }
-
-  return commandAcknowledged;
+  ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
+           get_pcb_name(valveAddress), MAX_SEND_RETRIES);
+  update_status_message("No ack %s", get_pcb_name(valveAddress));
+  return false;
 }
 
 // Function to clear message queue
@@ -464,7 +483,6 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     return;
   }
 
-  // Get device address from MAC
   uint8_t device_addr = get_device_from_mac(mac_addr);
   if (device_addr == 0xFF) {
     ESP_LOGD(TAG, "Send callback for unknown device MAC: " MACSTR,
@@ -472,82 +490,40 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     return;
   }
 
-  // Get PCB name for better logging
   const char *pcb_name = espnow_get_peer_name(mac_addr);
 
   if (status == ESP_NOW_SEND_SUCCESS) {
-    ESP_LOGD(TAG, "ESP-NOW message sent successfully to %s (0x%02X)", pcb_name,
+    ESP_LOGD(TAG, "Message sent successfully to %s (0x%02X)", pcb_name,
              device_addr);
 
-    // Process acknowledgment based on device type and address
+    // Just mark the message as acknowledged - that's it!
+    mark_message_acknowledged(device_addr);
+
+    // Optional: Log device type for debugging, but don't store state
     uint8_t device_type = GET_DEVICE_TYPE(device_addr);
     uint8_t plot_number = GET_PLOT_NUMBER(device_addr);
 
     switch (device_type) {
     case DEVICE_TYPE_VALVE:
-      // Handle valve acknowledgments
-      if (plot_number == 1 && !Valve_A_Acknowledged) {
-        Valve_A_Acknowledged = true;
-        xSemaphoreGive(Valve_A_AckSemaphore);
-        ESP_LOGD(TAG, "Gave Valve_A_AckSemaphore (Valve %d)", plot_number);
-      } else if (plot_number == 2 && !Valve_B_Acknowledged) {
-        Valve_B_Acknowledged = true;
-        xSemaphoreGive(Valve_B_AckSemaphore);
-        ESP_LOGD(TAG, "Gave Valve_B_AckSemaphore (Valve %d)", plot_number);
-      } else {
-        // For future valve expansion (plots 3, 4, etc.)
-        ESP_LOGD(TAG,
-                 "ACK from Valve %d (0x%02X) - no specific semaphore defined",
-                 plot_number, device_addr);
-      }
+      ESP_LOGD(TAG, "Valve %d acknowledged command", plot_number);
       break;
-
-    case DEVICE_TYPE_SOIL:
-      // Handle soil sensor acknowledgments (all use same semaphore for now)
-      if (!Soil_pcb_Acknowledged) {
-        Soil_pcb_Acknowledged = true;
-        xSemaphoreGive(Soil_AckSemaphore);
-        ESP_LOGD(TAG, "Gave Soil_AckSemaphore (Soil %d)", plot_number);
-      } else {
-        ESP_LOGD(TAG, "Soil %d already acknowledged", plot_number);
-      }
-      break;
-
     case DEVICE_TYPE_PUMP:
-      if (!Pump_Acknowledged) {
-        Pump_Acknowledged = true;
-        xSemaphoreGive(Pump_AckSemaphore);
-        ESP_LOGD(TAG, "Gave PUMP_AckSemaphore");
-      }
+      ESP_LOGD(TAG, "Pump acknowledged command");
       break;
-
-    case DEVICE_TYPE_MASTER:
-      ESP_LOGD(TAG, "Master ACK");
+    case DEVICE_TYPE_SOIL:
+      ESP_LOGD(TAG, "Soil sensor %d acknowledged", plot_number);
       break;
-
-    case DEVICE_TYPE_WEATHER:
-      ESP_LOGD(TAG, "Weather station %d ACK (0x%02X)", plot_number,
-               device_addr);
-      break;
-
     default:
-      // Handle special cases and legacy addresses
-      if (device_addr == 0xFE) {
-        ESP_LOGD(TAG, "Broadcast message");
-      } else {
-        ESP_LOGW(TAG, "Received ACK from unknown device: 0x%02X (%s)",
-                 device_addr, get_pcb_name(device_addr));
-      }
+      ESP_LOGD(TAG, "Device 0x%02X acknowledged", device_addr);
       break;
     }
   } else {
-    ESP_LOGW(TAG, "ESP-NOW message send failed to %s (0x%02X)", pcb_name,
-             device_addr);
+    ESP_LOGW(TAG, "Message send failed to %s (0x%02X)", pcb_name, device_addr);
+    // Message failed - the retry logic will handle this via timeout
   }
 }
 
 void processMasterMessage(comm_t *message) {
-  ValveState newState = getCurrentState();
   device_type = GET_DEVICE_TYPE(message->source);
   plot_number = GET_PLOT_NUMBER(message->source);
 
@@ -555,11 +531,9 @@ void processMasterMessage(comm_t *message) {
   case DEVICE_TYPE_VALVE:
     // Handle valve messages based on plot number
     if (plot_number == 1) {
-      valveAck(message);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve A handler)",
                plot_number);
     } else if (plot_number == 2) {
-      valveAck(message);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve B handler)",
                plot_number);
     }
@@ -568,11 +542,9 @@ void processMasterMessage(comm_t *message) {
   case DEVICE_TYPE_SOLENOID:
     // Handle valve messages based on plot number
     if (plot_number == 1) {
-      solenoidAck(message, newState);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve A handler)",
                plot_number);
     } else if (plot_number == 2) {
-      solenoidAck(message, newState);
       ESP_LOGD(TAG, "Processed message from Valve %d (using Valve B handler)",
                plot_number);
     }
@@ -792,43 +764,6 @@ void processValveMessage(comm_t *message) {
   vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-void reset_acknowledgements() {
-  Valve_A_Acknowledged = false;
-  Valve_B_Acknowledged = false;
-  Pump_Acknowledged = false;
-
-  // Explicitly set all semaphores to 0 (unavailable)
-  xSemaphoreTake(Valve_A_AckSemaphore, 0);
-  xSemaphoreTake(Valve_B_AckSemaphore, 0);
-  xSemaphoreTake(Pump_AckSemaphore, 0);
-}
-
-void valveAck(comm_t *message) {
-  if (message->command == 0xA1) { // Valve A ON acknowledgment
-    Valve_A_Acknowledged = true;
-    xSemaphoreGive(Valve_A_AckSemaphore);
-  } else if (message->command == 0xA2) { // Valve A OFF acknowledgment
-    Valve_A_Acknowledged = false;
-    xSemaphoreGive(Valve_A_AckSemaphore);
-  } else {
-    ESP_LOGD(TAG, "Ignored command from VALVE A: 0x%02X", message->command);
-  }
-}
-
-void solenoidAck(comm_t *message) {
-  if (message->command == 0xB1) { // Valve B ON acknowledgment
-    Valve_B_Acknowledged = true;
-    xSemaphoreGive(Valve_B_AckSemaphore);
-    ////update_status_message("Valve B ON");
-  } else if (message->command == 0xB2) { // Valve B OFF acknowledgment
-    Valve_B_Acknowledged = false;
-    xSemaphoreGive(Valve_B_AckSemaphore);
-    ////update_status_message("Valve B OFF");
-  } else {
-    ESP_LOGD(TAG, "Ignored command from VALVE B: 0x%02X", message->command);
-  }
-}
-
 void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
                     int rssi) {
   if (mac_addr == NULL || data == NULL || data_len <= 0) {
@@ -1038,11 +973,6 @@ void serialize_message(const comm_t *message, uint8_t *buffer) {
 }
 
 bool deserialize_message(const uint8_t *buffer, size_t size, comm_t *message) {
-  // if (size != sizeof(comm_t)) {
-  //   ESP_LOGW(TAG, "Not right size %d byte packet received instead of %d
-  //   byte",
-  //            size, sizeof(comm_t));
-  // }
 
   message->address = buffer[0];
   message->command = buffer[1];
@@ -1199,11 +1129,8 @@ void update_device_mappings_from_discovered_peers(void) {
 }
 
 esp_err_t espnow_init2(void) {
-  // ESP_LOGI(TAG,"inside espnow_init");
   wifi_init_for_espnow();
   vTaskDelay(pdMS_TO_TICKS(500));
-  // g_nodeAddress = SENSOR_ADDRESS;
-  //  uint8_t mac_addr = 0x00;
   //  Create configuration for the espnow library
   espnow_config_t config = {
       .pcb_name = get_pcb_name(
@@ -1662,8 +1589,6 @@ bool verify_device_mappings(void) {
     return false;
   }
 
-  int device_index = 0;
-
 #if CONFIG_MASTER
   // Add master address
   required_devices[device_index++] = MASTER_ADDRESS;
@@ -1842,8 +1767,6 @@ bool nvs_has_valid_mappings(void) {
 }
 
 void vTaskESPNOW(void *pvParameters) {
-  // ESP_LOGI(TAG,"inside vtask espnow");
-  uint8_t nodeAddress = *(uint8_t *)pvParameters;
   comm_t message = {0};
 
   // Initialize message queue if not already done

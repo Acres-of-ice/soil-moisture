@@ -57,35 +57,153 @@ set(PROJECT_VER ${BASE_VERSION})
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-project(soil_moisture VERSION ${BASE_VERSION})
+# Determine project name based on configuration
+if(CONFIG_MASTER)
+    set(PROJECT_NAME_CUSTOM "${CONFIG_SITE_NAME}_MASTER")
+elseif(CONFIG_SOIL)
+    set(PROJECT_NAME_CUSTOM "${CONFIG_SITE_NAME}_SOIL${CONFIG_PLOT_NUMBER}")
+elseif(CONFIG_VALVE)
+    set(PROJECT_NAME_CUSTOM "${CONFIG_SITE_NAME}_VALVE${CONFIG_PLOT_NUMBER}")
+elseif(CONFIG_SOLENOID)
+    set(PROJECT_NAME_CUSTOM "${CONFIG_SITE_NAME}_SOLENOID${CONFIG_PLOT_NUMBER}")
+elseif(CONFIG_PUMP)
+    set(PROJECT_NAME_CUSTOM "${CONFIG_SITE_NAME}_PUMP")
+else()
+    set(PROJECT_NAME_CUSTOM "soil_moisture")
+endif()
 
+project(${PROJECT_NAME_CUSTOM} VERSION ${BASE_VERSION})
+
+# Enhanced build configuration display function
 function(display_build_config)
-    message(STATUS "")
-    message(STATUS "╔════════════════════════════════════════╗")
-    message(STATUS "║           BUILD CONFIGURATION         ║")
-    message(STATUS "╠════════════════════════════════════════╣")
-    
-    # Device information
-    message(STATUS "║ Version: ${PROJECT_VERSION_FROM_FILE}")
-    message(STATUS "║ Site: ${CONFIG_SITE_NAME}")
-    
-    # Device type with address calculation
-    if(CONFIG_MASTER)
-        message(STATUS "║ Device: MASTER (Address: 0x01)")
-    elseif(CONFIG_SOIL)
-        math(EXPR SOIL_ADDR "32 + ${CONFIG_PLOT_NUMBER}")  # 0x20 + plot
-        message(STATUS "║ Device: SOIL ${CONFIG_PLOT_NUMBER} (Address: 0x${SOIL_ADDR})")
-    elseif(CONFIG_VALVE)
-        math(EXPR VALVE_ADDR "16 + ${CONFIG_PLOT_NUMBER}")  # 0x10 + plot
-        message(STATUS "║ Device: VALVE ${CONFIG_PLOT_NUMBER} (Address: 0x${VALVE_ADDR})")
-    elseif(CONFIG_PUMP)
-        message(STATUS "║ Device: PUMP (Address: 0x42)")
+    # Determine chip type from IDF_TARGET
+    set(CHIP_TYPE "Unknown")
+    if(DEFINED IDF_TARGET)
+        string(TOUPPER ${IDF_TARGET} CHIP_TYPE)
+    elseif(DEFINED CONFIG_IDF_TARGET)
+        string(TOUPPER ${CONFIG_IDF_TARGET} CHIP_TYPE)
     endif()
     
-    message(STATUS "║ Plots: ${CONFIG_NUM_PLOTS}")
-    message(STATUS "╠════════════════════════════════════════╣")
+    # Calculate device address and determine device info
+    set(DEVICE_INFO "")
+    set(DEVICE_ADDR "")
+    
+    if(CONFIG_MASTER)
+        set(DEVICE_INFO "MASTER")
+        set(DEVICE_ADDR "0x01")
+    elseif(CONFIG_SOIL)
+        math(EXPR SOIL_ADDR "32 + ${CONFIG_PLOT_NUMBER}")  # 0x20 + plot
+        string(TOUPPER "${SOIL_ADDR}" SOIL_ADDR_HEX)
+        math(EXPR SOIL_ADDR_HEX "${SOIL_ADDR}" OUTPUT_FORMAT HEXADECIMAL)
+        set(DEVICE_INFO "SOIL ${CONFIG_PLOT_NUMBER}")
+        set(DEVICE_ADDR "${SOIL_ADDR_HEX}")
+    elseif(CONFIG_VALVE)
+        math(EXPR VALVE_ADDR "16 + ${CONFIG_PLOT_NUMBER}")  # 0x10 + plot
+        string(TOUPPER "${VALVE_ADDR}" VALVE_ADDR_HEX)
+        math(EXPR VALVE_ADDR_HEX "${VALVE_ADDR}" OUTPUT_FORMAT HEXADECIMAL)
+        set(DEVICE_INFO "VALVE ${CONFIG_PLOT_NUMBER}")
+        set(DEVICE_ADDR "${VALVE_ADDR_HEX}")
+    elseif(CONFIG_SOLENOID)
+        math(EXPR SOLENOID_ADDR "96 + ${CONFIG_PLOT_NUMBER}")  # 0x60 + plot
+        string(TOUPPER "${SOLENOID_ADDR}" SOLENOID_ADDR_HEX)
+        math(EXPR SOLENOID_ADDR_HEX "${SOLENOID_ADDR}" OUTPUT_FORMAT HEXADECIMAL)
+        set(DEVICE_INFO "SOLENOID ${CONFIG_PLOT_NUMBER}")
+        set(DEVICE_ADDR "${SOLENOID_ADDR_HEX}")
+    elseif(CONFIG_PUMP)
+        set(DEVICE_INFO "PUMP")
+        set(DEVICE_ADDR "0x42")
+    endif()
+    
+    # Hardware features detection
+    set(HW_FEATURES "")
+    if(CONFIG_ENABLE_GSM)
+        list(APPEND HW_FEATURES "GSM")
+    endif()
+    if(CONFIG_ENABLE_VALVE)
+        list(APPEND HW_FEATURES "Valves")
+    endif()
+    if(CONFIG_ENABLE_TEMP_HUMIDITY)
+        list(APPEND HW_FEATURES "TempHum")
+    endif()
+    if(CONFIG_ENABLE_FLOWMETER)
+        list(APPEND HW_FEATURES "Flow")
+    endif()
+    if(CONFIG_ENABLE_PRESSURE)
+        list(APPEND HW_FEATURES "Pressure")
+    endif()
+    if(CONFIG_ENABLE_VOLTAGE_CUTOFF)
+        list(APPEND HW_FEATURES "VoltCutoff")
+    endif()
+    if(CONFIG_ENABLE_SIMULATION_MODE)
+        list(APPEND HW_FEATURES "SIMULATION")
+    endif()
+    
+    # Join features with commas
+    string(JOIN ", " HW_FEATURES_STR ${HW_FEATURES})
+    if(NOT HW_FEATURES_STR)
+        set(HW_FEATURES_STR "None")
+    endif()
+    
+    # Color codes for prominent display
+    string(ASCII 27 ESC)
+    set(BOLD "${ESC}[1m")
+    set(GREEN "${ESC}[32m")
+    set(BLUE "${ESC}[34m")
+    set(CYAN "${ESC}[36m")
+    set(YELLOW "${ESC}[33m")
+    set(RED "${ESC}[31m")
+    set(RESET "${ESC}[0m")
+    
+    # Display the configuration with enhanced formatting
+    message(STATUS "")
+    message(STATUS "${BOLD}${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${RESET}")
+    message(STATUS "${BOLD}${GREEN}║                              BUILD CONFIGURATION                            ║${RESET}")
+    message(STATUS "${BOLD}${GREEN}╠══════════════════════════════════════════════════════════════════════════════╣${RESET}")
+    message(STATUS "${GREEN}║${RESET}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Version:${RESET}      ${BOLD}${YELLOW}${PROJECT_VERSION}${RESET}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Site:${RESET}         ${BOLD}${CONFIG_SITE_NAME}${RESET}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Device:${RESET}       ${BOLD}${BLUE}${DEVICE_INFO}${RESET} ${CYAN}(Address: ${DEVICE_ADDR})${RESET}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Chip:${RESET}         ${CHIP_TYPE}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Plots:${RESET}        ${CONFIG_NUM_PLOTS}")
+    message(STATUS "${GREEN}║${RESET} ${BOLD}${CYAN}Features:${RESET}     ${HW_FEATURES_STR}")
+    
+    # Special warnings for important configurations
+    if(CONFIG_ENABLE_SIMULATION_MODE)
+        message(STATUS "${GREEN}║${RESET}")
+        message(STATUS "${GREEN}║${RESET} ${BOLD}${RED}⚠ WARNING: SIMULATION MODE ENABLED ⚠${RESET}")
+    endif()
+    
+    if(CONFIG_SITE_TEST)
+        message(STATUS "${GREEN}║${RESET}")
+        message(STATUS "${GREEN}║${RESET} ${BOLD}${YELLOW}ℹ INFO: TEST SITE CONFIGURATION${RESET}")
+    endif()
+    
+    message(STATUS "${GREEN}║${RESET}")
+    message(STATUS "${BOLD}${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${RESET}")
+    message(STATUS "")
+    
+    # Get user confirmation
+    message(STATUS "${BOLD}${CYAN}Please verify the above configuration is correct.${RESET}")
+    message(STATUS "${CYAN}Press ENTER to continue or Ctrl+C to abort...${RESET}")
+    
+    # Check if we're in a CI environment or automated build
+    if(DEFINED ENV{CI} OR DEFINED ENV{GITHUB_ACTIONS} OR DEFINED ENV{GITLAB_CI} OR DEFINED ENV{BUILD_AUTOMATION})
+        message(STATUS "${YELLOW}Automated build environment detected - skipping user confirmation${RESET}")
+    else()
+        # Pause for user input
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E echo ""
+            COMMAND bash -c "read -p ''"
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            ERROR_QUIET
+        )
+    endif()
+    
+    message(STATUS "${GREEN}✓ Configuration confirmed - proceeding with build...${RESET}")
+    message(STATUS "")
 endfunction()
 
+# Call the enhanced display function early in the build process
 display_build_config()
 
 # Optional: Print version information

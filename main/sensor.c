@@ -660,7 +660,7 @@ void simulation_task(void *pvParameters) {
         battery_values[i] = current_test.battery[i];
       } else {
         // For additional plots beyond 2, use default values
-        soil_values[i] = CONFIG_SOIL_WET + 5; // Well-watered
+        soil_values[i] = CONFIG_PLOT_WET + 5; // Well-watered
         battery_values[i] = 85 + (i * 2);     // Good battery levels
       }
     }

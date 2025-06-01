@@ -24,13 +24,11 @@ bool DRAIN_mode = pdFALSE;
 
 static ValveState currentState = STATE_IDLE;
 static TickType_t stateEntryTime = 0;
-
 static TickType_t errorEntryTime = 0; // Track when we entered error state
-// bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
 int counter = 1;
-
+int current_plot = -1; // -1 means no plot active
 bool errorConditionMet = false;
 
 static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
@@ -39,27 +37,6 @@ static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
 
 static const char *PRESSURE_STATE_STR[] = {
     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
-
-bool Valve_A_Acknowledged = false;
-bool Valve_B_Acknowledged = false;
-bool Pump_Acknowledged = false;
-bool Soil_pcb_Acknowledged = false;
-bool AIR_NOTE_acknowledged = false;
-bool DRAIN_NOTE_feedback = false;
-bool SOURCE_NOTE_feedback = false;
-bool heat_on = false;
-
-static int moisture_level = 0;
-
-void update_moisture_readings(int a) { moisture_level = a; }
-
-static moisture_state_t get_moisture_state(float humidity) {
-  if (humidity >= 80)
-    return MOISTURE_HIGH;
-  if (humidity >= 20)
-    return MOISTURE_NORMAL;
-  return MOISTURE_LOW;
-}
 
 const char *valveStateToString(ValveState state) {
   switch (state) {
@@ -208,7 +185,6 @@ void updateValveState(void *pvParameters) {
     if (isStateTimedOut(newState)) {
       ESP_LOGE(TAG, "Timeout State machine");
       setCurrentState(STATE_IDLE);
-      reset_acknowledgements();
       current_plot = -1;               // Reset current plot
       vTaskDelay(pdMS_TO_TICKS(1000)); // Short delay before continuing
       continue;
@@ -217,7 +193,6 @@ void updateValveState(void *pvParameters) {
     switch (newState) {
 
     case STATE_IDLE:
-      reset_acknowledgements();
       current_plot = -1; // No active plot
       ESP_LOGI(TAG, "IDLE");
 
@@ -241,7 +216,7 @@ void updateValveState(void *pvParameters) {
       int plot_to_irrigate = -1;
       if (dripTimer()) {
         for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
-          if (current_readings.soil[i] < CONFIG_SOIL_DRY) {
+          if (current_readings.soil[i] < CONFIG_PLOT_DRY) {
             plot_to_irrigate = i;
             break; // Take the first plot that needs irrigation
           }
@@ -309,16 +284,14 @@ void updateValveState(void *pvParameters) {
       // Update sensor readings
       get_sensor_readings(&current_readings);
 
-      if (current_readings.soil[current_plot] >= CONFIG_SOIL_WET) {
+      if (current_readings.soil[current_plot] >= CONFIG_PLOT_WET) {
         ESP_LOGI(TAG, "Plot %d moisture reached threshold: %d%%",
                  current_plot + 1, current_readings.soil[current_plot]);
-        reset_acknowledgements();
         newState = STATE_PUMP_OFF;
       } else if (xTaskGetTickCount() - stateEntryTime >
                  pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
         ESP_LOGW(TAG, "Irrigation timeout for plot %d: %d%%", current_plot + 1,
                  current_readings.soil[current_plot]);
-        reset_acknowledgements();
         newState = STATE_PUMP_OFF;
       } else {
         ESP_LOGI(TAG, "Waiting for plot %d: %d%%", current_plot + 1,

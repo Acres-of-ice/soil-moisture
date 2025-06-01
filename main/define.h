@@ -97,12 +97,6 @@ extern data_statistics_t data_stats;
 #define MY_ADC_ATTEN ADC_ATTEN_DB_12
 #define SAMPLE_DURATION_MS 30000
 #define SAMPLE_INTERVAL_MS 1000
-// #define SOIL_DRY_ADC_VALUE 0
-// #define SOIL_MOIST_ADC_VALUE 0
-static int32_t DRY_STATE = 0;
-static int32_t WET_STATE = 0;
-static int32_t soil_dry_adc_value = 0;
-static int32_t soil_wet_adc_value = 0;
 
 // ==================== SMS Definitions ====================
 
@@ -269,10 +263,6 @@ extern bool wifi_enabled, sta_enabled;
 extern bool SPRAY_mode, DRAIN_mode, AUTO_mode;
 extern float Twater_cal;
 
-extern SemaphoreHandle_t DRAIN_NOTE_AckSemaphore;
-extern SemaphoreHandle_t SOURCE_NOTE_AckSemaphore;
-extern SemaphoreHandle_t AIR_NOTE_AckSemaphore;
-extern SemaphoreHandle_t HEAT_AckSemaphore;
 extern SemaphoreHandle_t readings_mutex;
 extern SemaphoreHandle_t i2c_mutex;
 extern SemaphoreHandle_t stateMutex;
@@ -352,41 +342,41 @@ typedef struct {
 // Test cases for soil moisture simulation (dynamic plots)
 static const test_case_t test_cases[] = {
     // Low moisture scenarios (should trigger irrigation)
-    {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
+    {.soil = {CONFIG_PLOT_DRY - 15, CONFIG_PLOT_DRY - 5},
      .battery = {85, 87},
      .description = "Both plots dry - both should trigger irrigation"},
-    {.soil = {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15},
+    {.soil = {CONFIG_PLOT_DRY - 5, CONFIG_PLOT_DRY - 15},
      .battery = {82, 84},
      .description =
          "Plot 1 marginal, Plot 2 dry - Plot 2 should trigger irrigation"},
-    {.soil = {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5},
+    {.soil = {CONFIG_PLOT_DRY - 15, CONFIG_PLOT_DRY - 5},
      .battery = {88, 91},
      .description =
          "Plot 1 dry, Plot 2 marginal - Plot 1 should trigger irrigation"},
     // Mixed moisture scenarios
-    {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5},
+    {.soil = {CONFIG_PLOT_DRY - 10, CONFIG_PLOT_WET + 5},
      .battery = {86, 93},
      .description =
          "Plot 1 dry, Plot 2 wet - only Plot 1 should trigger irrigation"},
-    {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10},
+    {.soil = {CONFIG_PLOT_WET + 5, CONFIG_PLOT_DRY - 10},
      .battery = {90, 78},
      .description =
          "Plot 1 wet, Plot 2 dry - only Plot 2 should trigger irrigation"},
     // High moisture scenarios (should not trigger irrigation)
-    {.soil = {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 10},
+    {.soil = {CONFIG_PLOT_WET + 5, CONFIG_PLOT_WET + 10},
      .battery = {88, 92},
      .description = "Both plots wet - neither should trigger irrigation"},
-    {.soil = {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20},
+    {.soil = {CONFIG_PLOT_WET + 15, CONFIG_PLOT_WET + 20},
      .battery = {94, 96},
      .description = "Both plots very wet - neither should trigger irrigation"},
     // Edge cases
-    {.soil = {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY},
+    {.soil = {CONFIG_PLOT_DRY, CONFIG_PLOT_DRY},
      .battery = {80, 80},
      .description = "Both plots at threshold - edge case"},
-    {.soil = {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1},
+    {.soil = {CONFIG_PLOT_DRY - 1, CONFIG_PLOT_WET + 1},
      .battery = {75, 95},
      .description = "Plot 1 just below threshold, Plot 2 just above threshold"},
-    {.soil = {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1},
+    {.soil = {CONFIG_PLOT_WET + 1, CONFIG_PLOT_DRY - 1},
      .battery = {93, 77},
      .description = "Plot 1 just above threshold, Plot 2 just below threshold"},
     // Extreme cases
@@ -397,11 +387,11 @@ static const test_case_t test_cases[] = {
      .battery = {99, 60},
      .description = "Plot 1 saturated, Plot 2 bone dry"},
     // Battery testing scenarios
-    {.soil = {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_DRY - 8},
+    {.soil = {CONFIG_PLOT_DRY - 10, CONFIG_PLOT_DRY - 8},
      .battery = {25, 15},
      .description = "Low battery levels with dry soil - irrigation with low "
                     "battery warning"},
-    {.soil = {CONFIG_SOIL_WET + 10, CONFIG_SOIL_WET + 8},
+    {.soil = {CONFIG_PLOT_WET + 10, CONFIG_PLOT_WET + 8},
      .battery = {5, 8},
      .description =
          "Critical battery levels with wet soil - battery warning only"}};

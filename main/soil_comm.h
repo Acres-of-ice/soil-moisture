@@ -11,17 +11,12 @@
 // Initialize ESP-NOW communication
 esp_err_t espnow_init();
 
-// Forward declarations for callback functions
-// static void espnow_send_cb(const uint8_t *mac_addr,
-//                            esp_now_send_status_t status);
-// static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
-//                            const uint8_t *data, int len);
-
 // Command sending with retries and acknowledgment
 bool sendCommandWithRetry(uint8_t deviceAddress, uint8_t command,
                           uint8_t source);
 // Queue management
 void clearMessageQueue();
+void init_message_ack_tracking(void);
 
 // Message processing functions
 void processReceivedMessage(comm_t *message);
