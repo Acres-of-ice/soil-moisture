@@ -44,6 +44,7 @@ extern uint8_t sequence_number;
 #define IS_VALVE_CONTROLLER(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_VALVE)
 #define IS_MASTER_DEVICE(addr) ((addr) == MASTER_ADDRESS)
 #define IS_PUMP_DEVICE(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_PUMP)
+#define IS_SOLENOID_DEVICE(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_SOLENOID)
 
 // ==================== GPIO Definitions ====================
 #define RELAY_1 GPIO_NUM_16

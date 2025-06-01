@@ -104,7 +104,7 @@ function(display_build_config)
         set(DEVICE_INFO "VALVE ${CONFIG_PLOT_NUMBER}")
         set(DEVICE_ADDR "${VALVE_ADDR_HEX}")
     elseif(CONFIG_SOLENOID)
-        math(EXPR SOLENOID_ADDR "96 + ${CONFIG_PLOT_NUMBER}")  # 0x60 + plot
+        math(EXPR VALVE_ADDR "16 + ${CONFIG_PLOT_NUMBER}")  # 0x10 + plot
         string(TOUPPER "${SOLENOID_ADDR}" SOLENOID_ADDR_HEX)
         math(EXPR SOLENOID_ADDR_HEX "${SOLENOID_ADDR}" OUTPUT_FORMAT HEXADECIMAL)
         set(DEVICE_INFO "SOLENOID ${CONFIG_PLOT_NUMBER}")
