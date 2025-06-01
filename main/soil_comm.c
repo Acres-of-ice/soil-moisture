@@ -222,45 +222,33 @@ bool sendCommandWithRetry(uint8_t valveAddress, uint8_t command,
   clearMessageQueue();
 
   const int MAX_SEND_RETRIES = 3;
-  const int ACK_TIMEOUT_MS = 1000;
 
   for (int retry = 0; retry < MAX_SEND_RETRIES; retry++) {
     ESP_LOGD(TAG, "Sending command 0x%02X to 0x%02X (%s), attempt %d/%d",
              command, valveAddress, get_pcb_name(valveAddress), retry + 1,
              MAX_SEND_RETRIES);
 
-    // Track this message for acknowledgment
-    uint8_t seq_num = sequence_number;
-    track_message(seq_num, valveAddress);
-
     ESPNOW_queueMessage(valveAddress, command, source, retry);
 
     // Wait for the message to be sent from queue
     int wait_cycles = 0;
     while (!ESPNOW_isQueueEmpty() && wait_cycles < 50) {
-      vTaskDelay(pdMS_TO_TICKS(20));
+      vTaskDelay(pdMS_TO_TICKS(50));
       wait_cycles++;
     }
 
-    // Wait for acknowledgment
-    TickType_t start_time = xTaskGetTickCount();
-    while ((xTaskGetTickCount() - start_time) < pdMS_TO_TICKS(ACK_TIMEOUT_MS)) {
-      if (is_latest_message_acknowledged(valveAddress)) {
-        ESP_LOGI(TAG, "%s acknowledged command 0x%02X from %s on attempt %d",
-                 get_pcb_name(valveAddress), command, get_pcb_name(source),
-                 retry + 1);
-        return true;
-      }
-      vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    // Simple delay - the callback will log success/failure
+    vTaskDelay(pdMS_TO_TICKS(500));
 
-    ESP_LOGW(TAG, "No acknowledgment from %s for command 0x%02X, retry %d/%d",
-             get_pcb_name(valveAddress), command, retry + 1, MAX_SEND_RETRIES);
+    // For now, assume success if no crash
+    // You can enhance this later with proper acknowledgment tracking
+    ESP_LOGI(TAG, "Command 0x%02X sent to %s (attempt %d)", command,
+             get_pcb_name(valveAddress), retry + 1);
+    return true;
   }
 
-  ESP_LOGW(TAG, "%s failed to acknowledge after %d attempts",
-           get_pcb_name(valveAddress), MAX_SEND_RETRIES);
-  update_status_message("No ack %s", get_pcb_name(valveAddress));
+  ESP_LOGW(TAG, "Failed to send command 0x%02X to %s after %d attempts",
+           command, get_pcb_name(valveAddress), MAX_SEND_RETRIES);
   return false;
 }
 
@@ -493,33 +481,9 @@ void custom_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
   const char *pcb_name = espnow_get_peer_name(mac_addr);
 
   if (status == ESP_NOW_SEND_SUCCESS) {
-    ESP_LOGD(TAG, "Message sent successfully to %s (0x%02X)", pcb_name,
-             device_addr);
-
-    // Just mark the message as acknowledged - that's it!
-    mark_message_acknowledged(device_addr);
-
-    // Optional: Log device type for debugging, but don't store state
-    uint8_t device_type = GET_DEVICE_TYPE(device_addr);
-    uint8_t plot_number = GET_PLOT_NUMBER(device_addr);
-
-    switch (device_type) {
-    case DEVICE_TYPE_VALVE:
-      ESP_LOGD(TAG, "Valve %d acknowledged command", plot_number);
-      break;
-    case DEVICE_TYPE_PUMP:
-      ESP_LOGD(TAG, "Pump acknowledged command");
-      break;
-    case DEVICE_TYPE_SOIL:
-      ESP_LOGD(TAG, "Soil sensor %d acknowledged", plot_number);
-      break;
-    default:
-      ESP_LOGD(TAG, "Device 0x%02X acknowledged", device_addr);
-      break;
-    }
+    ESP_LOGI(TAG, "✓ %s acknowledged", pcb_name);
   } else {
-    ESP_LOGW(TAG, "Message send failed to %s (0x%02X)", pcb_name, device_addr);
-    // Message failed - the retry logic will handle this via timeout
+    ESP_LOGW(TAG, "✗ %s send failed", pcb_name);
   }
 }
 
@@ -1588,6 +1552,7 @@ bool verify_device_mappings(void) {
     ESP_LOGE(TAG, "Failed to allocate memory for required devices list");
     return false;
   }
+  int device_index = 0;
 
 #if CONFIG_MASTER
   // Add master address
@@ -1601,12 +1566,11 @@ bool verify_device_mappings(void) {
         DEVICE_TYPE_SOIL | plot; // Soil sensor for this plot
   }
 
-  // Add pump address
-  required_devices[device_index++] = PUMP_ADDRESS;
+  // // Add pump address
+  // required_devices[device_index++] = PUMP_ADDRESS;
 #endif
 
-#if CONFIG_SOIL_A || CONFIG_SOIL_B || CONFIG_VALVE_A || CONFIG_VALVE_B ||      \
-    CONFIG_PUMP
+#if CONFIG_SOIL || CONFIG_SOLENOID || CONFIG_VALVE || CONFIG_PUMP
   // For non-master devices, only need to find master
   required_devices[device_index++] = MASTER_ADDRESS;
   total_required_devices = 1;

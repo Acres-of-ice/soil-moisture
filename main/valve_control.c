@@ -155,7 +155,7 @@ const char *get_pcb_name(uint8_t nodeAddress) {
   return dynamic_name;
 }
 
-static bool isStateTimedOut(ValveState state) {
+bool isStateTimedOut(ValveState state) {
   // Don't timeout in IDLE or calibration state
   if ((state == STATE_IDLE) || (state == STATE_ERROR)) {
     return false;

@@ -151,13 +151,13 @@ void app_main(void) {
   esp_log_level_set("*", ESP_LOG_INFO);
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
-  esp_log_level_set("ESPNOW", ESP_LOG_INFO);
-  // esp_log_level_set("espnow_lib", ESP_LOG_INFO);
-  esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+  // esp_log_level_set("ESPNOW", ESP_LOG_DEBUG);
+  // esp_log_level_set("espnow_lib", ESP_LOG_DEBUG);
+  // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
   // esp_log_level_set("GSM", ESP_LOG_DEBUG);
-  esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
+  // esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
   // esp_log_level_set("DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("LoRa", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT", ESP_LOG_DEBUG);

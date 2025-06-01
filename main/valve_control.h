@@ -23,7 +23,7 @@ typedef enum {
 } ValveState;
 
 void update_moisture_readings(int a);
-static bool isStateTimedOut(ValveState state);
+bool isStateTimedOut(ValveState state);
 void updateValveState(void *pvParameters);
 ValveState getCurrentState();
 void setCurrentState(ValveState newState);

@@ -80,16 +80,22 @@ menu "App Configuration"
         default "n" if MASTER
         default "n" if VALVE || SOIL || PUMP
 
-    config PARTITION_TABLE_CUSTOM
-        bool "Use custom partition table"
-        default y
-        help
-            Use custom partition table based on PCB type
-
-    config PARTITION_TABLE_CUSTOM_FILENAME
-        string
-        default "partitions/master.csv" if MASTER
-        default "partitions/valves.csv" if VALVE || SOIL || PUMP || SOLENOID
+    # config PARTITION_TABLE_SINGLE_APP
+    #     bool
+    #     default n
+    #     help
+    #         Use custom partition table based on PCB type
+    #
+    # config PARTITION_TABLE_CUSTOM
+    #     bool
+    #     default y
+    #     help
+    #         Use custom partition table based on PCB type
+    #
+    # config PARTITION_TABLE_CUSTOM_FILENAME
+    #     string
+    #     default "partitions/master.csv" if MASTER
+    #     default "partitions/valves.csv" if VALVE || SOIL || PUMP || SOLENOID
 
     # CPU Frequency Configuration
     config ESP_DEFAULT_CPU_FREQ_MHZ
