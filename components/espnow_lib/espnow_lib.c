@@ -421,7 +421,7 @@ bool is_own_mac(const uint8_t *mac_addr) {
   return (memcmp(mac_addr, s_own_mac, ESP_NOW_ETH_ALEN) == 0);
 }
 
-static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
+void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
   static const char *TAG = "STORE_PCB";
 
   if (mac_addr == NULL || pcb_name == NULL) {
@@ -511,8 +511,8 @@ static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
   }
 }
 
-static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
-                                      size_t len, bool include_pcb_name) {
+esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
+                               size_t len, bool include_pcb_name) {
   if (mac_addr == NULL || data == NULL || len == 0) {
     return ESP_ERR_INVALID_ARG;
   }
@@ -578,8 +578,8 @@ static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
   }
 }
 
-static int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
-                             uint16_t *seq, uint32_t *magic, char *pcb_name) {
+int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
+                      uint16_t *seq, uint32_t *magic, char *pcb_name) {
   espnow_data_t *buf = (espnow_data_t *)data;
   uint16_t crc, crc_cal = 0;
 

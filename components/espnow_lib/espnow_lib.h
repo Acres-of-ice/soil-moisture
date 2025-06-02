@@ -131,11 +131,11 @@ void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data,
 void espnow_task(void *pvParameter);
 void init_own_mac(void);
 bool is_own_mac(const uint8_t *mac_addr);
-static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name);
-static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
-                                      size_t len, bool include_pcb_name);
-static int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
-                             uint16_t *seq, uint32_t *magic, char *pcb_name);
+void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name);
+esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
+                               size_t len, bool include_pcb_name);
+int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
+                      uint16_t *seq, uint32_t *magic, char *pcb_name);
 void add_authenticated_peer(const uint8_t *mac_addr);
 
 /**

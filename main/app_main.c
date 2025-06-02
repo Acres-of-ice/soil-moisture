@@ -175,10 +175,6 @@ void app_main(void) {
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
 
-  // if (site_config.simulate) {
-  //   esp_log_level_set("ESPNOW", ESP_LOG_NONE);
-  // }
-
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
     ESP_LOGE(TAG, "SPI mutex Failed to create ");

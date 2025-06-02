@@ -74,6 +74,9 @@ endif()
 
 project(${PROJECT_NAME_CUSTOM} VERSION ${BASE_VERSION})
 
+message(STATUS "Flashing webapp")
+spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
+
 # # Enhanced build configuration display function
 # function(display_build_config VERSION_STRING)
 #     # Get the PROJECT_VERSION from parent scope
@@ -206,9 +209,6 @@ project(${PROJECT_NAME_CUSTOM} VERSION ${BASE_VERSION})
 #
 # display_build_config(${PROJECT_VERSION})
 
-# Optional: Print version information
-# message(STATUS "Flashing webapp")
-# spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
 
 # # Create images directory
 # file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)

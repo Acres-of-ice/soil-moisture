@@ -60,7 +60,7 @@ void processValveBMessage(comm_t *message, ValveState newState);
 void processPumpMessage(comm_t *message);
 void clearMessageQueue();
 
-static void wifi_init_for_espnow(void);
+void wifi_init_for_espnow(void);
 const char *get_pcb_name(uint8_t nodeAddress);
 uint8_t get_device_from_pcb_name(const char *pcb_name);
 void update_device_mappings_from_discovered_peers(void);

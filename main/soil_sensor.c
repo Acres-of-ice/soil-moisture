@@ -398,7 +398,7 @@ int8_t get_current_rssi(void) {
  * @return float Battery level percentage (0-100)
  */
 
-static float read_battery_voltage(void) {
+float read_battery_voltage(void) {
   if (!adc1_handle)
     soil_sensor_init(); // Ensure ADC is initialized
 

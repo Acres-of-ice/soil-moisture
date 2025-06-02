@@ -27,7 +27,7 @@
 #define SOIL_BATT_MAX_VOLTAGE 4.15f // Maximum voltage for battery
 #define SOIL_BATT_MIN_VOLTAGE 3.22f // Minimum voltage for battery
 int read_battery_level(void);
-static float read_battery_voltage(void);
+float read_battery_voltage(void);
 
 // #define SOIL_DRY_ADC_VALUE_ 3337
 // #define SOIL_MOIST_ADC_VALUE_B 2192
@@ -39,7 +39,7 @@ static float read_battery_voltage(void);
 #define SOIL_BATT_MAX_VOLTAGE 4.15f // Maximum voltage for battery
 #define SOIL_BATT_MIN_VOLTAGE 3.22f // Minimum voltage for battery
 int read_battery_level(void);
-static float read_battery_voltage(void);
+float read_battery_voltage(void);
 
 // Function prototypes for sensor operations
 void soil_sensor_init(void);

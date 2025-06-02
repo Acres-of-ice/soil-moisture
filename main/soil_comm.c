@@ -273,7 +273,7 @@ void clearMessageQueue() {
  * This function handles the core WiFi initialization needed specifically for
  * ESP-NOW
  */
-static void wifi_init_for_espnow(void) {
+void wifi_init_for_espnow(void) {
   ESP_LOGD(TAG, "Initializing WiFi for ESP-NOW communication");
 
   // Step 1: Basic system initialization

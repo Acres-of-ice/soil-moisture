@@ -29,30 +29,12 @@ size_t usedBytes = 0;
 static FILE *logFile = NULL;
 spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
-extern char header_buffer[512] = "";
+char header_buffer[512] = "";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
 data_statistics_t data_stats = {0};
-
-// Initialize moving average structure
-void init_data_statistics(void) {
-  memset(&data_stats, 0, sizeof(data_statistics_t));
-  strncpy(data_stats.last_data_time, fetchTime(),
-          sizeof(data_stats.last_data_time) - 1);
-  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
-
-  // Try to load previous statistics from SPIFFS if you want persistence
-  // This is optional but useful to maintain counts across reboots
-  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "rb");
-  if (stats_file != NULL) {
-    fread(&data_stats, sizeof(data_statistics_t), 1, stats_file);
-    fclose(stats_file);
-    ESP_LOGI(TAG, "Loaded existing statistics: %lu total data points",
-             data_stats.total_data_points);
-  }
-}
 
 void generate_data_file_header(char *header_buffer, size_t buffer_size) {
   // Start with the base header
@@ -213,7 +195,6 @@ esp_err_t init_data_module(void) {
   return ESP_OK;
 }
 
-// Initialize SPIFFS
 esp_err_t init_spiffs(void) {
   esp_vfs_spiffs_conf_t conf = {.base_path = SPIFFS_MOUNT_POINT,
                                 .partition_label = "storage",
@@ -221,8 +202,7 @@ esp_err_t init_spiffs(void) {
                                 .format_if_mount_failed = true};
   esp_err_t ret = esp_vfs_spiffs_register(&conf);
   if (ret != ESP_OK) {
-    ESP_LOGE("SPIFFS", "Failed to initialize SPIFFS (%s)",
-             esp_err_to_name(ret));
+    ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
     return ret;
   }
 
@@ -232,18 +212,30 @@ esp_err_t init_spiffs(void) {
     return ret;
   }
 
-  // Check if the file exists and its size
+  // Check if the data file exists
   FILE *dataFile = fopen(data_path, "r");
   if (!dataFile) {
-    ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
+    ESP_LOGI(TAG, "Data file doesn't exist, creating new one");
+
+    // Generate header first and log it
+    generate_data_file_header(header_buffer, sizeof(header_buffer));
+    ESP_LOGD(TAG, "Generated header: %s", header_buffer);
+    ESP_LOGD(TAG, "Header length: %d", strlen(header_buffer));
 
     dataFile = fopen(data_path, "w");
-    vTaskDelay(10);
     if (dataFile) {
-      generate_data_file_header(header_buffer, sizeof(header_buffer));
-      fputs(header_buffer, dataFile);
+      ESP_LOGD(TAG, "Successfully opened data file for writing");
+
+      int bytes_written = fputs(header_buffer, dataFile);
+      ESP_LOGD(TAG, "fputs returned: %d", bytes_written);
+
+      fflush(dataFile);
+      ESP_LOGD(TAG, "fflush completed");
+
+      fclose(dataFile);
+      ESP_LOGD(TAG, "File closed successfully");
     } else {
-      ESP_LOGI("SYSTEM",
+      ESP_LOGE("SYSTEM",
                "Error opening sensor_data.csv for initialization. Errno: %d",
                errno);
       char err_buf[100];
@@ -255,17 +247,18 @@ esp_err_t init_spiffs(void) {
     fclose(dataFile);
   }
 
-  // Check if the file exists and its size
+  // Same for log file...
   FILE *logFile = fopen(log_path, "r");
   if (!logFile) {
     ESP_LOGI("SYSTEM", "Initialising empty log file");
 
     logFile = fopen(log_path, "w");
-    vTaskDelay(10);
     if (logFile) {
       const char *header = "Time,Level,Tag,Message\n";
       fputs(header, logFile);
+      fflush(logFile);
       fclose(logFile);
+      ESP_LOGI("SYSTEM", "Log file header written successfully");
     } else {
       ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
                errno);

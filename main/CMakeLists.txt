@@ -29,12 +29,5 @@ idf_component_register(SRCS ${SRCS_LIST}
 file(READ ${CMAKE_SOURCE_DIR}/version.txt PROJECT_VERSION_FROM_FILE)
 string(STRIP ${PROJECT_VERSION_FROM_FILE} PROJECT_VERSION_FROM_FILE)
 
-# Set partition table filename based on device type
-if(CONFIG_MASTER)
-    set(ENV{CONFIG_PARTITION_TABLE_CUSTOM_FILENAME} "partitions/master.csv")
-else()
-    set(ENV{CONFIG_PARTITION_TABLE_CUSTOM_FILENAME} "partitions/valves.csv")
-endif()
-
 # Add compile definition
 target_compile_definitions(${COMPONENT_LIB} PRIVATE PROJECT_VERSION="${PROJECT_VERSION_FROM_FILE}")
