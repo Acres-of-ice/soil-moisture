@@ -74,8 +74,8 @@ endif()
 
 project(${PROJECT_NAME_CUSTOM} VERSION ${BASE_VERSION})
 
-message(STATUS "Flashing webapp")
-spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
+# message(STATUS "Flashing webapp")
+# spiffs_create_partition_image(storage spiffs_image FLASH_IN_PROJECT)
 
 # # Enhanced build configuration display function
 # function(display_build_config VERSION_STRING)
