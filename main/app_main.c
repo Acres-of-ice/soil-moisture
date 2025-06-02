@@ -415,13 +415,13 @@ void app_main(void) {
   );
 
   // Start ESP-NOW transmission task
-  // xTaskCreate(vTaskESPNOW_TX, // Transmission task
-  //             "transmit",     // Task name
-  //             1024 * 4,       // Stack size
-  //             NULL,           // No parameters needed
-  //             5,              // Priority
-  //             NULL            // No handle needed
-  // );
+  xTaskCreate(vTaskESPNOW_TX, // Transmission task
+              "transmit",     // Task name
+              1024 * 4,       // Stack size
+              NULL,           // No parameters needed
+              5,              // Priority
+              NULL            // No handle needed
+  );
 #endif
 
 #if CONFIG_SOIL_B
