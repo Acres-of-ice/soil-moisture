@@ -503,7 +503,8 @@ void sensor_task(void *pvParameters) {
 
 void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
                           int battery_values[CONFIG_NUM_PLOTS], float temp,
-                          float water_temp, float pressure, float discharge) {
+                          float humidity, float pressure, float water_temp,
+                          float discharge, float voltage) {
   if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
     // Update soil moisture for all plots
     if (soil_values != NULL) {
@@ -527,23 +528,17 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
       }
     }
 
-    // Only update optional parameters if they're not the sentinel value
-    if (temp != -999.0f)
-      simulated_readings.temperature = temp;
-    if (water_temp != -999.0f)
-      simulated_readings.water_temp = water_temp;
-    if (pressure != -999.0f)
-      simulated_readings.pressure = pressure;
-    if (discharge != -999.0f)
-      simulated_readings.discharge = discharge;
-
-    // Make sure we have a sane voltage value for simulation
-    if (simulated_readings.voltage <= 0.0f)
-      simulated_readings.voltage = 12.6f;
+    // Update all environmental sensor readings
+    simulated_readings.temperature = temp;
+    simulated_readings.humidity = humidity;
+    simulated_readings.water_temp = water_temp;
+    simulated_readings.pressure = pressure;
+    simulated_readings.discharge = discharge;
+    simulated_readings.voltage = voltage;
 
     xSemaphoreGive(readings_mutex);
 
-    // Enhanced LOGD message showing all plots
+    // Enhanced logging message showing all sensor readings
     char soil_str[128] = {0};
     char battery_str[128] = {0};
     int soil_offset = 0, battery_offset = 0;
@@ -555,22 +550,24 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
                    "%s%d%%", (i > 0) ? ", " : "", simulated_readings.soil[i]);
     }
 
-    // Build battery values string - now using %d for integers
+    // Build battery values string
     for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
       battery_offset += snprintf(
           battery_str + battery_offset, sizeof(battery_str) - battery_offset,
           "%s%d%%", (i > 0) ? ", " : "", simulated_readings.battery[i]);
     }
 
-    ESP_LOGD(TAG,
-             "Set simulated values - Soil: [%s], Battery: [%s], "
-             "Temp: %.2f°C, Water: %.2f°C, Pressure: %.2f bar, "
-             "Flow: %.2f l/s, Voltage: %.2f V",
-             soil_str, battery_str, simulated_readings.temperature,
-             simulated_readings.water_temp, simulated_readings.pressure,
-             simulated_readings.discharge, simulated_readings.voltage);
+    ESP_LOGI(
+        "Simulation",
+        "Set simulated values - Soil: [%s], Battery: [%s], "
+        "Temp: %.1f°C, Humidity: %.1f%%, Water: %.1f°C, Pressure: %.1f bar, "
+        "Flow: %.1f l/s, Voltage: %.1f V",
+        soil_str, battery_str, simulated_readings.temperature,
+        simulated_readings.humidity, simulated_readings.water_temp,
+        simulated_readings.pressure, simulated_readings.discharge,
+        simulated_readings.voltage);
   } else {
-    ESP_LOGW(TAG, "Failed to get mutex for setting simulated values");
+    ESP_LOGW("Simulation", "Failed to get mutex for setting simulated values");
   }
 }
 
@@ -628,6 +625,240 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
   } else {
     // Return last known values if mutex timeout
     ESP_LOGW(TAG, "Mutex timeout in get_sensor_readings");
+  }
+}
+
+// Random sensor value generation functions
+static float generate_random_temperature(void) {
+  // Generate temperature between 15°C and 45°C
+  return 15.0f + ((float)rand() / RAND_MAX) * 30.0f;
+}
+
+static float generate_random_humidity(void) {
+  // Generate humidity between 20% and 95%
+  return 20.0f + ((float)rand() / RAND_MAX) * 75.0f;
+}
+
+static float generate_random_pressure(void) {
+  // Generate pressure between 0.5 and 4.0 bar
+  return 0.5f + ((float)rand() / RAND_MAX) * 3.5f;
+}
+
+static float generate_random_water_temp(void) {
+  // Generate water temperature between 10°C and 40°C
+  return 10.0f + ((float)rand() / RAND_MAX) * 30.0f;
+}
+
+static float generate_random_discharge(void) {
+  // Generate discharge between 0.2 and 5.0 l/s
+  return 0.2f + ((float)rand() / RAND_MAX) * 4.8f;
+}
+
+static float generate_random_voltage(void) {
+  // Generate voltage between 10.0V and 14.5V (typical 12V system range)
+  return 10.0f + ((float)rand() / RAND_MAX) * 4.5f;
+}
+
+// Simulation task that sets all sensor readings
+void simulation_task(void *pvParameters) {
+  // Initialize mutex if not already done
+  if (readings_mutex == NULL) {
+    readings_mutex = xSemaphoreCreateMutex();
+  }
+
+  const char *TAG = "Simulation";
+  size_t test_index = 0;
+  bool use_random_mode = false; // Flag to switch between predefined and random
+
+  ESP_LOGI(TAG,
+           "Starting automated test sequence with %d test cases for %d plots",
+           NUM_TEST_CASES, CONFIG_NUM_PLOTS);
+
+  // Seed random number generator
+  srand(time(NULL));
+
+  while (1) {
+    test_case_t current_test;
+
+    if (use_random_mode) {
+      // Generate completely random test case
+      ESP_LOGI(TAG, "=== Random Test Case ===");
+
+      // Generate random soil and battery values
+      for (int i = 0; i < 2; i++) {
+        current_test.soil[i] = rand() % 101;          // 0-100%
+        current_test.battery[i] = 20 + (rand() % 81); // 20-100%
+      }
+
+      // Generate random environmental readings
+      current_test.temperature = generate_random_temperature();
+      current_test.humidity = generate_random_humidity();
+      current_test.pressure = generate_random_pressure();
+      current_test.water_temp = generate_random_water_temp();
+      current_test.discharge = generate_random_discharge();
+      current_test.voltage = generate_random_voltage();
+      current_test.description = "Randomly generated test case";
+
+    } else {
+      // Use predefined test case
+      current_test = test_cases[test_index];
+    }
+
+    // Set test values for all configured plots
+    int soil_values[CONFIG_NUM_PLOTS] = {0};
+    int battery_values[CONFIG_NUM_PLOTS] = {0};
+
+    // Copy the test values to the array (up to CONFIG_NUM_PLOTS)
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      if (i < 2) {
+        // Use test case values for first 2 plots
+        soil_values[i] = current_test.soil[i];
+        battery_values[i] = current_test.battery[i];
+      } else {
+        // For additional plots beyond 2, use random or default values
+        if (use_random_mode) {
+          soil_values[i] = rand() % 101;          // Random 0-100%
+          battery_values[i] = 20 + (rand() % 81); // Random 20-100%
+        } else {
+          soil_values[i] = CONFIG_PLOT_WET + 5; // Well-watered
+          battery_values[i] = 85 + (i * 2);     // Good battery levels
+        }
+      }
+    }
+
+    // Set all simulated values including environmental sensors
+    set_simulated_values(soil_values, battery_values, current_test.temperature,
+                         current_test.humidity, current_test.pressure,
+                         current_test.water_temp, current_test.discharge,
+                         current_test.voltage);
+
+    // Log test case details
+    if (use_random_mode) {
+      ESP_LOGI(TAG, "=== Random Test Case %zu ===", test_index + 1);
+    } else {
+      ESP_LOGI(TAG, "=== Test case %zu ===", test_index + 1);
+    }
+    ESP_LOGI(TAG, "Description: %s", current_test.description);
+
+    // Log all configured plots
+    char soil_log[128] = {0};
+    char battery_log[128] = {0};
+    int soil_offset = 0, battery_offset = 0;
+
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      soil_offset += snprintf(soil_log + soil_offset,
+                              sizeof(soil_log) - soil_offset, "%sPlot %d: %d%%",
+                              (i > 0) ? ", " : "", i + 1, soil_values[i]);
+      battery_offset += snprintf(
+          battery_log + battery_offset, sizeof(battery_log) - battery_offset,
+          "%sPlot %d: %d%%", (i > 0) ? ", " : "", i + 1, battery_values[i]);
+    }
+
+    ESP_LOGI(TAG, "Soil - %s", soil_log);
+    ESP_LOGI(TAG, "Battery - %s", battery_log);
+
+    // Log environmental sensor readings
+    ESP_LOGI(TAG, "Environmental Readings:");
+    ESP_LOGI(TAG, "  Temperature: %.1f°C", current_test.temperature);
+    ESP_LOGI(TAG, "  Humidity: %.1f%%", current_test.humidity);
+    ESP_LOGI(TAG, "  Pressure: %.1f bar", current_test.pressure);
+    ESP_LOGI(TAG, "  Water Temp: %.1f°C", current_test.water_temp);
+    ESP_LOGI(TAG, "  Discharge: %.1f l/s", current_test.discharge);
+    ESP_LOGI(TAG, "  Voltage: %.1f V", current_test.voltage);
+    ESP_LOGI(TAG, "==================");
+
+    // Move to next test case
+    if (use_random_mode) {
+      test_index++; // Just increment for random mode counter
+    } else {
+      test_index = (test_index + 1) % NUM_TEST_CASES;
+
+      // Switch to random mode after completing all predefined test cases twice
+      if (test_index == 0) {
+        static int cycle_count = 0;
+        cycle_count++;
+        if (cycle_count >= 2) {
+          use_random_mode = true;
+          ESP_LOGI(TAG, "Switching to random test case generation mode");
+        }
+      }
+    }
+
+    // Delay before next test
+    vTaskDelay(pdMS_TO_TICKS(TEST_DELAY_MS));
+  }
+
+  vTaskDelete(NULL);
+}
+
+// Updated set simulated values function with all sensor types
+void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
+                          int battery_values[CONFIG_NUM_PLOTS], float temp,
+                          float humidity, float pressure, float water_temp,
+                          float discharge, float voltage) {
+  if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+    // Update soil moisture for all plots
+    if (soil_values != NULL) {
+      for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+        simulated_readings.soil[i] = soil_values[i];
+      }
+    }
+
+    // Update battery levels for all plots
+    if (battery_values != NULL) {
+      for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+        simulated_readings.battery[i] = battery_values[i];
+      }
+    } else {
+      // Set default battery values if not provided
+      for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+        if (simulated_readings.battery[i] <= 0) {
+          simulated_readings.battery[i] =
+              85 + (i * 2); // Default: 85%, 87%, 89%, etc.
+        }
+      }
+    }
+
+    // Update all environmental sensor readings
+    simulated_readings.temperature = temp;
+    simulated_readings.humidity = humidity;
+    simulated_readings.water_temp = water_temp;
+    simulated_readings.pressure = pressure;
+    simulated_readings.discharge = discharge;
+    simulated_readings.voltage = voltage;
+
+    xSemaphoreGive(readings_mutex);
+
+    // Enhanced logging message showing all sensor readings
+    char soil_str[128] = {0};
+    char battery_str[128] = {0};
+    int soil_offset = 0, battery_offset = 0;
+
+    // Build soil values string
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      soil_offset +=
+          snprintf(soil_str + soil_offset, sizeof(soil_str) - soil_offset,
+                   "%s%d%%", (i > 0) ? ", " : "", simulated_readings.soil[i]);
+    }
+
+    // Build battery values string
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      battery_offset += snprintf(
+          battery_str + battery_offset, sizeof(battery_str) - battery_offset,
+          "%s%d%%", (i > 0) ? ", " : "", simulated_readings.battery[i]);
+    }
+
+    ESP_LOGI(
+        "Simulation",
+        "Set simulated values - Soil: [%s], Battery: [%s], "
+        "Temp: %.1f°C, Humidity: %.1f%%, Water: %.1f°C, Pressure: %.1f bar, "
+        "Flow: %.1f l/s, Voltage: %.1f V",
+        soil_str, battery_str, simulated_readings.temperature,
+        simulated_readings.humidity, simulated_readings.water_temp,
+        simulated_readings.pressure, simulated_readings.discharge,
+        simulated_readings.voltage);
+  } else {
+    ESP_LOGW("Simulation", "Failed to get mutex for setting simulated values");
   }
 }
 
