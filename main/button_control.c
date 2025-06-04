@@ -17,9 +17,8 @@ static char response_sms[32];
 
 bool demo_mode_active = false;
 bool use_simulated_values = false;
-TickType_t demo_start_time = 0;
-int demo_soil_A_value = 0;
-int demo_soil_B_value = 0;
+
+
 
 typedef struct {
   void (*short_press_action)(void);
@@ -84,7 +83,7 @@ void a_btn_long_press(void) {
     if (!demo_mode_active) {
         ESP_LOGI(TAG, "Starting demo mode");
         demo_mode_active = true;
-        demo_start_time = xTaskGetTickCount();
+        //demo_start_time = xTaskGetTickCount();
         
         // Set initial low values to trigger irrigation
         // demo_soil_A_value = 25;
@@ -324,7 +323,7 @@ void setup_conductor_buttons(void) {
                           d_btn_short_press, d_btn_long_press);
 }
 
-void button_task(void *pvParameters) {
+void lcd_button_task(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   button_event_t ev;
   QueueHandle_t button_events = initialize_button_queue(nodeAddress);
@@ -341,7 +340,7 @@ void button_task(void *pvParameters) {
 
   while (true) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      ESP_LOGE(TAG, "Low stack button task: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
     if (xQueueReceive(button_events, &ev, pdMS_TO_TICKS(1000))) {

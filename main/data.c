@@ -310,7 +310,7 @@ void dataLoggingTask(void *pvParameters) {
 
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      ESP_LOGE(TAG, "Low stack Data logging: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
     get_sensor_readings(&data_readings);

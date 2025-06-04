@@ -137,7 +137,7 @@ void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      ESP_LOGE(TAG, "Low stack update valve state: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
     // if (demo_mode_active && (xTaskGetTickCount() - demo_mode_start_time >=

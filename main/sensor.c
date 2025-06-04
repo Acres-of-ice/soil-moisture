@@ -17,6 +17,10 @@ sensor_readings_t data_readings;
 static int simulated_soil_A = 0;
 static int simulated_soil_B = 0;
 
+TickType_t demo_start_time = 0;
+static int demo_soil_A_value = 0;
+static int demo_soil_B_value = 0;
+
 // Voltage monitoring variables
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
@@ -386,6 +390,10 @@ void modbus_init(void) {
 }
 
 void sensor_task(void *pvParameters) {
+
+  if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+    }
   static i2c_dev_t i2c_dev_ads = {0};
   static ADS1x1x_config_t ch1 = {0};
   static float adc_readings_arr[4];
@@ -405,15 +413,18 @@ void sensor_task(void *pvParameters) {
   }
 
   // After other initializations but before the main loop
-  esp_err_t voltage_init_result = voltage_monitor_init();
-  if (voltage_init_result != ESP_OK) {
-    ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
-             esp_err_to_name(voltage_init_result));
-  }
+  // esp_err_t voltage_init_result = voltage_monitor_init();
+  // if (voltage_init_result != ESP_OK) {
+  //   ESP_LOGW(TAG, "Voltage monitoring initialization failed: %s",
+  //            esp_err_to_name(voltage_init_result));
+  // }
 
-  last_wake_time = xTaskGetTickCount();
+  // last_wake_time = xTaskGetTickCount();
 
   while (1) {
+    if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+      ESP_LOGE(TAG, "Low stack Sensor Task: %d", uxTaskGetStackHighWaterMark(NULL));
+    }
     // Do all sensor readings first without mutex
     if (i2c0bus != NULL) {
       for (int i = 0; i < 4; i++) {
@@ -460,30 +471,30 @@ void sensor_task(void *pvParameters) {
       }
     }
 
-    if (site_config.has_voltage_cutoff && adc_handle != NULL) {
-      local_readings.voltage = measure_voltage();
+    // if (site_config.has_voltage_cutoff && adc_handle != NULL) {
+    //   local_readings.voltage = measure_voltage();
 
-      if (local_readings.voltage < LOW_CUTOFF_VOLTAGE) {
-        ESP_LOGE(
-            TAG,
-            "Voltage below %.2fV, disabling SIM and entering deep sleep...",
-            LOW_CUTOFF_VOLTAGE);
+    //   if (local_readings.voltage < LOW_CUTOFF_VOLTAGE) {
+    //     ESP_LOGE(
+    //         TAG,
+    //         "Voltage below %.2fV, disabling SIM and entering deep sleep...",
+    //         LOW_CUTOFF_VOLTAGE);
 
-        // Disable SIM pin
-        esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-        gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
-        gpio_set_level(SIM_GPIO, 1);
+    //     // Disable SIM pin
+    //     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    //     gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
+    //     gpio_set_level(SIM_GPIO, 1);
 
-        // Enter deep sleep
-        esp_sleep_enable_timer_wakeup(
-            (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
-            1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
-        esp_deep_sleep_start();
-      }
-    } else if (!site_config.has_voltage_cutoff) {
-      // Default value if voltage cutoff is disabled
-      local_readings.voltage = 0.0f;
-    }
+    //     // Enter deep sleep
+    //     esp_sleep_enable_timer_wakeup(
+    //         (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
+    //         1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+    //     esp_deep_sleep_start();
+    //   }
+    // } else if (!site_config.has_voltage_cutoff) {
+    //   // Default value if voltage cutoff is disabled
+    //   local_readings.voltage = 0.0f;
+    // }
 
     local_readings.soil_A = soil_A;
     local_readings.soil_B = soil_B;
@@ -558,27 +569,33 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->discharge = simulated_readings.discharge;
       output_readings->voltage = simulated_readings.voltage;
     } else if (demo_mode_active) {
-            // Handle demo mode values
-            TickType_t now = xTaskGetTickCount();
-            TickType_t elapsed = now - demo_start_time;
-            
-            if (elapsed <= pdMS_TO_TICKS(5*60*1000)) { // First 5 minutes
-                ESP_LOGI(TAG,"Dry Values setting");
-                demo_soil_A_value = 25;
-                demo_soil_B_value = 25;
-            } else { // After 5 minutes
-                ESP_LOGI(TAG,"Wet Values setting");
-                demo_soil_A_value = 85;
-                demo_soil_B_value = 85;
-                
-                if (elapsed > pdMS_TO_TICKS(5*60*1000 + 10000)) { // 10 sec buffer
-                    demo_mode_active = false;
-                }
-            }
-            
-            output_readings->soil_A = demo_soil_A_value;
-            output_readings->soil_B = demo_soil_B_value;
-        } else {
+    // Initialize demo_start_time if not set
+    if (demo_start_time == 0) {
+        demo_start_time = xTaskGetTickCount();
+        ESP_LOGI(TAG, "Demo mode started");
+    }
+    
+    TickType_t now = xTaskGetTickCount();
+    TickType_t elapsed = now - demo_start_time;
+    
+    if (elapsed <= pdMS_TO_TICKS(5*60*1000)) { // First 5 minutes
+        ESP_LOGI(TAG,"Dry Values setting");
+        demo_soil_A_value = 25;
+        demo_soil_B_value = 25;
+    } else { // After 5 minutes
+        ESP_LOGI(TAG,"Wet Values setting");
+        demo_soil_A_value = 85;
+        demo_soil_B_value = 85;
+        
+        if (elapsed > pdMS_TO_TICKS(5*60*1000 + 10000)) { // 10 sec buffer
+            demo_mode_active = false;
+            demo_start_time = 0; // Reset for next demo
+        }
+    }
+    
+    output_readings->soil_A = demo_soil_A_value;
+    output_readings->soil_B = demo_soil_B_value;
+     } else {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;
       output_readings->soil_B = readings.soil_B;

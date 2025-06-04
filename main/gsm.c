@@ -313,7 +313,7 @@ void sms_receive_task(void *pvParameters) {
   hex_data_t decoded_data;
   for (;;) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGW(TAG, "Low stack in SMS receive task: %d",
+      ESP_LOGE(TAG, "Low stack in SMS receive task: %d",
                uxTaskGetStackHighWaterMark(NULL));
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
@@ -589,7 +589,7 @@ void unified_sms_task(void *pvParameters) {
   while (1) {
     // Stack check
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGW(TAG, "Low stack in unified SMS task: %d",
+      ESP_LOGE(TAG, "Low stack in unified SMS task: %d",
                uxTaskGetStackHighWaterMark(NULL));
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;

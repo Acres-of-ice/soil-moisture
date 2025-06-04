@@ -283,7 +283,7 @@ void wifi_app_task(void *pvParameters) {
 
   for (;;) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      ESP_LOGE(TAG, "Low stack wifi app task: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
     if (xQueueReceive(wifi_app_queue_handle, &msg, portMAX_DELAY)) {

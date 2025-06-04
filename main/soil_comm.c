@@ -1822,7 +1822,7 @@ void vTaskESPNOW(void *pvParameters) {
   while (1) {
     // Check stack space
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      ESP_LOGE(TAG, "Low stack vTaskespnow: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
     // Handle outgoing messages from queue

@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 // Function prototypes
-void button_task(void *pvParameters);
+void lcd_button_task(void *pvParameters);
 QueueHandle_t initialize_button_queue(int nodeAddress);
 // void handle_conductor_buttons(button_event_t *ev, bool *wifi_enabled, bool
 // *sta_enabled, int *counter);

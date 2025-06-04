@@ -354,9 +354,9 @@ void lcd_row_one_task(void *pvParameters) {
   static sensor_readings_t lcd_readings;
 
   while (1) {
-    if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
-    }
+  //  if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+      ESP_LOGE(TAG, "Low stack Lcd row one: %d", uxTaskGetStackHighWaterMark(NULL));
+  //  }
     double current_uptime = get_uptime_days();
     get_sensor_readings(&lcd_readings);
 

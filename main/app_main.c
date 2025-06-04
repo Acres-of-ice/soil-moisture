@@ -23,6 +23,9 @@
 #include "soil_sensor.h"
 #include "valve_control.h"
 #include "wifi_app.h"
+#include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 i2c_master_bus_handle_t i2c0bus = NULL;
 uint8_t g_nodeAddress = 0x00;
@@ -155,6 +158,52 @@ void pump_button_task(void *arg) {
   }
 }
 
+
+// void monitor_task(void *pvParameters) {
+//     while(1) {
+//         ESP_LOGE(TAG, "Monitor stack: %d", uxTaskGetStackHighWaterMark(NULL));
+      
+//         vTaskDelay(pdMS_TO_TICKS(5000));
+//     }
+// }
+
+void monitor_task(void *pvParameters) {
+    while(1) {
+        TaskStatus_t *pxTaskStatusArray;
+        UBaseType_t uxArraySize = uxTaskGetNumberOfTasks();
+        
+        pxTaskStatusArray = pvPortMalloc(uxArraySize * sizeof(TaskStatus_t));
+        
+        if(pxTaskStatusArray != NULL) {
+            uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize, NULL);
+            
+            ESP_LOGI("STACK", "=== Task Stack Report ===");
+            for(int i=0; i<uxArraySize; i++) {
+        ESP_LOGI("STACK", "Task %-15s: StackHWM %" PRIu32, 
+         pxTaskStatusArray[i].pcTaskName,
+         pxTaskStatusArray[i].usStackHighWaterMark);
+
+
+                
+                // Critical warning for low stack
+        if(pxTaskStatusArray[i].usStackHighWaterMark < 200) {
+    ESP_LOGE("STACK", "CRITICAL: Task %s has only %" PRIu32 " bytes free!", 
+             pxTaskStatusArray[i].pcTaskName,
+             pxTaskStatusArray[i].usStackHighWaterMark);
+}
+
+            }
+            
+            vPortFree(pxTaskStatusArray);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(30000)); // Check every 30 seconds
+    }
+}
+
+
+
+
 void app_main(void) {
 
   // Set log level for all components
@@ -183,6 +232,8 @@ void app_main(void) {
   esp_log_level_set("coreMQTT", ESP_LOG_NONE);
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
+
+  
 
   if (site_config.simulate) {
     esp_log_level_set("ESPNOW", ESP_LOG_NONE);
@@ -256,7 +307,7 @@ void app_main(void) {
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
-
+  //xTaskCreate(monitor_task, "Monitor", 4096, NULL, 1, NULL);
   if (site_config.has_gsm) {
     esp_err_t gsm_init_result = gsm_init();
     if (gsm_init_result != ESP_OK) {
@@ -283,7 +334,7 @@ void app_main(void) {
     gpio_set_level(SIM_GPIO, 1);
   }
 
-  xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
+  xTaskCreatePinnedToCore(lcd_button_task, "lcd Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
                           &buttonTaskHandle, BUTTON_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
@@ -344,8 +395,7 @@ void app_main(void) {
                           HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(100));
 
-  // ESP_LOGI(TAG, "Starting demo mode");
-  // vTaskDelay(pdMS_TO_TICKS(1000));
+
 
 
   if (site_config.has_voltage_cutoff) {

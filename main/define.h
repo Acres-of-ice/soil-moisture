@@ -74,8 +74,8 @@ extern bool demo_mode_active;
 extern bool use_simulated_values;
 extern TickType_t demo_start_time;
 #define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
-extern int demo_soil_A_value;
-extern int demo_soil_B_value;
+// extern int demo_soil_A_value;
+// extern int demo_soil_B_value;
 
 typedef struct {
   uint32_t total_data_points;
