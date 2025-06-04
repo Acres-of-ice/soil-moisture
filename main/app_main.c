@@ -10,6 +10,7 @@
 #include "define.h"
 #include "tasks_common.h"
 
+#include "Pppos.h"
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
@@ -246,27 +247,43 @@ void app_main(void) {
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
 
-  if (site_config.has_gsm) {
-    esp_err_t gsm_init_result = gsm_init();
-    if (gsm_init_result != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to initialize GSM module");
-      // Disable SIM pin
-      esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-      gpio_set_level(SIM_GPIO, 1);
-    } else {
-      ESP_LOGI(TAG, "GSM module initialized successfully");
-      xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
-                              NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
-                              SMS_TASK_CORE_ID);
-      vTaskDelay(pdMS_TO_TICKS(500));
+  // if (site_config.has_gsm) {
+  //   esp_err_t gsm_init_result = gsm_init();
+  //   if (gsm_init_result != ESP_OK) {
+  //     ESP_LOGW(TAG, "Failed to initialize GSM module");
+  //     // Disable SIM pin
+  //     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+  //     gpio_set_level(SIM_GPIO, 1);
+  //   } else {
+  //     ESP_LOGI(TAG, "GSM module initialized successfully");
+  //     xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
+  //                             NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
+  //                             SMS_TASK_CORE_ID);
+  //     vTaskDelay(pdMS_TO_TICKS(500));
+  //
+  //     snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s",
+  //     PROJECT_VERSION,
+  //              CONFIG_SITE_NAME);
+  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+  //     vTaskDelay(pdMS_TO_TICKS(5000));
+  //   }
+  // } else {
+  //   ESP_LOGW(TAG, "GSM module disabled");
+  //   // Disable SIM pin
+  //   esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+  //   gpio_set_level(SIM_GPIO, 1);
+  // }
+  //
 
-      snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s", PROJECT_VERSION,
-               CONFIG_SITE_NAME);
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-      vTaskDelay(pdMS_TO_TICKS(5000));
+  if (site_config.has_gsm) {
+    esp_err_t err = iPPPOS_Init();
+    if (ESP_OK != err) {
+      ESP_LOGI("PPPOS", "PPPOS Init Fail");
+    } else {
+      ESP_LOGI("PPPOS", "PPPOS Init Success");
     }
   } else {
-    ESP_LOGW(TAG, "GSM module disabled");
+    ESP_LOGW(TAG, "GSM module disabled, PPPOS Not required");
     // Disable SIM pin
     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
     gpio_set_level(SIM_GPIO, 1);
