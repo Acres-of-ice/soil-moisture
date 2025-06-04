@@ -12,6 +12,9 @@ set(SRCS_LIST
 )
 
 if(CONFIG_MASTER)
+    list(APPEND SRCS_LIST "Pppos.c")
+    list(APPEND SRCS_LIST "Ota.c")
+    list(APPEND SRCS_LIST "MqttParser.c")
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
     list(APPEND SRCS_LIST "hex_data.c")
@@ -23,7 +26,7 @@ endif()
 
 idf_component_register(SRCS ${SRCS_LIST}
                     INCLUDE_DIRS "."
-                    REQUIRES esp32-button app_update esp_http_server esp_app_format fatfs esp_wifi spiffs nvs_flash rtc espnow_lib espressif__mdns-v1.4.0)
+                    REQUIRES esp32-button app_update esp_http_server esp_app_format fatfs esp_wifi spiffs nvs_flash rtc espnow_lib espressif__mdns-v1.4.0 espressif__esp_modem mqtt json esp_http_client esp_https_ota)
                   
 # Read version from root directory
 file(READ ${CMAKE_SOURCE_DIR}/version.txt PROJECT_VERSION_FROM_FILE)

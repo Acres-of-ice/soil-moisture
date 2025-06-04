@@ -276,6 +276,12 @@ void app_main(void) {
   //
 
   if (site_config.has_gsm) {
+    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    gpio_set_level(SIM_GPIO, 0);
+    vTaskDelay(500);
+    gpio_set_level(SIM_GPIO, 1);
+    vTaskDelay(500);
+    gpio_set_level(SIM_GPIO, 0);
     esp_err_t err = iPPPOS_Init();
     if (ESP_OK != err) {
       ESP_LOGI("PPPOS", "PPPOS Init Fail");

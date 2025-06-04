@@ -204,7 +204,7 @@ esp_err_t iMQTT_Init(void) {
   ESP_LOGI(TAG, "MQTT Init");
   esp_mqtt_client_config_t mqtt_config = {
       .broker = {
-          .address.uri = "mqtt://aoi:aoi@4201@44.194.157.172:1883",
+          .address.uri = "mqtt://aoi:4201@44.194.157.172:1883",
       }};
   esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
   ERROR_CHECK_RETURN(esp_mqtt_client_register_event(
