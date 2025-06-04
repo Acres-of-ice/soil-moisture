@@ -13,8 +13,7 @@ set(SRCS_LIST
 
 if(CONFIG_MASTER)
     list(APPEND SRCS_LIST "Pppos.c")
-    list(APPEND SRCS_LIST "Ota.c")
-    list(APPEND SRCS_LIST "MqttParser.c")
+    list(APPEND SRCS_LIST "mqtt.c")
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
     list(APPEND SRCS_LIST "hex_data.c")

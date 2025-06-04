@@ -1,7 +1,7 @@
 #include "Pppos.h"
-#include "MqttParser.h"
+#include "mqtt.h"
 
-#define TAG "[PPPOS]"
+static const char *TAG = "PPPOS";
 
 #define MODEM_UART_TX_PIN GPIO_NUM_33
 #define MODEM_UART_RX_PIN GPIO_NUM_32
@@ -14,11 +14,6 @@
 #define MODEM_UART_EVENT_TASK_STACK_SIZE 4096
 #define MODEM_UART_EVENT_TASK_PRIORITY 10
 #define MODEM_PPP_APN "internet"
-
-#define MQTT_TEST_TOPIC "AutoAir/Msg"
-// #define MQTT_TEST_DATA "{\"msgId\": 9, \"url\":
-// \"http://pcb-bins.s3.us-east-1.amazonaws.com/Stakmo_CONDUCTOR.bin\"}"
-#define MQTT_TEST_DATA "HI, MQTT, TEST, DATA"
 
 #define ERROR_CHECK_RETURN(err)                                                \
   ({                                                                           \
@@ -34,12 +29,6 @@
 esp_modem_dce_t *dce = NULL;
 
 bool isModemConnectedToPPP = false;
-bool isMqttConnected = false;
-
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-                               int32_t event_id, void *event_data);
-
-esp_err_t iMQTT_Init(void);
 
 static void initialize_sntp(void) {
   ESP_LOGI(TAG, "Initializing SNTP");
@@ -149,67 +138,6 @@ esp_err_t iPPPOS_Init(void) {
   // ESP_LOGI(TAG, "Current time: %lld", time(&now));
 
   ERROR_CHECK_RETURN(iMQTT_Init());
-
-  return ESP_OK;
-}
-
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-                               int32_t event_id, void *event_data) {
-  ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIu32,
-           base, event_id);
-  esp_mqtt_event_handle_t event = event_data;
-  esp_mqtt_client_handle_t client = event->client;
-  int msg_id;
-  switch ((esp_mqtt_event_id_t)event_id) {
-  case MQTT_EVENT_CONNECTED:
-    ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-    msg_id = esp_mqtt_client_subscribe(client, MQTT_TEST_TOPIC, 0);
-    ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-    // iEVENT_SetEventBit(EVENT_MQTT_CONNECTED);
-    isMqttConnected = true;
-    break;
-  case MQTT_EVENT_DISCONNECTED:
-    ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-    // iEVENT_ClearEventBit(EVENT_MQTT_CONNECTED);
-    isMqttConnected = false;
-    break;
-  case MQTT_EVENT_SUBSCRIBED:
-    ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-    msg_id = esp_mqtt_client_publish(client, MQTT_TEST_TOPIC, MQTT_TEST_DATA, 0,
-                                     0, 0);
-    ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-    break;
-  case MQTT_EVENT_UNSUBSCRIBED:
-    ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-    break;
-  case MQTT_EVENT_PUBLISHED:
-    ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-    break;
-  case MQTT_EVENT_DATA:
-    ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-    printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-    printf("DATA=%.*s\r\n", event->data_len, event->data);
-    iMqtt_OtaParser(event->data);
-    break;
-  case MQTT_EVENT_ERROR:
-    ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-    break;
-  default:
-    ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
-    break;
-  }
-}
-
-esp_err_t iMQTT_Init(void) {
-  ESP_LOGI(TAG, "MQTT Init");
-  esp_mqtt_client_config_t mqtt_config = {
-      .broker = {
-          .address.uri = "mqtt://aoi:4201@44.194.157.172:1883",
-      }};
-  esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
-  ERROR_CHECK_RETURN(esp_mqtt_client_register_event(
-      mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL));
-  ERROR_CHECK_RETURN(esp_mqtt_client_start(mqtt_client));
 
   return ESP_OK;
 }

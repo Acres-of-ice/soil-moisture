@@ -18,6 +18,7 @@
 #include "hex_data.h"
 #include "i2cdev.h"
 #include "lcd.h"
+#include "mqtt.h"
 #include "rtc_operations.h"
 #include "sensor.h"
 #include "soil_comm.h"
@@ -44,6 +45,7 @@ TaskHandle_t sensorTaskHandle = NULL;
 TaskHandle_t buttonTaskHandle = NULL;
 TaskHandle_t soilTaskHandle = NULL;
 TaskHandle_t TXTaskHandle = NULL;
+TaskHandle_t spOtaTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
@@ -197,6 +199,14 @@ void app_main(void) {
     ESP_LOGE(TAG, "data module Failed to initialize ");
   }
 
+  // Configure the GPIO pin
+  gpio_config_t io_conf = {.pin_bit_mask = (1ULL << SIM_GPIO),
+                           .mode = GPIO_MODE_OUTPUT,
+                           .pull_up_en = GPIO_PULLUP_DISABLE,
+                           .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                           .intr_type = GPIO_INTR_DISABLE};
+  gpio_config(&io_conf);
+
   init_semaphores();
   vTaskDelay(100);
   espnow_init2();
@@ -276,22 +286,26 @@ void app_main(void) {
   //
 
   if (site_config.has_gsm) {
-    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+    // Configure as output and set level
     gpio_set_level(SIM_GPIO, 0);
-    vTaskDelay(500);
+    vTaskDelay(1000);
     gpio_set_level(SIM_GPIO, 1);
-    vTaskDelay(500);
+    vTaskDelay(1000);
     gpio_set_level(SIM_GPIO, 0);
+    vTaskDelay(1000);
     esp_err_t err = iPPPOS_Init();
     if (ESP_OK != err) {
-      ESP_LOGI("PPPOS", "PPPOS Init Fail");
+      ESP_LOGE("PPPOS", "Failed");
     } else {
-      ESP_LOGI("PPPOS", "PPPOS Init Success");
+      ESP_LOGD("PPPOS", "Success");
+      vTaskDelay(500);
+      iMQTT_Init();
     }
   } else {
     ESP_LOGW(TAG, "GSM module disabled, PPPOS Not required");
     // Disable SIM pin
-    esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+
+    // Set the pin level
     gpio_set_level(SIM_GPIO, 1);
   }
 

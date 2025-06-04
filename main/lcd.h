@@ -14,9 +14,8 @@
 #define SCROLL_DELAY_MS 600
 #define SCROLL_ROW 1 // Fixed row for scrolling
 
-// #define I2C_LCD_FREQ_HZ          400000                     /*!< I2C master
-// clock frequency */
-#define I2C_LCD_FREQ_HZ 250000 /*!< I2C master clock frequency */
+#define I2C_LCD_FREQ_HZ 100000 /*!< I2C master clock frequency */
+// #define I2C_LCD_FREQ_HZ 1000000 /*!< I2C master clock frequency */
 #define I2C_MASTER_TIMEOUT_MS 1000
 
 void lcd_init(void);
