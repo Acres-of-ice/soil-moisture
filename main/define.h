@@ -193,7 +193,7 @@ extern SemaphoreHandle_t file_mutex;
 
 //======================LCD Definitions=====================
 extern bool lcd_device_ready;
-extern char uptime_str[5];
+//extern char uptime_str[5];
 #define WIFI_SYMBOL_ADDRESS 0x00
 #define GSM_SYMBOL_ADDRESS 0x01
 #define LORA_SYMBOL_ADDRESS 0x02

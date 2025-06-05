@@ -312,6 +312,13 @@ menu "Time Configuration"
         help
             Timeout for state machine in minutes.
 
+    config DEMO_TIMEOUT_M
+        int "Demo timeout (minutes)"
+        default 30
+        range 1 60
+        help
+            Timeout for demo mode in minutes.
+
     config VALVE_TIMEOUT_S
         int "Valve operation timeout (seconds)"
         default 6 if SITE_TEST

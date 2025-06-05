@@ -568,34 +568,36 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->pressure = simulated_readings.pressure;
       output_readings->discharge = simulated_readings.discharge;
       output_readings->voltage = simulated_readings.voltage;
-    } else if (demo_mode_active) {
-    // Initialize demo_start_time if not set
-    if (demo_start_time == 0) {
-        demo_start_time = xTaskGetTickCount();
-        ESP_LOGI(TAG, "Demo mode started");
-    }
+    } 
+    // else if (demo_mode_active) {
+    // // Initialize demo_start_time if not set
+    // if (demo_start_time == 0) {
+    //     demo_start_time = xTaskGetTickCount();
+    //     ESP_LOGI(TAG, "Demo mode started");
+    // }
     
-    TickType_t now = xTaskGetTickCount();
-    TickType_t elapsed = now - demo_start_time;
+    // TickType_t now = xTaskGetTickCount();
+    // TickType_t elapsed = now - demo_start_time;
     
-    if (elapsed <= pdMS_TO_TICKS(5*60*1000)) { // First 5 minutes
-        ESP_LOGI(TAG,"Dry Values setting");
-        demo_soil_A_value = 25;
-        demo_soil_B_value = 25;
-    } else { // After 5 minutes
-        ESP_LOGI(TAG,"Wet Values setting");
-        demo_soil_A_value = 85;
-        demo_soil_B_value = 85;
+    // if (elapsed <= pdMS_TO_TICKS(5*60*1000)) { // First 5 minutes
+    //     ESP_LOGI(TAG,"Dry Values setting");
+    //     demo_soil_A_value = 25;
+    //     demo_soil_B_value = 25;
+    // } else { // After 5 minutes
+    //     ESP_LOGI(TAG,"Wet Values setting");
+    //     demo_soil_A_value = 85;
+    //     demo_soil_B_value = 85;
         
-        if (elapsed > pdMS_TO_TICKS(5*60*1000 + 10000)) { // 10 sec buffer
-            demo_mode_active = false;
-            demo_start_time = 0; // Reset for next demo
-        }
-    }
+    //     if (elapsed > pdMS_TO_TICKS(5*60*1000 + 10000)) { // 10 sec buffer
+    //         demo_mode_active = false;
+    //         demo_start_time = 0; // Reset for next demo
+    //     }
+    // }
     
-    output_readings->soil_A = demo_soil_A_value;
-    output_readings->soil_B = demo_soil_B_value;
-     } else {
+    // output_readings->soil_A = demo_soil_A_value;
+    // output_readings->soil_B = demo_soil_B_value;
+    //  } 
+     else {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;
       output_readings->soil_B = readings.soil_B;

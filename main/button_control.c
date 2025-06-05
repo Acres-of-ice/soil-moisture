@@ -30,65 +30,12 @@ typedef struct {
 static button_actions_t button_map[4] = {0}; // For A_btn, B_btn, C_btn, D_btn
 
 void a_btn_short_press(void) {
-  ESP_LOGD(TAG, "Demo mode activated");
-  ValveState newState = getCurrentState();
-  if ((newState == STATE_IDLE) || (newState == STATE_ERROR)) {
-
-    if (newState == STATE_ERROR) {
-      ESP_LOGI(TAG, "Exiting error state - button pressed");
-      errorConditionMet = false; // Reset error flag
-    }
-
-    ESP_LOGI(TAG, "Counter: %d", counter);
-
-    if (counter % 2 == 0) {
-      newState = STATE_VALVE_B_OPEN;
-      if (gsm_init_success) {
-        snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-      }
-
-      ESP_LOGI(TAG, "Force drip sector B");
-    } else {
-      newState = STATE_VALVE_A_OPEN;
-      if (gsm_init_success) {
-        snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-      }
-
-      ESP_LOGI(TAG, "Force drip sector A");
-    }
-    setCurrentState(newState);
-  } else {
-    ESP_LOGW(TAG, "Wait until state change %d", counter);
-  }
-}
-
-void a_btn_long_press(void) {
-  ValveState currentState = getCurrentState();
-
-  if (currentState != STATE_IDLE) {
-    ESP_LOGI(TAG, "Cannot start demo - system not in IDLE state");
-
-    // Show message on LCD if available
-    if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-      lcd_put_cur(1, 0);
-      lcd_send_string("Not idle - abort");
-      xSemaphoreGive(i2c_mutex);
-      vTaskDelay(pdMS_TO_TICKS(2000)); // Show for 2 seconds
-    }
-    return;
-  }
-
-    if (!demo_mode_active) {
+    ValveState currentState = getCurrentState();
+    //ValveState newState = getCurrentState();
+    if (!demo_mode_active || currentState == STATE_IDLE) {
         ESP_LOGI(TAG, "Starting demo mode");
         demo_mode_active = true;
-        //demo_start_time = xTaskGetTickCount();
-        
-        // Set initial low values to trigger irrigation
-        // demo_soil_A_value = 25;
-        // demo_soil_B_value = 25;
-        
+        //newState = DEMO_STATE_VALVE_A_OPEN;
         // Notify via LCD
         if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
             lcd_put_cur(1, 0);
@@ -98,8 +45,17 @@ void a_btn_long_press(void) {
         
         // Optional SMS notification
         if (gsm_init_success) {
-            snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
+            snprintf(response_sms, sizeof(response_sms), "Demo mode Enabled");
             sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+        }
+    
+      }else{
+      ESP_LOGI(TAG,"Demo Mode not Enabled");
+              // Notify via LCD
+        if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+            lcd_put_cur(1, 0);
+            lcd_send_string("Demo Mode Not Enabled");
+            xSemaphoreGive(i2c_mutex);
         }
     }
 }
@@ -140,6 +96,29 @@ void c_btn_short_press(void) {
     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
   }
+}
+
+void a_btn_long_press(void) {
+
+
+    if (demo_mode_active) {
+        //ESP_LOGI(TAG, "Starting demo mode");
+        demo_mode_active = false;
+
+        
+        // Notify via LCD
+        if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
+            lcd_put_cur(1, 0);
+            lcd_send_string("Demo Mode OFF");
+            xSemaphoreGive(i2c_mutex);
+        }
+        
+        // Optional SMS notification
+        if (gsm_init_success) {
+            snprintf(response_sms, sizeof(response_sms), "Demo mode Disabled");
+            sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+        }
+    }
 }
 
 void c_btn_long_press(void) {
@@ -343,6 +322,19 @@ void lcd_button_task(void *pvParameters) {
       ESP_LOGE(TAG, "Low stack button task: %d", uxTaskGetStackHighWaterMark(NULL));
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+    
     if (xQueueReceive(button_events, &ev, pdMS_TO_TICKS(1000))) {
       if (nodeAddress == MASTER_ADDRESS) {
         if (ev.pin == A_btn)
