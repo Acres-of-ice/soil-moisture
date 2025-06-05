@@ -1,6 +1,6 @@
 #include "hex_data.h"
 #include "define.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "valve_control.h"

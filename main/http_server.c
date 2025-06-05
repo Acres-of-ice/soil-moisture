@@ -16,7 +16,7 @@
 #include "data.h"
 #include "define.h"
 #include "http_server.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "wifi_app.h"
 

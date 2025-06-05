@@ -11,7 +11,7 @@
 #include "espnow_lib.h"
 #include "lcd.h"
 #include "nvs_flash.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_sensor.h"
 #include "valve_control.h"

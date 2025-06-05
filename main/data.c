@@ -7,7 +7,7 @@
 #include "gsm.h"
 #include "http_server.h"
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sdmmc_cmd.h"
 #include "sensor.h"
 #include "valve_control.h"

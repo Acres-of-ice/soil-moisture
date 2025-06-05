@@ -433,7 +433,7 @@ CONFIG_ENABLE_HW=y
 #
 # Hardware Configuration
 #
-# CONFIG_LCD_ADDR_3F is not set
+CONFIG_LCD_ADDR_3F=y
 # CONFIG_HAS_VALVE is not set
 CONFIG_ENABLE_VALVE=0
 CONFIG_HAS_GSM=y

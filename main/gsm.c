@@ -13,7 +13,7 @@
 
 #include "hex_data.h"
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "tasks_common.h"
 #include "valve_control.h"

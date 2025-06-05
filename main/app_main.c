@@ -19,7 +19,7 @@
 #include "i2cdev.h"
 #include "lcd.h"
 #include "mqtt.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "soil_sensor.h"
@@ -243,6 +243,10 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
+  rtc_init(i2c0bus);
+  // 🔥 SYNC SYSTEM TIME WITH RTC - This enables RTC timestamps in logs!
+  rtc_sync_system_time();
+  vTaskDelay(100);
   modbus_init();
   vTaskDelay(100);
   init_logging();
@@ -303,8 +307,6 @@ void app_main(void) {
       ESP_LOGE("PPPOS", "Failed");
     } else {
       ESP_LOGD("PPPOS", "Success");
-      vTaskDelay(500);
-      iMQTT_Init();
     }
   } else {
     ESP_LOGW(TAG, "GSM module disabled, PPPOS Not required");

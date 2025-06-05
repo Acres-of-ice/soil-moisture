@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "soil_sensor.h"
