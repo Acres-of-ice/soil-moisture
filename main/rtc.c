@@ -222,7 +222,6 @@ esp_err_t rtc_sync_system_time(void) {
   }
 
   ESP_LOGI(TAG, "System time synced with RTC: %s", fetchTime());
-  ESP_LOGI(TAG, "ESP-IDF logs will now show RTC timestamps");
   return ESP_OK;
 }
 

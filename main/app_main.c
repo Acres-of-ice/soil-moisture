@@ -160,6 +160,7 @@ void app_main(void) {
   esp_log_level_set("*", ESP_LOG_INFO);
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
+  esp_log_level_set("PPPOS", ESP_LOG_DEBUG);
   // esp_log_level_set("ESPNOW", ESP_LOG_DEBUG);
   // esp_log_level_set("espnow_lib", ESP_LOG_DEBUG);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
@@ -182,6 +183,7 @@ void app_main(void) {
   esp_log_level_set("coreMQTT", ESP_LOG_NONE);
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
+  esp_log_level_set("esp-netif_lwip-ppp", ESP_LOG_DEBUG);
 
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {

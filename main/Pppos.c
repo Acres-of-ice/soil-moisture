@@ -66,7 +66,7 @@ static void time_sync_notification_cb(struct timeval *tv) {
   localtime_r(&now, &timeinfo);
   char strftime_buf[64];
   strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-  ESP_LOGI(TAG, "Current time: %s", strftime_buf);
+  ESP_LOGD(TAG, "Current time: %s", strftime_buf);
 }
 
 static esp_err_t initialize_sntp_enhanced(void) {
@@ -109,64 +109,91 @@ static esp_err_t initialize_sntp_enhanced(void) {
   return ESP_OK;
 }
 
-static esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
-  ESP_LOGI(TAG, "Waiting for time synchronization (timeout: %lu ms)",
+esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
+  ESP_LOGI(TAG, "Waiting for SNTP time synchronization (timeout: %lu ms)",
            timeout_ms);
 
   TickType_t start_time = xTaskGetTickCount();
   TickType_t timeout_ticks = pdMS_TO_TICKS(timeout_ms);
   uint32_t check_count = 0;
 
-  // First, let's give SNTP some time to start
+  // Reset the sync flag to ensure we wait for actual SNTP sync
+  isTimeSync = false;
+
+  // Store the current time before SNTP to detect actual changes
+  time_t time_before_sntp = time(NULL);
+  ESP_LOGD(TAG, "Time before SNTP sync: %lld", (long long)time_before_sntp);
+
+  // Force SNTP restart to ensure fresh synchronization
+  esp_sntp_restart();
+
+  // Give SNTP some time to start
   vTaskDelay(pdMS_TO_TICKS(3000));
 
   while (!isTimeSync) {
     if ((xTaskGetTickCount() - start_time) > timeout_ticks) {
-      ESP_LOGW(TAG, "Time synchronization timeout after %lu ms", timeout_ms);
+      ESP_LOGW(TAG, "SNTP synchronization timeout after %lu ms", timeout_ms);
 
       // Try manual time sync as fallback
-      ESP_LOGI(TAG, "Attempting manual SNTP sync...");
+      ESP_LOGI(TAG, "Attempting manual SNTP sync restart...");
       esp_sntp_restart();
       vTaskDelay(pdMS_TO_TICKS(5000));
 
-      // Check one more time after restart
+      // Final check - but only accept if time has actually changed from SNTP
       time_t now = time(NULL);
-      struct tm timeinfo;
-      localtime_r(&now, &timeinfo);
-
-      if (timeinfo.tm_year > (2020 - 1900)) {
-        ESP_LOGI(TAG, "Manual sync successful (year: %d)",
-                 timeinfo.tm_year + 1900);
-        isTimeSync = true;
-        break;
+      if (abs((long long)(now - time_before_sntp)) >
+          5) { // Time changed by more than 5 seconds
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        if (timeinfo.tm_year > (2020 - 1900)) {
+          ESP_LOGI(TAG,
+                   "Time appears to have been updated by SNTP (change: %lld "
+                   "seconds)",
+                   (long long)(now - time_before_sntp));
+          isTimeSync = true;
+          break;
+        }
       }
 
       return ESP_ERR_TIMEOUT;
     }
 
-    // Check if we have a valid time (year > 2020) - fallback method
-    time_t now = time(NULL);
-    struct tm timeinfo;
-    localtime_r(&now, &timeinfo);
-
     check_count++;
 
-    if (timeinfo.tm_year > (2020 - 1900)) {
-      ESP_LOGI(TAG,
-               "Time appears to be synchronized (year: %d) after %lu checks",
-               timeinfo.tm_year + 1900, check_count);
-      isTimeSync = true;
-      break;
+    // Don't accept time just because year > 2020 - wait for actual SNTP
+    // callback Only use this as a fallback after significant time passage
+    if (check_count > 30) { // After 30 seconds of trying
+      time_t now = time(NULL);
+      if (abs((long long)(now - time_before_sntp)) >
+          10) { // Time changed significantly
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+
+        if (timeinfo.tm_year > (2020 - 1900)) {
+          ESP_LOGI(TAG,
+                   "Fallback: Time appears synchronized (year: %d, change: "
+                   "%lld sec)",
+                   timeinfo.tm_year + 1900,
+                   (long long)(now - time_before_sntp));
+          isTimeSync = true;
+          break;
+        }
+      }
     }
 
     // Log progress every 10 seconds
     if (check_count % 10 == 0) {
-      ESP_LOGI(TAG,
-               "Still waiting for time sync... (check %lu, current year: %d)",
-               check_count, timeinfo.tm_year + 1900);
+      time_t current_time = time(NULL);
+      ESP_LOGI(
+          TAG,
+          "Still waiting for SNTP sync... (check %lu, time change: %lld sec)",
+          check_count, (long long)(current_time - time_before_sntp));
 
-      // Force SNTP sync attempt
-      esp_sntp_restart();
+      // Force another SNTP sync attempt every 20 seconds
+      if (check_count % 20 == 0) {
+        ESP_LOGI(TAG, "Forcing SNTP restart attempt...");
+        esp_sntp_restart();
+      }
     }
 
     vTaskDelay(pdMS_TO_TICKS(TIME_SYNC_CHECK_INTERVAL_MS));
@@ -179,7 +206,8 @@ static esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
     char strftime_buf[64];
     strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S",
              &timeinfo);
-    ESP_LOGI(TAG, "Time synchronization successful: %s", strftime_buf);
+    ESP_LOGD(TAG, "SNTP synchronization successful: %s (change: %lld sec)",
+             strftime_buf, (long long)(now - time_before_sntp));
 
     // Set longer sync interval after successful initial sync
     esp_sntp_set_sync_interval(604800000); // 7 days
@@ -190,6 +218,88 @@ static esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
 
   return ESP_ERR_TIMEOUT;
 }
+
+// static esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
+//   ESP_LOGI(TAG, "Waiting for time synchronization (timeout: %lu ms)",
+//            timeout_ms);
+//
+//   TickType_t start_time = xTaskGetTickCount();
+//   TickType_t timeout_ticks = pdMS_TO_TICKS(timeout_ms);
+//   uint32_t check_count = 0;
+//
+//   // First, let's give SNTP some time to start
+//   vTaskDelay(pdMS_TO_TICKS(3000));
+//
+//   while (!isTimeSync) {
+//     if ((xTaskGetTickCount() - start_time) > timeout_ticks) {
+//       ESP_LOGW(TAG, "Time synchronization timeout after %lu ms", timeout_ms);
+//
+//       // Try manual time sync as fallback
+//       ESP_LOGI(TAG, "Attempting manual SNTP sync...");
+//       esp_sntp_restart();
+//       vTaskDelay(pdMS_TO_TICKS(5000));
+//
+//       // Check one more time after restart
+//       time_t now = time(NULL);
+//       struct tm timeinfo;
+//       localtime_r(&now, &timeinfo);
+//
+//       if (timeinfo.tm_year > (2020 - 1900)) {
+//         ESP_LOGI(TAG, "Manual sync successful (year: %d)",
+//                  timeinfo.tm_year + 1900);
+//         isTimeSync = true;
+//         break;
+//       }
+//
+//       return ESP_ERR_TIMEOUT;
+//     }
+//
+//     // Check if we have a valid time (year > 2020) - fallback method
+//     time_t now = time(NULL);
+//     struct tm timeinfo;
+//     localtime_r(&now, &timeinfo);
+//
+//     check_count++;
+//
+//     if (timeinfo.tm_year > (2020 - 1900)) {
+//       ESP_LOGI(TAG,
+//                "Time appears to be synchronized (year: %d) after %lu checks",
+//                timeinfo.tm_year + 1900, check_count);
+//       isTimeSync = true;
+//       break;
+//     }
+//
+//     // Log progress every 10 seconds
+//     if (check_count % 10 == 0) {
+//       ESP_LOGI(TAG,
+//                "Still waiting for time sync... (check %lu, current year:
+//                %d)", check_count, timeinfo.tm_year + 1900);
+//
+//       // Force SNTP sync attempt
+//       esp_sntp_restart();
+//     }
+//
+//     vTaskDelay(pdMS_TO_TICKS(TIME_SYNC_CHECK_INTERVAL_MS));
+//   }
+//
+//   if (isTimeSync) {
+//     time_t now = time(NULL);
+//     struct tm timeinfo;
+//     localtime_r(&now, &timeinfo);
+//     char strftime_buf[64];
+//     strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S",
+//              &timeinfo);
+//     ESP_LOGI(TAG, "Time synchronization successful: %s", strftime_buf);
+//
+//     // Set longer sync interval after successful initial sync
+//     esp_sntp_set_sync_interval(604800000); // 7 days
+//     rtc_update_from_system();
+//
+//     return ESP_OK;
+//   }
+//
+//   return ESP_ERR_TIMEOUT;
+// }
 
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data) {
