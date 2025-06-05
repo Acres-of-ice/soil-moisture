@@ -56,26 +56,25 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     esp_netif_t *netif = event->esp_netif;
 
-    ESP_LOGI(TAG, "Modem Connect to PPP Server");
-    ESP_LOGI(TAG, "~~~~~~~~~~~~~~");
+    ESP_LOGI(TAG, "Modem Connected to PPP Server");
+    ESP_LOGD(TAG, "~~~~~~~~~~~~~~");
     ESP_LOGI(TAG, "IP          : " IPSTR, IP2STR(&event->ip_info.ip));
-    ESP_LOGI(TAG, "Netmask     : " IPSTR, IP2STR(&event->ip_info.netmask));
-    ESP_LOGI(TAG, "Gateway     : " IPSTR, IP2STR(&event->ip_info.gw));
+    ESP_LOGD(TAG, "Netmask     : " IPSTR, IP2STR(&event->ip_info.netmask));
+    ESP_LOGD(TAG, "Gateway     : " IPSTR, IP2STR(&event->ip_info.gw));
     esp_netif_get_dns_info(netif, 0, &dns_info);
-    ESP_LOGI(TAG, "Name Server1: " IPSTR, IP2STR(&dns_info.ip.u_addr.ip4));
+    ESP_LOGD(TAG, "Name Server1: " IPSTR, IP2STR(&dns_info.ip.u_addr.ip4));
     esp_netif_get_dns_info(netif, 1, &dns_info);
-    ESP_LOGI(TAG, "Name Server2: " IPSTR, IP2STR(&dns_info.ip.u_addr.ip4));
-    ESP_LOGI(TAG, "~~~~~~~~~~~~~~");
-    ESP_LOGI(TAG, "GOT ip event!!!");
+    ESP_LOGD(TAG, "Name Server2: " IPSTR, IP2STR(&dns_info.ip.u_addr.ip4));
+    ESP_LOGD(TAG, "~~~~~~~~~~~~~~");
+    ESP_LOGD(TAG, "GOT ip event!!!");
     // iEVENT_SetEventBit(EVENT_MODEM_CONNECTED_TO_PPP);// Sync Time via SNTP
     isModemConnectedToPPP = true;
   } else if (event_id == IP_EVENT_PPP_LOST_IP) {
-    ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
+    ESP_LOGW(TAG, "Modem Disconnect from PPP Server");
     // iEVENT_ClearEventBit(EVENT_MODEM_CONNECTED_TO_PPP);
     isModemConnectedToPPP = false;
   } else if (event_id == IP_EVENT_GOT_IP6) {
-    ESP_LOGI(TAG, "GOT IPv6 event!");
-
+    ESP_LOGD(TAG, "GOT IPv6 event!");
     ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
     ESP_LOGI(TAG, "Got IPv6 address " IPV6STR, IPV62STR(event->ip6_info.ip));
   }
@@ -116,7 +115,7 @@ esp_err_t iPPPOS_Init(void) {
   dte_config.task_priority = MODEM_UART_EVENT_TASK_PRIORITY;
   dte_config.dte_buffer_size = MODEM_UART_RX_BUFFER_SIZE / 2;
 
-  ESP_LOGI(TAG, "Initializing esp_modem for the SIM800 module...");
+  ESP_LOGD(TAG, "Initializing esp_modem for the SIM800 module...");
   dce = esp_modem_new_dev(ESP_MODEM_DCE_SIM800, &dte_config, &dce_config,
                           esp_netif);
   // ERROR_CHECK_RETURN(CHECK_NULL(dce));
@@ -130,7 +129,7 @@ esp_err_t iPPPOS_Init(void) {
     ERROR_CHECK_RETURN(esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA));
   }
 
-  ESP_LOGI(TAG, "Waiting for PPP connection...");
+  ESP_LOGD(TAG, "Waiting for PPP connection...");
   while (!isModemConnectedToPPP) {
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
