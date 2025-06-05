@@ -70,13 +70,18 @@ QueueHandle_t message_queue = NULL;
 #define SMS_BUFFER_SIZE 60
 char sms_message[SMS_BUFFER_SIZE] = "Reboot";
 
-typedef enum {
-  BUTTON_IDLE,
-  BUTTON_START_PRESSED,
-  BUTTON_STOP_PRESSED
-} button_state_t;
-
 button_state_t button_state = BUTTON_IDLE;
+
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+  ESP_LOGE("STACK_OVERFLOW", "Task: %s", pcTaskName);
+  ESP_LOGW("STACK_OVERFLOW", "Free Heap: %" PRIu32 " bytes",
+           esp_get_free_heap_size());
+  ESP_LOGW("STACK_OVERFLOW", "Min Free Heap: %" PRIu32 " bytes",
+           esp_get_minimum_free_heap_size());
+  ESP_LOGE("STACK_OVERFLOW", "System will restart in 2 seconds...");
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  esp_restart();
+}
 
 void init_gpio_pump(void) {
   gpio_set_direction(START_btn, GPIO_MODE_INPUT);

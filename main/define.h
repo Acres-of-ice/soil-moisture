@@ -58,6 +58,12 @@ extern uint8_t sequence_number;
 #define feed2_GPIO GPIO_NUM_27
 #define VTG_SENS_GPIO 35
 
+typedef enum {
+  BUTTON_IDLE,
+  BUTTON_START_PRESSED,
+  BUTTON_STOP_PRESSED
+} button_state_t;
+
 #define A_btn 25 // Replace with actual GPIO pin for WiFi button
 #define B_btn 26 // Replace with actual GPIO pin for Demo mode button
 #define C_btn 27 // Replace with actual GPIO pin for Backup button
