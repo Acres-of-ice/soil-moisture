@@ -57,7 +57,7 @@ static esp_err_t cleanup_pppos_resources(void);
 static esp_err_t validate_modem_connection(void);
 
 static void time_sync_notification_cb(struct timeval *tv) {
-  ESP_LOGI(TAG, "Time synchronization event received");
+  ESP_LOGD(TAG, "Time synchronization event received");
   isTimeSync = true;
 
   // Log the synchronized time
@@ -70,7 +70,7 @@ static void time_sync_notification_cb(struct timeval *tv) {
 }
 
 static esp_err_t initialize_sntp_enhanced(void) {
-  ESP_LOGI(TAG, "Initializing enhanced SNTP configuration for India");
+  ESP_LOGD(TAG, "Initializing enhanced SNTP configuration for India");
 
   // Stop SNTP if already running
   if (esp_sntp_enabled()) {
@@ -91,7 +91,7 @@ static esp_err_t initialize_sntp_enhanced(void) {
   setenv("TZ", "IST-5:30", 1);
   tzset();
 
-  ESP_LOGI(TAG, "Timezone set to Indian Standard Time (IST, UTC+5:30)");
+  ESP_LOGD(TAG, "Timezone set to Indian Standard Time (IST, UTC+5:30)");
 
   // Set time sync notification callback
   esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb);
@@ -105,7 +105,7 @@ static esp_err_t initialize_sntp_enhanced(void) {
   // Initialize and start SNTP
   esp_sntp_init();
 
-  ESP_LOGI(TAG, "SNTP initialized with Indian NTP servers and IST timezone");
+  ESP_LOGD(TAG, "SNTP initialized with Indian NTP servers and IST timezone");
   return ESP_OK;
 }
 
@@ -193,13 +193,13 @@ static esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
 
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data) {
-  ESP_LOGI(TAG, "PPP state changed event %" PRIu32, event_id);
+  ESP_LOGD(TAG, "PPP state changed event %" PRIu32, event_id);
 
   if (event_id == NETIF_PPP_ERRORUSER) {
     esp_netif_t **p_netif = event_data;
-    ESP_LOGI(TAG, "User interrupted event from netif:%p", *p_netif);
+    ESP_LOGD(TAG, "User interrupted event from netif:%p", *p_netif);
   } else if (event_id == NETIF_PPP_ERRORNONE) {
-    ESP_LOGI(TAG, "PPP connection established successfully");
+    ESP_LOGD(TAG, "PPP connection established successfully");
   } else if (event_id == NETIF_PPP_ERRORPARAM) {
     ESP_LOGW(TAG, "PPP parameter error");
   } else if (event_id == NETIF_PPP_ERROROPEN) {
@@ -221,7 +221,7 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
 
 static void on_ip_event(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data) {
-  ESP_LOGI(TAG, "IP event received: %" PRIu32, event_id);
+  ESP_LOGD(TAG, "IP event received: %" PRIu32, event_id);
 
   if (xSemaphoreTake(connection_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
     if (event_id == IP_EVENT_PPP_GOT_IP) {
@@ -229,27 +229,27 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
       ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
       esp_netif_t *netif = event->esp_netif;
 
-      ESP_LOGI(TAG, "╔════════════════════════════════════════╗");
-      ESP_LOGI(TAG, "║        PPP Connection Established     ║");
-      ESP_LOGI(TAG, "╠════════════════════════════════════════╣");
+      ESP_LOGD(TAG, "╔════════════════════════════════════════╗");
+      ESP_LOGD(TAG, "║        PPP Connection Established     ║");
+      ESP_LOGD(TAG, "╠════════════════════════════════════════╣");
       ESP_LOGI(TAG, "║ IP Address : " IPSTR "              ║",
                IP2STR(&event->ip_info.ip));
-      ESP_LOGI(TAG, "║ Netmask    : " IPSTR "              ║",
+      ESP_LOGD(TAG, "║ Netmask    : " IPSTR "              ║",
                IP2STR(&event->ip_info.netmask));
-      ESP_LOGI(TAG, "║ Gateway    : " IPSTR "              ║",
+      ESP_LOGD(TAG, "║ Gateway    : " IPSTR "              ║",
                IP2STR(&event->ip_info.gw));
 
       if (esp_netif_get_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns_info) ==
           ESP_OK) {
-        ESP_LOGI(TAG, "║ DNS Main   : " IPSTR "              ║",
+        ESP_LOGD(TAG, "║ DNS Main   : " IPSTR "              ║",
                  IP2STR(&dns_info.ip.u_addr.ip4));
       }
       if (esp_netif_get_dns_info(netif, ESP_NETIF_DNS_BACKUP, &dns_info) ==
           ESP_OK) {
-        ESP_LOGI(TAG, "║ DNS Backup : " IPSTR "              ║",
+        ESP_LOGD(TAG, "║ DNS Backup : " IPSTR "              ║",
                  IP2STR(&dns_info.ip.u_addr.ip4));
       }
-      ESP_LOGI(TAG, "╚════════════════════════════════════════╝");
+      ESP_LOGD(TAG, "╚════════════════════════════════════════╝");
 
       isModemConnectedToPPP = true;
 
@@ -260,7 +260,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
 
     } else if (event_id == IP_EVENT_GOT_IP6) {
       ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
-      ESP_LOGI(TAG, "Got IPv6 address: " IPV6STR, IPV62STR(event->ip6_info.ip));
+      ESP_LOGD(TAG, "Got IPv6 address: " IPV6STR, IPV62STR(event->ip6_info.ip));
     }
     xSemaphoreGive(connection_mutex);
   }
@@ -274,7 +274,7 @@ static esp_err_t validate_modem_connection(void) {
 
   // Check modem mode
   esp_modem_dce_mode_t mode = esp_modem_get_mode(dce);
-  ESP_LOGI(TAG, "Current modem mode: %d", mode);
+  ESP_LOGD(TAG, "Current modem mode: %d", mode);
 
   // You can add additional modem validation here
   // Such as signal strength check, network registration, etc.
@@ -283,7 +283,7 @@ static esp_err_t validate_modem_connection(void) {
 }
 
 static esp_err_t cleanup_pppos_resources(void) {
-  ESP_LOGI(TAG, "Cleaning up PPPOS resources");
+  ESP_LOGD(TAG, "Cleaning up PPPOS resources");
 
   // Stop SNTP
   if (esp_sntp_enabled()) {
@@ -325,9 +325,9 @@ esp_err_t iPPPOS_Init(void) {
   esp_err_t ret = ESP_OK;
   int retry_count = 0;
 
-  ESP_LOGI(TAG, "╔════════════════════════════════════════╗");
-  ESP_LOGI(TAG, "║          Initializing PPPOS           ║");
-  ESP_LOGI(TAG, "╚════════════════════════════════════════╝");
+  ESP_LOGD(TAG, "╔════════════════════════════════════════╗");
+  ESP_LOGD(TAG, "║          Initializing PPPOS           ║");
+  ESP_LOGD(TAG, "╚════════════════════════════════════════╝");
 
   // Create mutex for connection state protection
   connection_mutex = xSemaphoreCreateMutex();
@@ -363,7 +363,7 @@ esp_err_t iPPPOS_Init(void) {
 
   // Retry loop for modem initialization
   for (retry_count = 0; retry_count < MODEM_INIT_RETRY_COUNT; retry_count++) {
-    ESP_LOGI(TAG, "Modem initialization attempt %d/%d", retry_count + 1,
+    ESP_LOGD(TAG, "Modem initialization attempt %d/%d", retry_count + 1,
              MODEM_INIT_RETRY_COUNT);
 
     // Configure DCE
@@ -399,7 +399,7 @@ esp_err_t iPPPOS_Init(void) {
     dte_config.task_priority = MODEM_UART_EVENT_TASK_PRIORITY;
     dte_config.dte_buffer_size = MODEM_UART_RX_BUFFER_SIZE / 2;
 
-    ESP_LOGI(TAG, "Creating modem DCE for SIM800 module...");
+    ESP_LOGD(TAG, "Creating modem DCE for SIM800 module...");
     dce = esp_modem_new_dev(ESP_MODEM_DCE_SIM800, &dte_config, &dce_config,
                             esp_netif_ppp);
     if (!dce) {
@@ -422,10 +422,10 @@ esp_err_t iPPPOS_Init(void) {
     }
 
     esp_modem_dce_mode_t mode = esp_modem_get_mode(dce);
-    ESP_LOGI(TAG, "Detected modem mode: %d", mode);
+    ESP_LOGD(TAG, "Detected modem mode: %d", mode);
 
     if (mode == ESP_MODEM_MODE_COMMAND) {
-      ESP_LOGI(TAG, "Switching modem to data mode...");
+      ESP_LOGD(TAG, "Switching modem to data mode...");
       ret = esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA);
       if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set data mode: %s", esp_err_to_name(ret));
@@ -445,7 +445,7 @@ esp_err_t iPPPOS_Init(void) {
     // Validate modem connection
     ret = validate_modem_connection();
     if (ret == ESP_OK) {
-      ESP_LOGI(TAG, "Modem initialization successful");
+      ESP_LOGD(TAG, "Modem initialization successful");
       break;
     } else {
       ESP_LOGW(TAG, "Modem validation failed: %s", esp_err_to_name(ret));
@@ -492,7 +492,7 @@ esp_err_t iPPPOS_Init(void) {
       ESP_LOGW(TAG, "Time synchronization failed: %s", esp_err_to_name(ret));
 
       // Try alternative approach - restart SNTP with different servers
-      ESP_LOGI(TAG, "Attempting SNTP restart with global servers...");
+      ESP_LOGD(TAG, "Attempting SNTP restart with global servers...");
 
       esp_sntp_stop();
       vTaskDelay(pdMS_TO_TICKS(2000));

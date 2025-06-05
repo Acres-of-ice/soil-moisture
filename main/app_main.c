@@ -243,7 +243,7 @@ void app_main(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
-  rtc_init(i2c0bus);
+  custom_rtc_init(i2c0bus);
   // 🔥 SYNC SYSTEM TIME WITH RTC - This enables RTC timestamps in logs!
   rtc_sync_system_time();
   vTaskDelay(100);
