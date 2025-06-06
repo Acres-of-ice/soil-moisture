@@ -163,7 +163,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     break;
   }
   case MQTT_EVENT_DATA: {
-    ESP_LOGI(TAG, "MQTT Data received");
+    ESP_LOGD(TAG, "MQTT Data received");
 
     // Validate data lengths
     if (event->topic_len <= 0 || event->data_len <= 0) {
@@ -188,18 +188,10 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     memcpy(data, event->data, data_copy_len);
     data[data_copy_len] = '\0';
 
-    ESP_LOGI(TAG, "TOPIC: %s", topic);
-    ESP_LOGD(TAG, "DATA: %s", data);
+    ESP_LOGI(TAG, "TOPIC: %s DATA: %s", topic, data);
 
     if (strstr(topic, ack_topic) != NULL) {
       ESP_LOGI(TAG, "Received data acknowledgment: %s", data);
-      // } else if (strstr(topic, ota_topic) != NULL) {
-      //   ESP_LOGI(TAG, "Processing OTA command");
-      //   esp_err_t ota_result = iMqtt_OtaParser(data);
-      //   if (ota_result != ESP_OK) {
-      //     ESP_LOGE(TAG, "OTA parsing failed: %s",
-      //     esp_err_to_name(ota_result));
-      //   }
     } else if (strcmp(topic, command_topic) == 0) {
       if (strcmp(data, "1") == 0) {
         ESP_LOGI(TAG, "Immediate data request received");

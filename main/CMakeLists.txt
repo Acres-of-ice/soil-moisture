@@ -27,9 +27,6 @@ if(CONFIG_SOIL)
     list(APPEND SRCS_LIST "soil_sensor.c")
 endif()
 
-# idf_component_register(SRCS ${SRCS_LIST}
-#                     INCLUDE_DIRS "."
-#                     REQUIRES esp32-button app_update esp_http_server esp_app_format fatfs esp_wifi spiffs nvs_flash esp_adc espnow_lib espressif__mdns-v1.4.0 espressif__esp_modem mqtt json esp_http_client esp_https_ota)
 idf_component_register(SRCS ${SRCS_LIST}
                     INCLUDE_DIRS "."
                     REQUIRES esp32-button 
