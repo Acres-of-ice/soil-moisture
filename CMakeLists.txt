@@ -93,13 +93,13 @@ add_custom_target(create_images ALL
     COMMENT "Creating images with PCB-specific naming"
 )
 
-# Copy main binary with PCB name and version (determined at build time)
+# Copy main binary with appropriate name - FORCE OVERWRITE
 add_custom_command(TARGET create_images POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/images/${OUTPUT_BINARY_NAME}.bin
+    COMMAND ${CMAKE_COMMAND} -E copy 
         ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin 
         ${CMAKE_SOURCE_DIR}/images/${ACTUAL_PROJECT_NAME}.bin
-    COMMENT "Copying ${ACTUAL_PROJECT_NAME}.bin to images/"
-    VERBATIM
+        COMMENT "Copying ${ACTUAL_PROJECT_NAME}.bin to images/ (forced overwrite)"
 )
 
 # Copy partition table with size-specific naming (determined at build time)
@@ -130,9 +130,7 @@ add_custom_target(clean_images
 add_custom_command(TARGET create_images POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "======================================"
-    COMMAND ${CMAKE_COMMAND} -E echo "Images created successfully:"
     COMMAND ${CMAKE_COMMAND} -E echo "Output Binary: images/${ACTUAL_PROJECT_NAME}.bin"
-    COMMAND ${CMAKE_COMMAND} -E echo "Partition Table: images/$<IF:$<BOOL:${CONFIG_MASTER}>,partition_table_8MB.bin,partition_table_4MB.bin>"
     COMMAND ${CMAKE_COMMAND} -E echo "======================================"
     COMMAND ${CMAKE_COMMAND} -E echo ""
     VERBATIM
