@@ -65,8 +65,8 @@
 #define HEX_DATA_TASK_PRIORITY 6
 #define HEX_DATA_TASK_CORE_ID 1
 
-#define OTA_TASK_STACK_SIZE (1024 * 8)
-#define OTA_TASK_PRIORITY 6
+#define OTA_TASK_STACK_SIZE (1024 * 10)
+#define OTA_TASK_PRIORITY 12
 #define OTA_TASK_CORE_ID 1
 
 // MQTT Data Task Configuration

@@ -8,6 +8,7 @@
 #include "sensor.h"
 #include "tasks_common.h"
 #include "valve_control.h"
+#include <math.h>
 #include <string.h>
 #include <time.h>
 
@@ -138,15 +139,22 @@ static esp_err_t serialize_sensor_data(const sensor_readings_t *readings,
   cJSON_AddStringToObject(root, "timestamp", timestamp);
   cJSON_AddNumberToObject(root, "counter", sequence);
 
-  // Add sensor readings (same as data.c stores)
-  cJSON_AddNumberToObject(root, "temperature", readings->temperature);
-  cJSON_AddNumberToObject(root, "humidity", readings->humidity);
-  cJSON_AddNumberToObject(root, "voltage", readings->voltage);
-  cJSON_AddNumberToObject(root, "pressure", readings->pressure);
-  cJSON_AddNumberToObject(root, "water_temp", readings->water_temp);
-  cJSON_AddNumberToObject(root, "discharge", readings->discharge);
+  // Add sensor readings with rounding to 2 decimal places
+  // Round using: round(value * 100.0) / 100.0
+  cJSON_AddNumberToObject(root, "temperature",
+                          round(readings->temperature * 100.0) / 100.0);
+  cJSON_AddNumberToObject(root, "humidity",
+                          round(readings->humidity * 100.0) / 100.0);
+  cJSON_AddNumberToObject(root, "voltage",
+                          round(readings->voltage * 100.0) / 100.0);
+  cJSON_AddNumberToObject(root, "pressure",
+                          round(readings->pressure * 100.0) / 100.0);
+  cJSON_AddNumberToObject(root, "water_temp",
+                          round(readings->water_temp * 100.0) / 100.0);
+  cJSON_AddNumberToObject(root, "discharge",
+                          round(readings->discharge * 100.0) / 100.0);
 
-  // Add soil moisture and battery arrays
+  // Add soil moisture and battery arrays (these are already integers)
   cJSON *soil_array = cJSON_CreateArray();
   cJSON *battery_array = cJSON_CreateArray();
 

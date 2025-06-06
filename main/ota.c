@@ -263,8 +263,8 @@ esp_err_t iOTA_EspStart(void) {
   if (NULL == spOtaTaskHandle) {
     ESP_LOGI(TAG, "Starting OTA task with safety mechanisms");
 
-    // Start safety timer before creating OTA task
-    start_ota_safety_timer();
+    // // Start safety timer before creating OTA task
+    // start_ota_safety_timer();
 
     if (pdPASS != xTaskCreate(&vOTA_EspTask, OTA_TASK_NAME, OTA_TASK_STACK_SIZE,
                               NULL, OTA_TASK_PRIORITY, &spOtaTaskHandle)) {
@@ -467,9 +467,9 @@ void suspend_tasks_for_ota_safe(void) {
 
   // List of tasks to suspend during OTA
   TaskHandle_t tasks_to_suspend[] = {
-      sensorTaskHandle, dataLoggingTaskHandle, buttonTaskHandle,
-      valveTaskHandle,  simulationTaskHandle,  discoveryTaskHandle,
-      soilTaskHandle,   TXTaskHandle,
+      sensorTaskHandle,   dataLoggingTaskHandle, buttonTaskHandle,
+      valveTaskHandle,    simulationTaskHandle,  discoveryTaskHandle,
+      mqttDataTaskHandle, wifiTaskHandle,
   };
 
   const int total_tasks = sizeof(tasks_to_suspend) / sizeof(TaskHandle_t);
@@ -583,7 +583,7 @@ esp_err_t publish_ota_status(const char *status, const char *message,
     return ESP_FAIL;
   }
 
-  ESP_LOGI(TAG, "OTA status published: %s (msg_id: %d)", status, msg_id);
+  ESP_LOGD(TAG, "OTA status published: %s (msg_id: %d)", status, msg_id);
   ESP_LOGD(TAG, "OTA status payload: %s", status_msg);
 
   return ESP_OK;
@@ -856,52 +856,9 @@ void vOTA_EspTask(void *pvParameter) {
 
     // Feed watchdog
     if (++progress_update_counter % 10 == 0) {
-      vTaskDelay(pdMS_TO_TICKS(1));
+      vTaskDelay(pdMS_TO_TICKS(50));
     }
   }
-
-  // while (1) {
-  //   data_read = esp_http_client_read(client, buffer, buffer_size);
-  //   if (data_read < 0) {
-  //     ESP_LOGE(TAG, "HTTP read error");
-  //     publish_ota_status("failed", "Download error", 0);
-  //     goto cleanup;
-  //   } else if (data_read > 0) {
-  //     err = esp_ota_write(update_handle, (const void *)buffer, data_read);
-  //     if (err != ESP_OK) {
-  //       ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-  //       publish_ota_status("failed", "Write failed", 0);
-  //       goto cleanup;
-  //     }
-  //     total_read += data_read;
-  //     progress_update_counter++;
-  //
-  //     // Calculate and report progress
-  //     int progress = 10;
-  //     if (content_length > 0) {
-  //       progress = 10 + ((total_read * 70) / content_length); // 10% to 80%
-  //     }
-  //
-  //     // Report progress every 10%
-  //     if (progress - last_reported_progress >= 10) {
-  //       char progress_msg[64];
-  //       snprintf(progress_msg, sizeof(progress_msg), "Downloaded %d KB",
-  //                total_read / 1024);
-  //       publish_ota_status("downloading", progress_msg, progress);
-  //       last_reported_progress = progress;
-  //     }
-  //
-  //   } else if (data_read == 0) {
-  //     // End of data
-  //     ESP_LOGI(TAG, "Download complete. Total: %d bytes", total_read);
-  //     break;
-  //   }
-  //
-  //   // Feed watchdog and yield to other tasks periodically
-  //   if (progress_update_counter % 10 == 0) {
-  //     vTaskDelay(pdMS_TO_TICKS(1));
-  //   }
-  // }
 
   // Verify download size
   if (content_length > 0 && total_read != content_length) {
@@ -969,8 +926,8 @@ cleanup:
   ESP_LOGI(TAG, "Resuming suspended tasks after OTA failure");
   resume_suspended_tasks_with_verification();
 
-  // Stop the safety timer since we're cleaning up properly
-  stop_ota_safety_timer();
+  // // Stop the safety timer since we're cleaning up properly
+  // stop_ota_safety_timer();
 
   // Log memory status after cleanup and task resumption
   size_t free_heap_after = esp_get_free_heap_size();
