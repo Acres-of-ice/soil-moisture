@@ -36,7 +36,7 @@ static esp_err_t transmit_buffered_data(void);
 static void mark_data_transmitted(uint32_t sequence_number);
 
 static esp_err_t validate_mqtt_data_config(void) {
-  ESP_LOGI(TAG, "Validating MQTT data configuration...");
+  ESP_LOGD(TAG, "Validating MQTT data configuration...");
 
   // Check if required components are enabled
   if (!site_config.has_gsm) {
@@ -54,7 +54,7 @@ static esp_err_t validate_mqtt_data_config(void) {
 
   // Check buffer size vs interval
   int max_offline_minutes = DATA_BUFFER_SIZE * CONFIG_DATA_TIME_M;
-  ESP_LOGI(TAG, "Max offline buffering: %d minutes (%d entries)",
+  ESP_LOGD(TAG, "Max offline buffering: %d minutes (%d entries)",
            max_offline_minutes, DATA_BUFFER_SIZE);
 
   // Validate JSON buffer size
@@ -71,12 +71,12 @@ static esp_err_t validate_mqtt_data_config(void) {
              free_heap, estimated_usage);
   }
 
-  ESP_LOGI(TAG, "Configuration validation completed");
+  ESP_LOGD(TAG, "Configuration validation completed");
   return ESP_OK;
 }
 
 esp_err_t mqtt_data_init(void) {
-  ESP_LOGI(TAG, "Initializing MQTT data transmission system");
+  ESP_LOGD(TAG, "Initializing MQTT data transmission system");
 
   // Add validation before initialization
   esp_err_t ret = validate_mqtt_data_config();
@@ -91,8 +91,9 @@ esp_err_t mqtt_data_init(void) {
     return ret;
   }
 
-  ESP_LOGI(TAG, "MQTT data system initialized successfully");
-  ESP_LOGI(TAG, "Data transmission interval: %d minutes", CONFIG_DATA_TIME_M);
+  ESP_LOGD(TAG, "MQTT data system initialized successfully");
+  ESP_LOGI(TAG, "MQTT Data transmission interval: %d minutes",
+           CONFIG_DATA_TIME_M);
   return ESP_OK;
 }
 
@@ -117,7 +118,7 @@ static esp_err_t init_data_buffer(void) {
   mqtt_data_buffer.sequence_counter = 1; // Start from 1
 
   data_buffer_initialized = true;
-  ESP_LOGI(TAG, "Data buffer initialized (size: %d entries)", DATA_BUFFER_SIZE);
+  ESP_LOGD(TAG, "Data buffer initialized (size: %d entries)", DATA_BUFFER_SIZE);
   return ESP_OK;
 }
 
@@ -134,64 +135,38 @@ static esp_err_t serialize_sensor_data(const sensor_readings_t *readings,
     return ESP_ERR_NO_MEM;
   }
 
-  // Add basic device information
+  // Add timestamp and counter (sequence)
   cJSON_AddStringToObject(root, "timestamp", timestamp);
-  cJSON_AddNumberToObject(root, "sequence", sequence);
-  cJSON_AddStringToObject(root, "device_id", get_pcb_name(g_nodeAddress));
-  cJSON_AddStringToObject(root, "site_name", CONFIG_SITE_NAME);
-  cJSON_AddStringToObject(root, "version", PROJECT_VERSION);
+  cJSON_AddNumberToObject(root, "counter", sequence);
 
-  // Create sensors object
-  cJSON *sensors = cJSON_CreateObject();
-  if (!sensors) {
-    cJSON_Delete(root);
-    return ESP_ERR_NO_MEM;
-  }
+  // Add sensor readings (same as data.c stores)
+  cJSON_AddNumberToObject(root, "temperature", readings->temperature);
+  cJSON_AddNumberToObject(root, "humidity", readings->humidity);
+  cJSON_AddNumberToObject(root, "voltage", readings->voltage);
+  cJSON_AddNumberToObject(root, "pressure", readings->pressure);
+  cJSON_AddNumberToObject(root, "water_temp", readings->water_temp);
+  cJSON_AddNumberToObject(root, "discharge", readings->discharge);
 
-  // Add soil moisture array
+  // Add soil moisture and battery arrays
   cJSON *soil_array = cJSON_CreateArray();
+  cJSON *battery_array = cJSON_CreateArray();
+
   for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
     cJSON_AddItemToArray(soil_array, cJSON_CreateNumber(readings->soil[i]));
-  }
-  cJSON_AddItemToObject(sensors, "soil", soil_array);
-
-  // Add battery array
-  cJSON *battery_array = cJSON_CreateArray();
-  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
     cJSON_AddItemToArray(battery_array,
                          cJSON_CreateNumber(readings->battery[i]));
   }
-  cJSON_AddItemToObject(sensors, "battery", battery_array);
 
-  // Add environmental sensors
-  cJSON_AddNumberToObject(sensors, "temperature", readings->temperature);
-  cJSON_AddNumberToObject(sensors, "humidity", readings->humidity);
-  cJSON_AddNumberToObject(sensors, "pressure", readings->pressure);
-  cJSON_AddNumberToObject(sensors, "water_temp", readings->water_temp);
-  cJSON_AddNumberToObject(sensors, "discharge", readings->discharge);
-  cJSON_AddNumberToObject(sensors, "voltage", readings->voltage);
+  cJSON_AddItemToObject(root, "soil", soil_array);
+  cJSON_AddItemToObject(root, "battery", battery_array);
 
-  cJSON_AddItemToObject(root, "sensors", sensors);
-
-  // Add status information
-  cJSON_AddStringToObject(root, "status", "normal");
-  cJSON_AddBoolToObject(root, "simulation", site_config.simulate);
-
-  // Add system information
-  cJSON *system = cJSON_CreateObject();
-  cJSON_AddNumberToObject(system, "free_heap", esp_get_free_heap_size());
-  cJSON_AddNumberToObject(system, "uptime",
-                          xTaskGetTickCount() * portTICK_PERIOD_MS / 1000);
-  cJSON_AddItemToObject(root, "system", system);
-
-  // Convert to string
+  // Convert to string and copy to buffer
   char *json_string = cJSON_Print(root);
   if (!json_string) {
     cJSON_Delete(root);
     return ESP_ERR_NO_MEM;
   }
 
-  // Check if it fits in buffer
   size_t json_len = strlen(json_string);
   if (json_len >= buffer_size) {
     ESP_LOGE(TAG, "JSON payload too large: %zu bytes (max: %zu)", json_len,
@@ -201,10 +176,8 @@ static esp_err_t serialize_sensor_data(const sensor_readings_t *readings,
     return ESP_ERR_INVALID_SIZE;
   }
 
-  // Copy to output buffer
   strcpy(json_buffer, json_string);
 
-  // Cleanup
   free(json_string);
   cJSON_Delete(root);
 
@@ -314,7 +287,7 @@ static esp_err_t transmit_buffered_data(void) {
     if (ret == ESP_OK) {
       entry->transmitted = true;
       transmitted_count++;
-      ESP_LOGI(TAG, "Successfully transmitted buffered data (seq: %lu)",
+      ESP_LOGD(TAG, "Successfully transmitted buffered data (seq: %lu)",
                entry->sequence_number);
     } else {
       entry->retry_count++;
@@ -335,14 +308,14 @@ static esp_err_t transmit_buffered_data(void) {
   xSemaphoreGive(mqtt_data_buffer.mutex);
 
   if (transmitted_count > 0) {
-    ESP_LOGI(TAG, "Transmitted %d buffered data entries", transmitted_count);
+    ESP_LOGD(TAG, "Transmitted %d buffered data entries", transmitted_count);
   }
 
   return ESP_OK;
 }
 
 void mqtt_data_task(void *pvParameters) {
-  ESP_LOGI(TAG, "MQTT Data task started");
+  ESP_LOGD(TAG, "MQTT Data task started");
 
   // Initialize the data system
   esp_err_t ret = mqtt_data_init();
@@ -353,54 +326,77 @@ void mqtt_data_task(void *pvParameters) {
   }
 
   TickType_t last_wake_time = xTaskGetTickCount();
+  uint32_t notification_value;
 
   while (1) {
-    ESP_LOGD(TAG, "Data transmission cycle starting");
+    bool immediate_request = false;
 
-    // Check if we have the necessary connections
-    bool can_transmit = isPPPConnected() && isMqttConnected;
-
-    if (can_transmit) {
-      // Collect fresh sensor data
-      sensor_readings_t current_readings = {0};
-      get_sensor_readings(&current_readings);
-
-      // Get timestamp
-      char timestamp[32];
-      strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
-      timestamp[sizeof(timestamp) - 1] = '\0';
-
-      // Buffer the data first
-      ret = buffer_sensor_data(&current_readings, timestamp);
-      if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to buffer sensor data");
-      }
-
-      // Try to transmit all buffered data
-      ret = transmit_buffered_data();
-      if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to transmit some buffered data");
-      }
-
-    } else {
-      // Just buffer the data for later transmission
-      sensor_readings_t current_readings = {0};
-      get_sensor_readings(&current_readings);
-
-      char timestamp[32];
-      strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
-      timestamp[sizeof(timestamp) - 1] = '\0';
-
-      ret = buffer_sensor_data(&current_readings, timestamp);
-      if (ret == ESP_OK) {
-        ESP_LOGI(
-            TAG, "Data buffered for later transmission (PPP: %s, MQTT: %s)",
-            isPPPConnected() ? "OK" : "FAIL", isMqttConnected ? "OK" : "FAIL");
+    // Check for immediate data request notification
+    if (xTaskNotifyWait(0, 0xFFFFFFFF, &notification_value, 0) == pdTRUE) {
+      if (notification_value & 1) {
+        immediate_request = true;
+        ESP_LOGI(TAG, "Processing immediate data request");
       }
     }
 
-    // Wait for next interval
-    vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(DATA_TIME_MS));
+    // Execute data transmission on schedule OR immediate request
+    if (immediate_request ||
+        (xTaskGetTickCount() - last_wake_time >= pdMS_TO_TICKS(DATA_TIME_MS))) {
+
+      ESP_LOGD(TAG, "Data transmission cycle starting");
+
+      // Check if we have the necessary connections
+      bool can_transmit = isPPPConnected() && isMqttConnected;
+
+      if (can_transmit) {
+        // Collect fresh sensor data
+        sensor_readings_t current_readings = {0};
+        get_sensor_readings(&current_readings);
+
+        // Get timestamp
+        char timestamp[32];
+        strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
+        timestamp[sizeof(timestamp) - 1] = '\0';
+
+        // Buffer the data first
+        ret = buffer_sensor_data(&current_readings, timestamp);
+        if (ret != ESP_OK) {
+          ESP_LOGE(TAG, "Failed to buffer sensor data");
+        }
+
+        // Try to transmit all buffered data
+        ret = transmit_buffered_data();
+        if (ret != ESP_OK) {
+          ESP_LOGW(TAG, "Failed to transmit some buffered data");
+        }
+
+      } else {
+        // Just buffer the data for later transmission
+        sensor_readings_t current_readings = {0};
+        get_sensor_readings(&current_readings);
+
+        char timestamp[32];
+        strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
+        timestamp[sizeof(timestamp) - 1] = '\0';
+
+        ret = buffer_sensor_data(&current_readings, timestamp);
+        if (ret == ESP_OK) {
+          ESP_LOGW(TAG,
+                   "Data buffered for later transmission (PPP: %s, MQTT: %s)",
+                   isPPPConnected() ? "OK" : "FAIL",
+                   isMqttConnected ? "OK" : "FAIL");
+        }
+      }
+
+      // Update last_wake_time only for scheduled transmissions, not immediate
+      // requests
+      if (!immediate_request) {
+        last_wake_time = xTaskGetTickCount();
+      }
+    }
+
+    // Check every second for notifications or scheduled time
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 

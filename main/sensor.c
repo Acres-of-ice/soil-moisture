@@ -646,7 +646,7 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
           "%s%d%%", (i > 0) ? ", " : "", simulated_readings.battery[i]);
     }
 
-    ESP_LOGI(
+    ESP_LOGD(
         "Simulation",
         "Set simulated values - Soil: [%s], Battery: [%s], "
         "Temp: %.1f°C, Humidity: %.1f%%, Water: %.1f°C, Pressure: %.1f bar, "
@@ -759,14 +759,14 @@ void simulation_task(void *pvParameters) {
     ESP_LOGI(TAG, "Battery - %s", battery_log);
 
     // Log environmental sensor readings
-    ESP_LOGI(TAG, "Environmental Readings:");
-    ESP_LOGI(TAG, "  Temperature: %.1f°C", current_test.temperature);
-    ESP_LOGI(TAG, "  Humidity: %.1f%%", current_test.humidity);
-    ESP_LOGI(TAG, "  Pressure: %.1f bar", current_test.pressure);
-    ESP_LOGI(TAG, "  Water Temp: %.1f°C", current_test.water_temp);
-    ESP_LOGI(TAG, "  Discharge: %.1f l/s", current_test.discharge);
-    ESP_LOGI(TAG, "  Voltage: %.1f V", current_test.voltage);
-    ESP_LOGI(TAG, "==================");
+    ESP_LOGD(TAG, "Environmental Readings:");
+    ESP_LOGD(TAG, "  Temperature: %.1f°C", current_test.temperature);
+    ESP_LOGD(TAG, "  Humidity: %.1f%%", current_test.humidity);
+    ESP_LOGD(TAG, "  Pressure: %.1f bar", current_test.pressure);
+    ESP_LOGD(TAG, "  Water Temp: %.1f°C", current_test.water_temp);
+    ESP_LOGD(TAG, "  Discharge: %.1f l/s", current_test.discharge);
+    ESP_LOGD(TAG, "  Voltage: %.1f V", current_test.voltage);
+    ESP_LOGD(TAG, "==================");
 
     // Move to next test case
     if (use_random_mode) {

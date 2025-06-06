@@ -14,8 +14,12 @@
 #define MQTT_TOPIC_BUFFER_SIZE 256
 #define OTA_TASK_NAME "OtaTask"
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
-                               int32_t event_id, void *event_data);
+// MQTT Topics
+#define MQTT_DATA_TOPIC_FORMAT "drip/%s/data"
+#define MQTT_ACK_TOPIC_FORMAT "drip/%s/data/ack"
+#define MQTT_STATUS_TOPIC_FORMAT "drip/%s/status"
+#define MQTT_COMMAND_TOPIC_FORMAT "drip/%s/do"
+#define MQTT_OTA_TOPIC_FORMAT "drip/%s/ota"
 
 // Global MQTT client handle
 extern esp_mqtt_client_handle_t global_mqtt_client;

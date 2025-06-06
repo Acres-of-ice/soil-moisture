@@ -7,6 +7,12 @@ static const char *TAG = "MQTT";
 static char pcOtaUrl[1000] = {0};
 bool isMqttConnected = false;
 
+char data_topic[64];
+char command_topic[64];
+char ack_topic[64];
+char ota_topic[64];
+char status_topic[64];
+
 static int mqtt_reconnect_attempts = 0;
 static TickType_t last_reconnect_attempt = 0;
 static bool mqtt_subscription_active = false;
@@ -66,6 +72,16 @@ esp_err_t iMQTT_Init(void) {
     ESP_LOGE(TAG, "Failed to start MQTT client: %s", esp_err_to_name(ret));
     return ret;
   }
+  snprintf(data_topic, sizeof(data_topic), MQTT_DATA_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
+  snprintf(command_topic, sizeof(command_topic), MQTT_COMMAND_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
+  snprintf(ack_topic, sizeof(ack_topic), MQTT_ACK_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
+  snprintf(ota_topic, sizeof(ota_topic), MQTT_OTA_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
+  snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
 
   ESP_LOGI(TAG, "MQTT client started successfully");
   return ESP_OK;
@@ -309,10 +325,6 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
     isMqttConnected = true;
 
-    // ADD THIS: Subscribe to data acknowledgment topic
-    char ack_topic[128];
-    snprintf(ack_topic, sizeof(ack_topic), MQTT_DATA_ACK_TOPIC_FORMAT,
-             CONFIG_SITE_NAME);
     msg_id = esp_mqtt_client_subscribe(client, ack_topic, 1);
     if (msg_id >= 0) {
       ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
@@ -320,16 +332,19 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
       ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
     }
 
-    // Optional: Publish connection status
+    msg_id = esp_mqtt_client_subscribe(client, command_topic, 1);
+    if (msg_id >= 0) {
+      ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
+    } else {
+      ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
+    }
+
     char status_msg[256];
     snprintf(status_msg, sizeof(status_msg),
              "{\"device\":\"%s\",\"status\":\"connected\",\"timestamp\":\"%s\","
              "\"version\":\"%s\"}",
              get_pcb_name(g_nodeAddress), fetchTime(), PROJECT_VERSION);
 
-    char status_topic[128];
-    snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
-             CONFIG_SITE_NAME);
     esp_mqtt_client_publish(client, status_topic, status_msg, 0, 1, 0);
 
     break;
@@ -363,20 +378,21 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     ESP_LOGI(TAG, "TOPIC: %s", topic);
     ESP_LOGD(TAG, "DATA: %s", data);
 
-    // Check for data acknowledgment
-    char expected_ack_topic[128];
-    snprintf(expected_ack_topic, sizeof(expected_ack_topic),
-             MQTT_DATA_ACK_TOPIC_FORMAT, CONFIG_SITE_NAME);
-
-    if (strstr(topic, "data/ack") != NULL) {
+    if (strstr(topic, ack_topic) != NULL) {
       ESP_LOGI(TAG, "Received data acknowledgment: %s", data);
       // You can parse the ACK and mark specific sequence numbers as confirmed
       // For now, we'll just log it
-    } else if (strstr(topic, "drip/ota") != NULL) {
+    } else if (strstr(topic, ota_topic) != NULL) {
       ESP_LOGI(TAG, "Processing OTA command");
       esp_err_t ota_result = iMqtt_OtaParser(data);
       if (ota_result != ESP_OK) {
         ESP_LOGE(TAG, "OTA parsing failed: %s", esp_err_to_name(ota_result));
+      }
+    } else if (strcmp(topic, command_topic) == 0 && strcmp(data, "1") == 0) {
+      ESP_LOGI(TAG, "Immediate data request received");
+      // Signal mqtt_data_task to send data immediately
+      if (mqttDataTaskHandle) {
+        xTaskNotify(mqttDataTaskHandle, 1, eSetBits);
       }
     } else {
       ESP_LOGD(TAG, "Unhandled topic: %s", topic);

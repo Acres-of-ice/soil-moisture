@@ -371,9 +371,10 @@ extern TaskHandle_t mqttDataTaskHandle;
 #define DATA_RETRY_INTERVAL_MS (30 * 1000) // 30 seconds between retries
 #define MAX_DATA_RETRY_ATTEMPTS 3
 
-// MQTT Topics
-#define MQTT_DATA_TOPIC_FORMAT "drip/%s/data"
-#define MQTT_DATA_ACK_TOPIC_FORMAT "drip/%s/data/ack"
-#define MQTT_STATUS_TOPIC_FORMAT "drip/%s/status"
+extern char data_topic[64];
+extern char command_topic[64];
+extern char ack_topic[64];
+extern char ota_topic[64];
+extern char status_topic[64];
 
 #endif // DEFINE_H
