@@ -316,6 +316,8 @@ static const test_case_t test_cases[] = {
          "Oversaturation: very wet, high pressure, optimal voltage"}};
 
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
+#define TEST_DELAY_MS                                                          \
+  (60 * 1000) // 3 minute delay between tests to allow full irrigation cycles
 
 // Function signature for setting all simulated values
 void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],

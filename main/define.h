@@ -340,10 +340,40 @@ typedef struct {
 
 extern HexCircularBuffer hex_buffer;
 
-// ==================== Simulation mode ====================
+// ==================== MQTT Data Transmission ====================
 
-#define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
-#define TEST_DELAY_MS                                                          \
-  (60 * 1000) // 3 minute delay between tests to allow full irrigation cycles
+// Data buffering for offline periods
+#define DATA_BUFFER_SIZE 12 // Store up to 1 hour of data (12 * 5min intervals)
+#define MQTT_DATA_JSON_SIZE 1024 // Maximum JSON payload size
+
+typedef struct {
+  char timestamp[32];
+  sensor_readings_t readings;
+  uint32_t sequence_number;
+  bool transmitted;
+  int retry_count;
+} buffered_data_t;
+
+typedef struct {
+  buffered_data_t buffer[DATA_BUFFER_SIZE];
+  int head;
+  int tail;
+  int count;
+  uint32_t sequence_counter;
+  SemaphoreHandle_t mutex;
+} data_buffer_t;
+
+// MQTT Data transmission globals
+extern data_buffer_t mqtt_data_buffer;
+extern TaskHandle_t mqttDataTaskHandle;
+
+// Data transmission timing (using existing CONFIG_DATA_TIME_M)
+#define DATA_RETRY_INTERVAL_MS (30 * 1000) // 30 seconds between retries
+#define MAX_DATA_RETRY_ATTEMPTS 3
+
+// MQTT Topics
+#define MQTT_DATA_TOPIC_FORMAT "drip/%s/data"
+#define MQTT_DATA_ACK_TOPIC_FORMAT "drip/%s/data/ack"
+#define MQTT_STATUS_TOPIC_FORMAT "drip/%s/status"
 
 #endif // DEFINE_H

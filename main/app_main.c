@@ -19,6 +19,7 @@
 #include "i2cdev.h"
 #include "lcd.h"
 #include "mqtt.h"
+#include "mqtt_data.h"
 #include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
@@ -46,6 +47,7 @@ TaskHandle_t buttonTaskHandle = NULL;
 TaskHandle_t soilTaskHandle = NULL;
 TaskHandle_t TXTaskHandle = NULL;
 TaskHandle_t spOtaTaskHandle = NULL;
+TaskHandle_t mqttDataTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
@@ -160,9 +162,9 @@ void app_main(void) {
   esp_log_level_set("*", ESP_LOG_INFO);
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
-  esp_log_level_set("PPPOS", ESP_LOG_DEBUG);
+  // esp_log_level_set("PPPOS", ESP_LOG_DEBUG);
   // esp_log_level_set("ESPNOW", ESP_LOG_DEBUG);
-  // esp_log_level_set("espnow_lib", ESP_LOG_DEBUG);
+  esp_log_level_set("espnow_lib", ESP_LOG_DEBUG);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
@@ -174,6 +176,7 @@ void app_main(void) {
   // esp_log_level_set("AIR", ESP_LOG_DEBUG);
   // esp_log_level_set("LCD", ESP_LOG_DEBUG);
 
+  esp_log_level_set("uart", ESP_LOG_NONE);
   esp_log_level_set("nvs", ESP_LOG_NONE);
   esp_log_level_set("wifi", ESP_LOG_NONE);
   esp_log_level_set("wifi_init", ESP_LOG_NONE);
@@ -183,7 +186,7 @@ void app_main(void) {
   esp_log_level_set("coreMQTT", ESP_LOG_NONE);
   esp_log_level_set("gpio", ESP_LOG_NONE);
   esp_log_level_set("sdspi_transaction", ESP_LOG_NONE);
-  esp_log_level_set("esp-netif_lwip-ppp", ESP_LOG_DEBUG);
+  esp_log_level_set("esp-netif_lwip-ppp", ESP_LOG_NONE);
 
   spi_mutex = xSemaphoreCreateMutex();
   if (spi_mutex == NULL) {
@@ -246,7 +249,6 @@ void app_main(void) {
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
   custom_rtc_init(i2c0bus);
-  // 🔥 SYNC SYSTEM TIME WITH RTC - This enables RTC timestamps in logs!
   rtc_sync_system_time();
   vTaskDelay(100);
   modbus_init();
@@ -309,12 +311,15 @@ void app_main(void) {
       ESP_LOGE("PPPOS", "Failed");
     } else {
       ESP_LOGD("PPPOS", "Success");
+      ESP_LOGI(TAG, "Starting MQTT data transmission task");
+      xTaskCreatePinnedToCore(
+          mqtt_data_task, "MQTT_Data", MQTT_DATA_TASK_STACK_SIZE, NULL,
+          MQTT_DATA_TASK_PRIORITY, &mqttDataTaskHandle, MQTT_DATA_TASK_CORE_ID);
+      vTaskDelay(pdMS_TO_TICKS(1000));
     }
   } else {
     ESP_LOGW(TAG, "GSM module disabled, PPPOS Not required");
     // Disable SIM pin
-
-    // Set the pin level
     gpio_set_level(SIM_GPIO, 1);
   }
 

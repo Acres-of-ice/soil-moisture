@@ -69,4 +69,9 @@
 #define OTA_TASK_PRIORITY 6
 #define OTA_TASK_CORE_ID 1
 
+// MQTT Data Task Configuration
+#define MQTT_DATA_TASK_STACK_SIZE (1024 * 6) // 6KB stack for JSON processing
+#define MQTT_DATA_TASK_PRIORITY 4            // Higher than data logging
+#define MQTT_DATA_TASK_CORE_ID 0             // Same core as MQTT
+
 #endif /* MAIN_TASKS_COMMON_H_ */
