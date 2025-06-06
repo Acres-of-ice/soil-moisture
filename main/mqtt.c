@@ -193,7 +193,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     if (strstr(topic, ack_topic) != NULL) {
       ESP_LOGI(TAG, "Received data acknowledgment: %s", data);
     } else if (strcmp(topic, command_topic) == 0) {
-      if (strcmp(data, "1") == 0) {
+      if (strcmp(data, "data") == 0) {
         ESP_LOGI(TAG, "Immediate data request received");
         // Signal mqtt_data_task to send data immediately
         if (mqttDataTaskHandle) {
@@ -204,7 +204,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         // Construct predefined OTA URL
         char ota_url[256];
         snprintf(ota_url, sizeof(ota_url),
-                 "http://pcb-bins.s3.us-east-1.amazonaws.com/%s_CONDUCTOR.bin",
+                 "http://pcb-bins.s3.us-east-1.amazonaws.com/%s_MASTER.bin",
                  CONFIG_SITE_NAME);
 
         // Create JSON for OTA parser

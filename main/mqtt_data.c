@@ -342,7 +342,7 @@ void mqtt_data_task(void *pvParameters) {
     if (xTaskNotifyWait(0, 0xFFFFFFFF, &notification_value, 0) == pdTRUE) {
       if (notification_value & 1) {
         immediate_request = true;
-        ESP_LOGI(TAG, "Processing immediate data request");
+        ESP_LOGD(TAG, "Processing immediate data request");
       }
     }
 

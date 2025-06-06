@@ -340,7 +340,7 @@ void send_daily_status_sms(double uptime_days) {
            CONFIG_SITE_NAME, uptime_days);
 
   // Call your SMS sending function here
-  sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
+  // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
   ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
 }
 

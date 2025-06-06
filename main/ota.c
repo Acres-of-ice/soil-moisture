@@ -608,16 +608,6 @@ esp_err_t iMqtt_OtaParser(char *json_string) {
     return ESP_ERR_INVALID_ARG;
   }
 
-  // Extract msgId (OPTIONAL - for tracking/logging purposes only)
-  int msgId = 0;
-  cJSON *msg_id_item = cJSON_GetObjectItem(root, "msgId");
-  if (cJSON_IsNumber(msg_id_item)) {
-    msgId = msg_id_item->valueint;
-    ESP_LOGI(TAG, "OTA request msgId: %d", msgId);
-  } else {
-    ESP_LOGD(TAG, "No msgId provided in OTA command (optional)");
-  }
-
   // Extract URL (REQUIRED)
   cJSON *url_item = cJSON_GetObjectItem(root, "url");
   if (!cJSON_IsString(url_item) || url_item->valuestring == NULL) {
@@ -652,11 +642,6 @@ esp_err_t iMqtt_OtaParser(char *json_string) {
     publish_ota_status("failed", "Invalid URL protocol", 0);
     cJSON_Delete(root);
     return ESP_ERR_INVALID_ARG;
-  }
-
-  // Recommend HTTPS for security
-  if (strncmp(url, "https://", 8) != 0) {
-    ESP_LOGW(TAG, "OTA URL uses HTTP instead of HTTPS - security risk!");
   }
 
   // Check if URL ends with .bin (firmware file)
@@ -710,9 +695,7 @@ esp_err_t iMqtt_OtaParser(char *json_string) {
     return ota_start_result;
   }
 
-  ESP_LOGI(TAG, "OTA task started successfully%s",
-           msgId > 0 ? "" : " (no msgId)");
-
+  ESP_LOGI(TAG, "OTA task started successfully");
   return ESP_OK;
 }
 

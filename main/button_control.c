@@ -44,7 +44,7 @@ void a_btn_short_press(void) {
       newState = STATE_VALVE_OPEN;
       if (gsm_init_success) {
         snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+        // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
       }
 
       ESP_LOGI(TAG, "Force drip sector B");
@@ -52,7 +52,7 @@ void a_btn_short_press(void) {
       newState = STATE_VALVE_OPEN;
       if (gsm_init_success) {
         snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+        // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
       }
 
       ESP_LOGI(TAG, "Force drip sector A");
@@ -96,7 +96,7 @@ void a_btn_long_press(void) {
   // Optional SMS notification
   if (gsm_init_success) {
     snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
+    // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
   }
 }
 
@@ -134,7 +134,7 @@ void c_btn_short_press(void) {
 
   if (gsm_init_success) {
     snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
   }
 }
 
@@ -197,7 +197,7 @@ void c_btn_long_press(void) {
   // Optional: Send SMS notification
   if (gsm_init_success) {
     snprintf(sms_message, sizeof(sms_message), "Files cleared");
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
   }
 }
 
