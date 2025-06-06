@@ -92,8 +92,7 @@ esp_err_t mqtt_data_init(void) {
   }
 
   ESP_LOGD(TAG, "MQTT data system initialized successfully");
-  ESP_LOGI(TAG, "MQTT Data transmission interval: %d minutes",
-           CONFIG_DATA_TIME_M);
+  ESP_LOGI(TAG, "Data transmission interval: %d minutes", CONFIG_DATA_TIME_M);
   return ESP_OK;
 }
 
@@ -193,7 +192,7 @@ static esp_err_t publish_sensor_data(const char *json_data) {
 
   // Format topic
   char topic[128];
-  snprintf(topic, sizeof(topic), MQTT_DATA_TOPIC_FORMAT, CONFIG_SITE_NAME);
+  snprintf(topic, sizeof(topic), data_topic, CONFIG_SITE_NAME);
 
   // Publish with QoS 1 for reliability
   int msg_id =
@@ -381,7 +380,7 @@ void mqtt_data_task(void *pvParameters) {
 
         ret = buffer_sensor_data(&current_readings, timestamp);
         if (ret == ESP_OK) {
-          ESP_LOGW(TAG,
+          ESP_LOGD(TAG,
                    "Data buffered for later transmission (PPP: %s, MQTT: %s)",
                    isPPPConnected() ? "OK" : "FAIL",
                    isMqttConnected ? "OK" : "FAIL");

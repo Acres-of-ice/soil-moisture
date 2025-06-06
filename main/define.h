@@ -342,6 +342,7 @@ extern HexCircularBuffer hex_buffer;
 
 // ==================== MQTT Data Transmission ====================
 
+extern bool isMqttConnected;
 // Data buffering for offline periods
 #define DATA_BUFFER_SIZE 12 // Store up to 1 hour of data (12 * 5min intervals)
 #define MQTT_DATA_JSON_SIZE 1024 // Maximum JSON payload size
@@ -376,5 +377,6 @@ extern char command_topic[64];
 extern char ack_topic[64];
 extern char ota_topic[64];
 extern char status_topic[64];
+extern char error_topic[64];
 
 #endif // DEFINE_H

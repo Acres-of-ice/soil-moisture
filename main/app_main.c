@@ -249,7 +249,7 @@ void app_main(void) {
   i2c_master_init_(&i2c0bus);
   vTaskDelay(100);
   custom_rtc_init(i2c0bus);
-  rtc_sync_system_time();
+  // rtc_sync_system_time();
   vTaskDelay(100);
   modbus_init();
   vTaskDelay(100);

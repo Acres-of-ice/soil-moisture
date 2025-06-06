@@ -20,6 +20,7 @@
 #define MQTT_STATUS_TOPIC_FORMAT "drip/%s/status"
 #define MQTT_COMMAND_TOPIC_FORMAT "drip/%s/do"
 #define MQTT_OTA_TOPIC_FORMAT "drip/%s/ota"
+#define MQTT_ERR_TOPIC_FORMAT "drip/%s/error"
 
 // Global MQTT client handle
 extern esp_mqtt_client_handle_t global_mqtt_client;
@@ -37,5 +38,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 esp_err_t iMQTT_Init(void);
 
 esp_err_t iOTA_EspStart(void);
+esp_err_t mqtt_publish_error_log(const char *level_str, const char *tag,
+                                 const char *message);
 
 #endif

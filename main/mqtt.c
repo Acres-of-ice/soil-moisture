@@ -12,6 +12,7 @@ char command_topic[64];
 char ack_topic[64];
 char ota_topic[64];
 char status_topic[64];
+char error_topic[64];
 
 static int mqtt_reconnect_attempts = 0;
 static TickType_t last_reconnect_attempt = 0;
@@ -79,6 +80,8 @@ esp_err_t iMQTT_Init(void) {
   snprintf(ack_topic, sizeof(ack_topic), MQTT_ACK_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
   snprintf(ota_topic, sizeof(ota_topic), MQTT_OTA_TOPIC_FORMAT,
+           CONFIG_SITE_NAME);
+  snprintf(error_topic, sizeof(error_topic), MQTT_ERR_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
   snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
@@ -431,8 +434,8 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
              "\"version\":\"%s\"}",
              CONFIG_SITE_NAME, PROJECT_VERSION);
 
-    int pub_msg_id = esp_mqtt_client_publish(client, MQTT_STATUS_TOPIC_FORMAT,
-                                             test_msg, 0, 1, 0);
+    int pub_msg_id =
+        esp_mqtt_client_publish(client, status_topic, test_msg, 0, 1, 0);
     if (pub_msg_id >= 0) {
       ESP_LOGI(TAG, "Test message published, msg_id=%d", pub_msg_id);
     } else {
@@ -483,4 +486,46 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     break;
   }
   }
+}
+
+esp_err_t mqtt_publish_error_log(const char *level_str, const char *tag,
+                                 const char *message) {
+  if (!isMqttConnected || !global_mqtt_client) {
+    // If MQTT is not available, we could optionally buffer the error
+    // or just return silently
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  // Create JSON payload for structured error logging
+  cJSON *error_json = cJSON_CreateObject();
+  if (!error_json) {
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Add minimal error details
+  cJSON_AddStringToObject(error_json, "timestamp", fetchTime());
+  cJSON_AddStringToObject(error_json, "tag", tag);
+  cJSON_AddStringToObject(error_json, "message", message);
+
+  // Convert to string
+  char *json_string = cJSON_Print(error_json);
+  if (!json_string) {
+    cJSON_Delete(error_json);
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Publish to MQTT
+  int msg_id = esp_mqtt_client_publish(global_mqtt_client, error_topic,
+                                       json_string, 0, 1, 0);
+
+  // Cleanup
+  free(json_string);
+  cJSON_Delete(error_json);
+
+  if (msg_id < 0) {
+    ESP_LOGW("MQTT_ERROR", "Failed to publish error log");
+    return ESP_FAIL;
+  }
+
+  return ESP_OK;
 }
