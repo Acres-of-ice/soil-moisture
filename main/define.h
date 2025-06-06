@@ -174,6 +174,7 @@ extern TaskHandle_t simulationTaskHandle;
 extern TaskHandle_t soilTaskHandle;
 extern TaskHandle_t TXTaskHandle;
 extern TaskHandle_t spOtaTaskHandle;
+extern TaskHandle_t discoveryTaskHandle;
 
 // ==================== UART Definitions ====================
 #define UART_NUM UART_NUM_0

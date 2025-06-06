@@ -1,10 +1,11 @@
 #include "mqtt.h"
+#include "ota.h"
 #include "rtc.h"
+#include "sdkconfig.h"
 #include "tasks_common.h"
 #include "valve_control.h"
 
 static const char *TAG = "MQTT";
-static char pcOtaUrl[1000] = {0};
 bool isMqttConnected = false;
 
 char data_topic[64];
@@ -20,13 +21,6 @@ static bool mqtt_subscription_active = false;
 // Global MQTT client handle for data publishing
 esp_mqtt_client_handle_t global_mqtt_client = NULL;
 
-// #define MQTT_TEST_TOPIC "AutoAir/Msg"
-// #define MQTT_TEST_TOPIC "drip/+"
-// #define MQTT_TEST_DATA "{\"msgId\": 9, \"url\":
-// \"http://pcb-bins.s3.us-east-1.amazonaws.com/Stakmo_CONDUCTOR.bin\"}"
-// #define MQTT_TEST_DATA "HI, MQTT, TEST, DATA"
-
-// Enhanced MQTT configuration in mqtt.c
 esp_err_t iMQTT_Init(void) {
   ESP_LOGI(TAG, "MQTT Init with enhanced configuration");
 
@@ -92,190 +86,6 @@ esp_err_t iMQTT_Init(void) {
 
 // Add this new function at the end of mqtt.c:
 esp_mqtt_client_handle_t get_mqtt_client(void) { return global_mqtt_client; }
-
-esp_err_t iMqtt_OtaParser(char *json_string) {
-  if (json_string == NULL) {
-    printf("Invalid JSON string\n");
-    return ESP_FAIL;
-  }
-
-  cJSON *root = cJSON_Parse(json_string);
-  if (root == NULL) {
-    printf("Failed to parse JSON\n");
-    return ESP_FAIL;
-  }
-
-  // Extract msgId
-  cJSON *msg_id_item = cJSON_GetObjectItem(root, "msgId");
-  if (!cJSON_IsNumber(msg_id_item)) {
-    printf("msgId not found or not a number\n");
-    cJSON_Delete(root);
-    return ESP_FAIL;
-  }
-  int msgId = msg_id_item->valueint;
-  printf("msgId: %d\n", msgId);
-
-  // Extract URL
-  cJSON *url_item = cJSON_GetObjectItem(root, "url");
-  if (!cJSON_IsString(url_item)) {
-    printf("url not found or not a string\n");
-    cJSON_Delete(root);
-    return ESP_FAIL;
-  }
-  const char *url = url_item->valuestring;
-  printf("URL: %s\n", url);
-
-  strcpy(pcOtaUrl, url);
-  printf("pcOtaUrl: %s\n", pcOtaUrl);
-
-  cJSON_Delete(root);
-
-  if (ESP_OK != iOTA_EspStart()) {
-    printf("Failed to start OTA\n");
-    return ESP_FAIL;
-  } else {
-    printf("OTA started successfully\n");
-  }
-  return ESP_OK;
-}
-
-esp_err_t iOTA_HttpEventHandler(esp_http_client_event_t *evt) {
-  switch (evt->event_id) {
-  case HTTP_EVENT_ERROR:
-    ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
-    break;
-  case HTTP_EVENT_ON_CONNECTED:
-    ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
-    break;
-  case HTTP_EVENT_HEADER_SENT:
-    ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
-    break;
-  case HTTP_EVENT_ON_HEADER:
-    ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key,
-             evt->header_value);
-    break;
-  case HTTP_EVENT_ON_DATA:
-    ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-    break;
-  case HTTP_EVENT_ON_FINISH:
-    ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
-    break;
-  case HTTP_EVENT_DISCONNECTED:
-    ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
-    break;
-  case HTTP_EVENT_REDIRECT:
-    ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
-    break;
-  }
-  return ESP_OK;
-}
-
-void vOTA_EspTask(void *pvParameter) {
-  esp_err_t iOtaFinishErr = ESP_FAIL;
-  esp_err_t err = ESP_FAIL;
-  esp_http_client_config_t stHttpClientConfig = {
-      .url = pcOtaUrl,
-      // .cert_pem = aws_cert,
-      .event_handler = iOTA_HttpEventHandler,
-      .keep_alive_enable = true,
-      .keep_alive_interval = 120,
-      .timeout_ms = 120000,
-  };
-
-  esp_https_ota_config_t stOtaConfig = {
-      .http_config = &stHttpClientConfig,
-  };
-
-  esp_https_ota_handle_t pstHttpsOtaHandle = NULL;
-  esp_app_desc_t stAppDesc = {0};
-
-  ESP_LOGI(TAG, "Attempting to download ESP Firmware update from (%s)",
-           stHttpClientConfig.url);
-
-  err = esp_https_ota_begin(&stOtaConfig, &pstHttpsOtaHandle);
-  if (ESP_OK != err) {
-    ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed");
-    spOtaTaskHandle = NULL;
-    vTaskDelete(NULL);
-  }
-
-  err = esp_https_ota_get_img_desc(pstHttpsOtaHandle, &stAppDesc);
-  if (ESP_OK != err) {
-    ESP_LOGE(TAG, "esp_https_ota_get_img_desc failed");
-    goto ota_end;
-  }
-
-  while (1) {
-    err = esp_https_ota_perform(pstHttpsOtaHandle);
-    if (ESP_ERR_HTTPS_OTA_IN_PROGRESS != err) {
-      break;
-    }
-    ESP_LOGI(TAG, "Image bytes read: %d",
-             esp_https_ota_get_image_len_read(pstHttpsOtaHandle));
-  }
-
-  if (true != esp_https_ota_is_complete_data_received(pstHttpsOtaHandle)) {
-    // the OTA image was not completely received and user can customise the
-    // response to this situation.
-    ESP_LOGE(TAG, "Complete data was not received.");
-  } else {
-    iOtaFinishErr = esp_https_ota_finish(pstHttpsOtaHandle);
-    if ((ESP_OK == err) && (ESP_OK == iOtaFinishErr)) {
-      ESP_LOGI(TAG, "ESP_HTTPS_OTA upgrade successful. Rebooting ...");
-      ESP_LOGI(TAG, "OTA Succeed, Rebooting...");
-      vTaskDelay(pdMS_TO_TICKS(5000U));
-      esp_restart();
-    } else {
-      if (ESP_ERR_OTA_VALIDATE_FAILED == iOtaFinishErr) {
-        ESP_LOGE(TAG, "Image validation failed, image is corrupted");
-      }
-      ESP_LOGE(TAG, "ESP_HTTPS_OTA upgrade failed 0x%x", iOtaFinishErr);
-      spOtaTaskHandle = NULL;
-      vTaskDelete(NULL);
-    }
-  }
-
-ota_end:
-  (void)esp_https_ota_abort(pstHttpsOtaHandle);
-  ESP_LOGE(TAG, "ESP_HTTPS_OTA upgrade failed");
-  spOtaTaskHandle = NULL;
-  vTaskDelete(NULL);
-}
-
-esp_err_t iOTA_EspStart(void) {
-  if (NULL == spOtaTaskHandle) {
-    ESP_LOGI(TAG, "-----------------------Starting OTA "
-                  "task------------------------------");
-    if (pdPASS != xTaskCreate(&vOTA_EspTask, OTA_TASK_NAME, OTA_TASK_STACK_SIZE,
-                              NULL, OTA_TASK_PRIORITY, &spOtaTaskHandle)) {
-      return ESP_FAIL;
-    }
-  }
-  return ESP_OK;
-}
-
-// Helper function to safely publish MQTT messages
-esp_err_t mqtt_publish_safe(esp_mqtt_client_handle_t client, const char *topic,
-                            const char *data, int qos, int retain) {
-  if (!client || !topic || !data) {
-    ESP_LOGE(TAG, "Invalid parameters for MQTT publish");
-    return ESP_ERR_INVALID_ARG;
-  }
-
-  if (!isMqttConnected) {
-    ESP_LOGW(TAG, "MQTT not connected, cannot publish");
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  int msg_id = esp_mqtt_client_publish(client, topic, data, 0, qos, retain);
-  if (msg_id < 0) {
-    ESP_LOGE(TAG, "Failed to publish MQTT message, error=%d", msg_id);
-    return ESP_FAIL;
-  }
-
-  ESP_LOGD(TAG, "MQTT message published successfully, msg_id=%d", msg_id);
-  return ESP_OK;
-}
 
 // Add these placeholder functions or implement them based on your needs
 static void handle_config_message(const char *data) {
@@ -383,19 +193,40 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
     if (strstr(topic, ack_topic) != NULL) {
       ESP_LOGI(TAG, "Received data acknowledgment: %s", data);
-      // You can parse the ACK and mark specific sequence numbers as confirmed
-      // For now, we'll just log it
-    } else if (strstr(topic, ota_topic) != NULL) {
-      ESP_LOGI(TAG, "Processing OTA command");
-      esp_err_t ota_result = iMqtt_OtaParser(data);
-      if (ota_result != ESP_OK) {
-        ESP_LOGE(TAG, "OTA parsing failed: %s", esp_err_to_name(ota_result));
-      }
-    } else if (strcmp(topic, command_topic) == 0 && strcmp(data, "1") == 0) {
-      ESP_LOGI(TAG, "Immediate data request received");
-      // Signal mqtt_data_task to send data immediately
-      if (mqttDataTaskHandle) {
-        xTaskNotify(mqttDataTaskHandle, 1, eSetBits);
+      // } else if (strstr(topic, ota_topic) != NULL) {
+      //   ESP_LOGI(TAG, "Processing OTA command");
+      //   esp_err_t ota_result = iMqtt_OtaParser(data);
+      //   if (ota_result != ESP_OK) {
+      //     ESP_LOGE(TAG, "OTA parsing failed: %s",
+      //     esp_err_to_name(ota_result));
+      //   }
+    } else if (strcmp(topic, command_topic) == 0) {
+      if (strcmp(data, "1") == 0) {
+        ESP_LOGI(TAG, "Immediate data request received");
+        // Signal mqtt_data_task to send data immediately
+        if (mqttDataTaskHandle) {
+          xTaskNotify(mqttDataTaskHandle, 1, eSetBits);
+        }
+      } else if (strcmp(data, "ota") == 0) {
+        ESP_LOGI(TAG, "OTA command received via command topic");
+        // Construct predefined OTA URL
+        char ota_url[256];
+        snprintf(ota_url, sizeof(ota_url),
+                 "http://pcb-bins.s3.us-east-1.amazonaws.com/%s_CONDUCTOR.bin",
+                 CONFIG_SITE_NAME);
+
+        // Create JSON for OTA parser
+        char ota_json[512];
+        snprintf(ota_json, sizeof(ota_json), "{\"url\": \"%s\"}", ota_url);
+
+        ESP_LOGI(TAG, "Starting OTA with URL: %s", ota_url);
+        esp_err_t ota_result = iMqtt_OtaParser(ota_json);
+        if (ota_result != ESP_OK) {
+          ESP_LOGE(TAG, "OTA initiation failed: %s",
+                   esp_err_to_name(ota_result));
+        }
+      } else {
+        ESP_LOGD(TAG, "Unknown command: %s", data);
       }
     } else {
       ESP_LOGD(TAG, "Unhandled topic: %s", topic);
