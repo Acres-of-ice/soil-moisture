@@ -18,7 +18,7 @@ static i2c_dev_t i2c_dev_lcd = {0};
 esp_err_t err;
 
 TaskHandle_t lcd_scroll_task_handle = NULL;
-static char uptime_str[5] = "0.00";
+static char uptime_str[16] = "0.00";
 
 #define LCD_UPDATE_INTERVAL_MS 30000 // 1 minute
 #define UPTIME_UPDATE_THRESHOLD 0.1  // 0.1 days
@@ -343,6 +343,55 @@ void send_daily_status_sms(double uptime_days) {
   ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
 }
 
+// void lcd_row_one_task(void *pvParameters) {
+//   if (!lcd_device_ready) {
+//     ESP_LOGD(TAG, "LCD device not ready. Terminating lcd_row_one_task.");
+//     vTaskDelete(NULL);
+//     return;
+//   }
+
+//   double last_displayed_uptime = -UPTIME_UPDATE_THRESHOLD;
+//   static sensor_readings_t lcd_readings;
+
+//   while (1) {
+//     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+//       ESP_LOGE(TAG, "Low stack Lcd row one: %d", uxTaskGetStackHighWaterMark(NULL));
+//     }
+//     double current_uptime = get_uptime_days();
+//     get_sensor_readings(&lcd_readings);
+
+//     // Check for day change
+//     int current_day = (int)current_uptime;
+//     if ((first_run || current_day > last_day) && (gsm_init_success)) {
+//       send_daily_status_sms(current_uptime);
+//       last_day = current_day;
+//       first_run = false;
+//     }
+
+//     if (current_uptime - last_displayed_uptime >= UPTIME_UPDATE_THRESHOLD) {
+//       if (current_uptime >= 100) {
+//         snprintf(uptime_str, sizeof(uptime_str), "%3dd",
+//                  (int)fmin(current_uptime, 999));
+//       } else if (current_uptime >= 10) {
+//         snprintf(uptime_str, sizeof(uptime_str), "%4.1f",
+//                  fmin(current_uptime, 99.9));
+//       } else if (current_uptime >= 1) {
+//         snprintf(uptime_str, sizeof(uptime_str), "%4.2f", current_uptime);
+//       } else {
+//         snprintf(uptime_str, sizeof(uptime_str), "%3dh",
+//                  (int)(current_uptime * 24));
+//       }
+//       last_displayed_uptime = current_uptime;
+//       ESP_LOGI(TAG, "Uptime %.2f", current_uptime);
+//     }
+
+//     update_lcd_row_one(uptime_str, &lcd_readings);
+
+//     vTaskDelay(pdMS_TO_TICKS(LCD_UPDATE_INTERVAL_MS));
+//   }
+// }
+
+
 void lcd_row_one_task(void *pvParameters) {
   if (!lcd_device_ready) {
     ESP_LOGD(TAG, "LCD device not ready. Terminating lcd_row_one_task.");
@@ -357,6 +406,7 @@ void lcd_row_one_task(void *pvParameters) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack Lcd row one: %d", uxTaskGetStackHighWaterMark(NULL));
     }
+
     double current_uptime = get_uptime_days();
     get_sensor_readings(&lcd_readings);
 
@@ -369,71 +419,19 @@ void lcd_row_one_task(void *pvParameters) {
     }
 
     if (current_uptime - last_displayed_uptime >= UPTIME_UPDATE_THRESHOLD) {
-      if (current_uptime >= 100) {
-        snprintf(uptime_str, sizeof(uptime_str), "%3dd",
-                 (int)fmin(current_uptime, 999));
-      } else if (current_uptime >= 10) {
-        snprintf(uptime_str, sizeof(uptime_str), "%4.1f",
-                 fmin(current_uptime, 99.9));
-      } else if (current_uptime >= 1) {
-        snprintf(uptime_str, sizeof(uptime_str), "%4.2f", current_uptime);
-      } else {
-        snprintf(uptime_str, sizeof(uptime_str), "%3dh",
-                 (int)(current_uptime * 24));
-      }
+      double current_uptime_hrs = current_uptime * 24.0;  // Convert days to hours
+      int total_minutes = (int)(current_uptime_hrs * 60);
+      int hrs = total_minutes / 60;
+      int mins = total_minutes % 60;
+      snprintf(uptime_str, sizeof(uptime_str), "%2dh %02dm", hrs, mins);
+
       last_displayed_uptime = current_uptime;
-      ESP_LOGI(TAG, "Uptime %.2f", current_uptime);
+      ESP_LOGI(TAG, "Uptime: %s", uptime_str);
     }
 
     update_lcd_row_one(uptime_str, &lcd_readings);
-
     vTaskDelay(pdMS_TO_TICKS(LCD_UPDATE_INTERVAL_MS));
   }
 }
 
-
-// void lcd_row_one_task(void *pvParameters) {
-//   if (!lcd_device_ready) {
-//     ESP_LOGD(TAG, "LCD device not ready. Terminating lcd_row_one_task.");
-//     vTaskDelete(NULL);
-//     return;
-//   }
-
-//   static sensor_readings_t lcd_readings;
-//   double last_displayed_uptime = -10.0;
-
-//   while (1) {
-//     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-//       ESP_LOGE(TAG, "Low stack Lcd row one: %d", uxTaskGetStackHighWaterMark(NULL));
-//     }
-
-//     get_sensor_readings(&lcd_readings);
-
-//     double current_uptime_hrs = (double)esp_timer_get_time() / (1000000.0 * 60 * 60);
-
-//     // Daily SMS trigger based on hour change
-//     int current_hour = (int)current_uptime_hrs;
-//     if ((first_run || current_hour / 24 > last_day) && gsm_init_success) {
-//       send_daily_status_sms(current_uptime_hrs / 24.0);
-//       last_day = current_hour / 24;
-//       first_run = false;
-//     }
-
-//     if (current_uptime_hrs - last_displayed_uptime >= 1.0) {  // update every hour
-//       if (current_uptime_hrs >= 100) {
-//         snprintf(uptime_str, sizeof(uptime_str), "%3d", (int)fmin(current_uptime_hrs, 999));
-//       } else if (current_uptime_hrs >= 10) {
-//         snprintf(uptime_str, sizeof(uptime_str), "%4.1fh", fmin(current_uptime_hrs, 99.9));
-//       } else {
-//         snprintf(uptime_str, sizeof(uptime_str), "%4.2fh", current_uptime_hrs);
-//       }
-
-//       last_displayed_uptime = current_uptime_hrs;
-//       ESP_LOGI(TAG, "Uptime hours: %.2f", current_uptime_hrs);
-//     }
-
-//     update_lcd_row_one(uptime_str, &lcd_readings);
-//     vTaskDelay(pdMS_TO_TICKS(LCD_UPDATE_INTERVAL_MS));
-//   }
-// }
 

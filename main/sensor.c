@@ -389,6 +389,123 @@ void modbus_init(void) {
   ESP_ERROR_CHECK(uart_driver_install(MB_PORT_NUM, 256, 256, 0, NULL, 0));
 }
 
+// void sensor_task(void *pvParameters) {
+//     // if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+//     //     ESP_LOGE(TAG, "Low stack: %" PRIu32, uxTaskGetStackHighWaterMark(NULL));
+//     // }
+    
+//     static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
+//     static float discharge = 99.0f, dummy = 99.0f;
+//     static sensor_readings_t local_readings = {0};
+    
+//     TickType_t last_wake_time = xTaskGetTickCount();
+
+//     // Skip I2C initialization completely
+//     ESP_LOGI(TAG, "Sensor task started - I2C operations disabled");
+
+//     while (1) {
+//         // if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+//         //     ESP_LOGE(TAG, "Low stack Sensor Task: %" PRIu32, uxTaskGetStackHighWaterMark(NULL));
+//         // }
+        
+//         // Clear readings
+//         memset(&local_readings, 0, sizeof(sensor_readings_t));
+        
+//         // SKIP ALL I2C OPERATIONS - Set pressure to default
+//         local_readings.pressure = 1.0f;  // Default pressure value
+//         ESP_LOGI(TAG, "I2C operations skipped, using default pressure: %.1f", local_readings.pressure);
+
+//         // ✅ Handle Modbus readings for temperature/humidity
+//         if (site_config.has_temp_humidity) {
+//             ESP_LOGI(TAG, "Reading temperature/humidity sensor...");
+//             int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+//             if (result == 0) {
+//                 local_readings.temperature = temp1;
+//                 local_readings.humidity = humidity;
+//                 ESP_LOGI(TAG, "Temp: %.1f°C, Humidity: %.1f%%", temp1, humidity);
+//             } else {
+//                 ESP_LOGE(TAG, "Temperature/humidity read failed: %d", result);
+//                 local_readings.temperature = 99.0f;
+//                 local_readings.humidity = 99.0f;
+//             }
+//             vTaskDelay(pdMS_TO_TICKS(100));
+//         } else {
+//             local_readings.temperature = 25.0f;  // Default values
+//             local_readings.humidity = 60.0f;
+//         }
+
+//         // ✅ Handle Modbus readings for flow meter
+//         if (site_config.has_flowmeter) {
+//             ESP_LOGI(TAG, "Reading flow sensors...");
+            
+//             int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+//             if (result == 0) {
+//                 local_readings.water_temp = temp2;
+//                 ESP_LOGI(TAG, "Water temp: %.1f°C", temp2);
+//             } else {
+//                 ESP_LOGE(TAG, "Flow temperature read failed: %d", result);
+//                 local_readings.water_temp = 99.0f;
+//             }
+
+//             result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+//             if (result == 0) {
+//                 local_readings.discharge = discharge;
+//                 ESP_LOGI(TAG, "Discharge: %.2f l/s", discharge);
+//             } else {
+//                 ESP_LOGE(TAG, "Flow discharge read failed: %d", result);
+//                 local_readings.discharge = 99.0f;
+//             }
+//             vTaskDelay(pdMS_TO_TICKS(100));
+//         } else {
+//             local_readings.water_temp = 20.0f;   // Default values
+//             local_readings.discharge = 0.5f;
+//         }
+
+//         // ✅ Handle voltage monitoring
+//         if (site_config.has_voltage_cutoff && adc_handle != NULL) {
+//             ESP_LOGI(TAG, "Reading voltage...");
+//             local_readings.voltage = measure_voltage();
+//             ESP_LOGI(TAG, "Measured voltage: %.2fV", local_readings.voltage);
+
+//             if (local_readings.voltage < LOW_CUTOFF_VOLTAGE) {
+//                 ESP_LOGE(TAG, "Voltage below %.2fV, disabling SIM and entering deep sleep...", LOW_CUTOFF_VOLTAGE);
+
+//                 // Disable SIM pin
+//                 esp_rom_gpio_pad_select_gpio(SIM_GPIO);
+//                 gpio_set_direction(SIM_GPIO, GPIO_MODE_OUTPUT);
+//                 gpio_set_level(SIM_GPIO, 1);
+
+//                 // Enter deep sleep
+//                 esp_sleep_enable_timer_wakeup((uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 * 1000);
+//                 esp_deep_sleep_start();
+//             }
+//         } else if (!site_config.has_voltage_cutoff) {
+//             local_readings.voltage = 12.0f;  // Default voltage
+//         }
+
+//         // ✅ External soil sensor variables
+//         local_readings.soil_A = soil_A;
+//         local_readings.soil_B = soil_B;
+//         ESP_LOGI(TAG, "Soil sensors - A: %d, B: %d", soil_A, soil_B);
+
+//         // ✅ Mutex operation to update shared readings
+//         if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
+//             memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+//             xSemaphoreGive(readings_mutex);
+//             ESP_LOGI(TAG, "Sensor readings updated successfully");
+//         } else {
+//             ESP_LOGE(TAG, "Failed to take readings mutex");
+//         }
+
+//         ESP_LOGI(TAG, "Sensor cycle completed - All readings: Soil A=%d, B=%d, Temp=%.1f°C, Humidity=%.1f%%, Water=%.1f°C, Pressure=%.1f, Discharge=%.2f, Voltage=%.1fV", 
+//                  local_readings.soil_A, local_readings.soil_B, 
+//                  local_readings.temperature, local_readings.humidity,
+//                  local_readings.water_temp, local_readings.pressure,
+//                  local_readings.discharge, local_readings.voltage);
+
+//         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
+//     }
+// }
 void sensor_task(void *pvParameters) {
 
   if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
@@ -400,7 +517,8 @@ void sensor_task(void *pvParameters) {
   static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
   static float discharge = 99.0f, dummy = 99.0f;
   static sensor_readings_t local_readings = {0}; // Local buffer
-  TickType_t last_wake_time;
+  //TickType_t last_wake_time;
+  TickType_t last_wake_time = xTaskGetTickCount();
 
   // Initialize ADC if needed
   if (i2c0bus != NULL) {
@@ -447,29 +565,29 @@ void sensor_task(void *pvParameters) {
     }
 
     // Handle Modbus readings without mutex
-    if (site_config.has_temp_humidity) {
-      int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
-      if (result == 0) {
-        local_readings.temperature = temp1;
-        local_readings.humidity = humidity;
-      } else {
-        local_readings.temperature = 99.0f;
-        local_readings.humidity = 99.0f;
-      }
-      vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    // if (site_config.has_temp_humidity) {
+    //   int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+    //   if (result == 0) {
+    //     local_readings.temperature = temp1;
+    //     local_readings.humidity = humidity;
+    //   } else {
+    //     local_readings.temperature = 99.0f;
+    //     local_readings.humidity = 99.0f;
+    //   }
+    //   vTaskDelay(pdMS_TO_TICKS(50));
+    // }
 
-    if (site_config.has_flowmeter) {
-      int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
-      if (result == 0) {
-        local_readings.water_temp = temp2;
-      }
+    // if (site_config.has_flowmeter) {
+    //   int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+    //   if (result == 0) {
+    //     local_readings.water_temp = temp2;
+    //   }
 
-      result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
-      if (result == 0) {
-        local_readings.discharge = discharge;
-      }
-    }
+    //   result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+    //   if (result == 0) {
+    //     local_readings.discharge = discharge;
+    //   }
+    // }
 
     // if (site_config.has_voltage_cutoff && adc_handle != NULL) {
     //   local_readings.voltage = measure_voltage();
@@ -496,8 +614,10 @@ void sensor_task(void *pvParameters) {
     //   local_readings.voltage = 0.0f;
     // }
 
-    local_readings.soil_A = soil_A;
-    local_readings.soil_B = soil_B;
+
+            local_readings.soil_A = soil_A;
+            local_readings.soil_B = soil_B;
+
 
     // Now take mutex only for the quick copy operation
     if (xSemaphoreTake(readings_mutex, portMAX_DELAY) == pdTRUE) {
@@ -568,35 +688,7 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
       output_readings->pressure = simulated_readings.pressure;
       output_readings->discharge = simulated_readings.discharge;
       output_readings->voltage = simulated_readings.voltage;
-    } 
-    // else if (demo_mode_active) {
-    // // Initialize demo_start_time if not set
-    // if (demo_start_time == 0) {
-    //     demo_start_time = xTaskGetTickCount();
-    //     ESP_LOGI(TAG, "Demo mode started");
-    // }
-    
-    // TickType_t now = xTaskGetTickCount();
-    // TickType_t elapsed = now - demo_start_time;
-    
-    // if (elapsed <= pdMS_TO_TICKS(5*60*1000)) { // First 5 minutes
-    //     ESP_LOGI(TAG,"Dry Values setting");
-    //     demo_soil_A_value = 25;
-    //     demo_soil_B_value = 25;
-    // } else { // After 5 minutes
-    //     ESP_LOGI(TAG,"Wet Values setting");
-    //     demo_soil_A_value = 85;
-    //     demo_soil_B_value = 85;
-        
-    //     if (elapsed > pdMS_TO_TICKS(5*60*1000 + 10000)) { // 10 sec buffer
-    //         demo_mode_active = false;
-    //         demo_start_time = 0; // Reset for next demo
-    //     }
-    // }
-    
-    // output_readings->soil_A = demo_soil_A_value;
-    // output_readings->soil_B = demo_soil_B_value;
-    //  } 
+    }  
      else {
       // Copy all readings
       output_readings->soil_A = readings.soil_A;

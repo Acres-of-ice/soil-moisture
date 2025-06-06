@@ -159,39 +159,39 @@ void pump_button_task(void *arg) {
 //     }
 // }
 
-void monitor_task(void *pvParameters) {
-    while(1) {
-        TaskStatus_t *pxTaskStatusArray;
-        UBaseType_t uxArraySize = uxTaskGetNumberOfTasks();
+// void monitor_task(void *pvParameters) {
+//     while(1) {
+//         TaskStatus_t *pxTaskStatusArray;
+//         UBaseType_t uxArraySize = uxTaskGetNumberOfTasks();
         
-        pxTaskStatusArray = pvPortMalloc(uxArraySize * sizeof(TaskStatus_t));
+//         pxTaskStatusArray = pvPortMalloc(uxArraySize * sizeof(TaskStatus_t));
         
-        if(pxTaskStatusArray != NULL) {
-            uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize, NULL);
+//         if(pxTaskStatusArray != NULL) {
+//             uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize, NULL);
             
-            ESP_LOGI("STACK", "=== Task Stack Report ===");
-            for(int i=0; i<uxArraySize; i++) {
-        ESP_LOGI("STACK", "Task %-15s: StackHWM %" PRIu32, 
-         pxTaskStatusArray[i].pcTaskName,
-         pxTaskStatusArray[i].usStackHighWaterMark);
+//             ESP_LOGI("STACK", "=== Task Stack Report ===");
+//             for(int i=0; i<uxArraySize; i++) {
+//         ESP_LOGI("STACK", "Task %-15s: StackHWM %" PRIu32, 
+//          pxTaskStatusArray[i].pcTaskName,
+//          pxTaskStatusArray[i].usStackHighWaterMark);
 
 
                 
-                // Critical warning for low stack
-        if(pxTaskStatusArray[i].usStackHighWaterMark < 200) {
-    ESP_LOGE("STACK", "CRITICAL: Task %s has only %" PRIu32 " bytes free!", 
-             pxTaskStatusArray[i].pcTaskName,
-             pxTaskStatusArray[i].usStackHighWaterMark);
-}
+//                 // Critical warning for low stack
+//         if(pxTaskStatusArray[i].usStackHighWaterMark < 200) {
+//     ESP_LOGE("STACK", "CRITICAL: Task %s has only %" PRIu32 " bytes free!", 
+//              pxTaskStatusArray[i].pcTaskName,
+//              pxTaskStatusArray[i].usStackHighWaterMark);
+// }
 
-            }
+//             }
             
-            vPortFree(pxTaskStatusArray);
-        }
+//             vPortFree(pxTaskStatusArray);
+//         }
         
-        vTaskDelay(pdMS_TO_TICKS(30000)); // Check every 30 seconds
-    }
-}
+//         vTaskDelay(pdMS_TO_TICKS(30000)); // Check every 30 seconds
+//     }
+// }
 
 
 
