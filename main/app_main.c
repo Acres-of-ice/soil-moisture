@@ -14,7 +14,8 @@
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
-#include "gsm.h"
+// #include "gsm.h"
+#include "button_control.h"
 #include "hex_data.h"
 #include "i2cdev.h"
 #include "lcd.h"
@@ -339,7 +340,7 @@ void app_main(void) {
 
   if (site_config.simulate) {
     ESP_LOGW(TAG, "Simulation ON");
-    update_status_message("Simulation ON");
+    notify("Simulation ON");
     xTaskCreatePinnedToCore(simulation_task, "simulation_task",
                             SIMULATION_TASK_STACK_SIZE, NULL,
                             SIMULATION_TASK_PRIORITY, &simulationTaskHandle,

@@ -6,6 +6,7 @@
 #include "sys/socket.h"
 #include "sys/time.h"
 #include "time.h"
+#include <stdlib.h>
 
 static const char *TAG = "PPPOS";
 
@@ -141,7 +142,7 @@ esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
 
       // Final check - but only accept if time has actually changed from SNTP
       time_t now = time(NULL);
-      if (abs((long long)(now - time_before_sntp)) >
+      if (llabs((long long)(now - time_before_sntp)) >
           5) { // Time changed by more than 5 seconds
         struct tm timeinfo;
         localtime_r(&now, &timeinfo);
@@ -164,7 +165,7 @@ esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
     // callback Only use this as a fallback after significant time passage
     if (check_count > 30) { // After 30 seconds of trying
       time_t now = time(NULL);
-      if (abs((long long)(now - time_before_sntp)) >
+      if (llabs((long long)(now - time_before_sntp)) >
           10) { // Time changed significantly
         struct tm timeinfo;
         localtime_r(&now, &timeinfo);

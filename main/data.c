@@ -4,7 +4,7 @@
 #include "driver/sdspi_host.h"
 #include "esp_spiffs.h"
 #include "esp_vfs_fat.h"
-#include "gsm.h"
+// #include "gsm.h"
 #include "http_server.h"
 #include "lcd.h"
 #include "mqtt.h"

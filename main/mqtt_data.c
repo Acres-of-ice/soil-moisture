@@ -23,7 +23,6 @@ extern bool isMqttConnected;
 
 // Internal state tracking
 static bool data_buffer_initialized = false;
-static TickType_t last_transmission_attempt = 0;
 
 // Function declarations
 static esp_err_t init_data_buffer(void);

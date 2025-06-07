@@ -815,7 +815,6 @@ void vOTA_EspTask(void *pvParameter) {
 
   // Download and write firmware
   int progress_update_counter = 0;
-  static int last_reported_progress = 10;
   while (1) {
     data_read = esp_http_client_read(client, buffer, buffer_size);
     if (data_read < 0) {

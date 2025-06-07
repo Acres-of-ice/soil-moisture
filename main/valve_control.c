@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "lcd.h"
+#include "mqtt_notify.h"
 #include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
@@ -357,7 +358,7 @@ void updateValveState(void *pvParameters) {
     // Update the state if it has changed
     if (newState != getCurrentState()) {
       setCurrentState(newState);
-      update_status_message(valveStateToString(newState));
+      notify(valveStateToString(newState));
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
   }

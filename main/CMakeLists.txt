@@ -5,7 +5,7 @@ set(SRCS_LIST
     "button_control.c"
     "data.c"
     "lcd.c"
-    "gsm.c"
+    # "gsm.c"
     "soil_comm.c"
     "sensor.c"
     "ads1x1x.c"

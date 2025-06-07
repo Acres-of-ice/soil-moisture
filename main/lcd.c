@@ -8,7 +8,7 @@
 #include <driver/i2c_master.h>
 #include <math.h>
 
-#include "gsm.h"
+// #include "gsm.h"
 #include "sensor.h"
 #include "valve_control.h"
 
@@ -272,7 +272,7 @@ void update_lcd_row_one(const char *uptime_str,
     return;
   }
 
-  char display_str[16] = {0};
+  // char display_str[16] = {0};
   char first_part[9] = {0};
   char second_part[7] = {0};
 

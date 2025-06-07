@@ -87,17 +87,6 @@ esp_err_t iMQTT_Init(void) {
 // Add this new function at the end of mqtt.c:
 esp_mqtt_client_handle_t get_mqtt_client(void) { return global_mqtt_client; }
 
-// Add these placeholder functions or implement them based on your needs
-static void handle_config_message(const char *data) {
-  ESP_LOGI(TAG, "Configuration message: %s", data);
-  // Implement configuration handling logic here
-}
-
-static void handle_device_command(const char *data) {
-  ESP_LOGI(TAG, "Device command: %s", data);
-  // Implement device command handling logic here
-}
-
 // Helper function to check MQTT connection status with timeout
 bool is_mqtt_connected_with_timeout(uint32_t timeout_ms) {
   TickType_t start_time = xTaskGetTickCount();
@@ -309,46 +298,4 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     break;
   }
   }
-}
-
-esp_err_t mqtt_publish_error_log(const char *level_str, const char *tag,
-                                 const char *message) {
-  if (!isMqttConnected || !global_mqtt_client) {
-    // If MQTT is not available, we could optionally buffer the error
-    // or just return silently
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  // Create JSON payload for structured error logging
-  cJSON *error_json = cJSON_CreateObject();
-  if (!error_json) {
-    return ESP_ERR_NO_MEM;
-  }
-
-  // Add minimal error details
-  cJSON_AddStringToObject(error_json, "timestamp", fetchTime());
-  cJSON_AddStringToObject(error_json, "tag", tag);
-  cJSON_AddStringToObject(error_json, "message", message);
-
-  // Convert to string
-  char *json_string = cJSON_Print(error_json);
-  if (!json_string) {
-    cJSON_Delete(error_json);
-    return ESP_ERR_NO_MEM;
-  }
-
-  // Publish to MQTT
-  int msg_id = esp_mqtt_client_publish(global_mqtt_client, error_topic,
-                                       json_string, 0, 1, 0);
-
-  // Cleanup
-  free(json_string);
-  cJSON_Delete(error_json);
-
-  if (msg_id < 0) {
-    ESP_LOGW("MQTT_ERROR", "Failed to publish error log");
-    return ESP_FAIL;
-  }
-
-  return ESP_OK;
 }

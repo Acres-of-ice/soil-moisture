@@ -29,7 +29,4 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
 esp_err_t iMQTT_Init(void);
 
-esp_err_t mqtt_publish_error_log(const char *level_str, const char *tag,
-                                 const char *message);
-
 #endif
