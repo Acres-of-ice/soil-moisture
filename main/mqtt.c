@@ -80,7 +80,7 @@ esp_err_t iMQTT_Init(void) {
   snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
 
-  ESP_LOGI(TAG, "MQTT client started successfully");
+  ESP_LOGD(TAG, "MQTT client started successfully");
   return ESP_OK;
 }
 
@@ -140,16 +140,16 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
     msg_id = esp_mqtt_client_subscribe(client, ack_topic, 1);
     if (msg_id >= 0) {
-      ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
+      ESP_LOGI(TAG, "Topic %s subscription sent", ack_topic);
     } else {
       ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
     }
 
     msg_id = esp_mqtt_client_subscribe(client, command_topic, 1);
     if (msg_id >= 0) {
-      ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
+      ESP_LOGI(TAG, "Topic %s subscription sent", command_topic);
     } else {
-      ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
+      ESP_LOGW(TAG, "Failed to subscribe to command topic");
     }
 
     char status_msg[256];

@@ -34,7 +34,6 @@ static esp_err_t publish_sensor_data(const char *json_data);
 static esp_err_t buffer_sensor_data(const sensor_readings_t *readings,
                                     const char *timestamp);
 static esp_err_t transmit_buffered_data(void);
-static void mark_data_transmitted(uint32_t sequence_number);
 
 static esp_err_t validate_mqtt_data_config(void) {
   ESP_LOGD(TAG, "Validating MQTT data configuration...");

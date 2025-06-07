@@ -8,6 +8,7 @@
 #include "http_server.h"
 #include "lcd.h"
 #include "mqtt.h"
+#include "mqtt_notify.h"
 #include "rtc.h"
 #include "sdmmc_cmd.h"
 #include "sensor.h"
@@ -141,13 +142,9 @@ static int custom_log_function(const char *fmt, va_list args) {
         xSemaphoreGive(i2c_mutex);
       }
     }
-    if (isMqttConnected) {
-      esp_err_t mqtt_err = mqtt_publish_error_log(level_str, tag, short_msg);
-      if (mqtt_err != ESP_OK) {
-        // If MQTT fails, we could optionally fall back to SMS or just log the
-        // failure For now, we'll just continue without the error notification
-        printf("Failed to send error to MQTT: %s\n", esp_err_to_name(mqtt_err));
-      }
+    esp_err_t mqtt_err = mqtt_notify_error(message);
+    if (mqtt_err != ESP_OK) {
+      printf("Failed to send error to MQTT: %s\n", esp_err_to_name(mqtt_err));
     }
   }
 
