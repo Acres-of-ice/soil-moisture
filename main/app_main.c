@@ -14,12 +14,14 @@
 #include "data.h"
 #include "esp_spiffs.h"
 #include "espnow_lib.h"
-#include "gsm.h"
+// #include "gsm.h"
+#include "button_control.h"
 #include "hex_data.h"
 #include "i2cdev.h"
 #include "lcd.h"
 #include "mqtt.h"
 #include "mqtt_data.h"
+#include "mqtt_notify.h"
 #include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
@@ -166,6 +168,9 @@ void app_main(void) {
   esp_log_level_set("ESPNOW", ESP_LOG_NONE);
   esp_log_level_set("espnow_lib", ESP_LOG_NONE);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
   // esp_log_level_set("GSM", ESP_LOG_DEBUG);
@@ -265,39 +270,10 @@ void app_main(void) {
   lcd_init();
   lcd_clear();
   vTaskDelay(pdMS_TO_TICKS(2000));
-  update_status_message("  %s", get_pcb_name(g_nodeAddress));
 
 #ifdef CONFIG_ENABLE_RTC
   ESP_LOGI(TAG, "RTC time set: %s", fetchTime());
 #endif
-
-  // if (site_config.has_gsm) {
-  //   esp_err_t gsm_init_result = gsm_init();
-  //   if (gsm_init_result != ESP_OK) {
-  //     ESP_LOGW(TAG, "Failed to initialize GSM module");
-  //     // Disable SIM pin
-  //     esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-  //     gpio_set_level(SIM_GPIO, 1);
-  //   } else {
-  //     ESP_LOGI(TAG, "GSM module initialized successfully");
-  //     xTaskCreatePinnedToCore(unified_sms_task, "SMS", SMS_TASK_STACK_SIZE,
-  //                             NULL, SMS_TASK_PRIORITY, &smsTaskHandle,
-  //                             SMS_TASK_CORE_ID);
-  //     vTaskDelay(pdMS_TO_TICKS(500));
-  //
-  //     snprintf(sms_message, SMS_BUFFER_SIZE, "Reboot v%s %s",
-  //     PROJECT_VERSION,
-  //              CONFIG_SITE_NAME);
-  //     sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  //     vTaskDelay(pdMS_TO_TICKS(5000));
-  //   }
-  // } else {
-  //   ESP_LOGW(TAG, "GSM module disabled");
-  //   // Disable SIM pin
-  //   esp_rom_gpio_pad_select_gpio(SIM_GPIO);
-  //   gpio_set_level(SIM_GPIO, 1);
-  // }
-  //
 
   if (site_config.has_gsm) {
     // Configure as output and set level
@@ -323,6 +299,9 @@ void app_main(void) {
     // Disable SIM pin
     gpio_set_level(SIM_GPIO, 1);
   }
+
+  notify("v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+         get_pcb_name(g_nodeAddress), g_plot_number);
 
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
@@ -364,7 +343,7 @@ void app_main(void) {
 
   if (site_config.simulate) {
     ESP_LOGW(TAG, "Simulation ON");
-    update_status_message("Simulation ON");
+    notify("Simulation ON");
     xTaskCreatePinnedToCore(simulation_task, "simulation_task",
                             SIMULATION_TASK_STACK_SIZE, NULL,
                             SIMULATION_TASK_PRIORITY, &simulationTaskHandle,

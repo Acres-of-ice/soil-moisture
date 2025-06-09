@@ -28,10 +28,6 @@
 esp_err_t init_data_module(void);
 esp_err_t init_spiffs(void);
 
-void init_data_statistics(void);
-void update_data_statistics(const char* site_name);
-void print_data_statistics(void);
-
 // Logging
 void init_logging(void);
 void log_event(esp_log_level_t level, const char *tag, const char *format, ...);
@@ -43,6 +39,7 @@ bool appendFile(const char *path, const char *message);
 void list_spiffs_contents();
 void get_spiffs_usage(size_t *total, size_t *used);
 bool is_path_in_spiffs(const char *path);
+void generate_data_file_header(char *header_buffer, size_t buffer_size);
 
 // Tasks
 void dataLoggingTask(void *pvParameters);

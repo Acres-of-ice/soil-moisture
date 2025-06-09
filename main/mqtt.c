@@ -80,23 +80,12 @@ esp_err_t iMQTT_Init(void) {
   snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
 
-  ESP_LOGI(TAG, "MQTT client started successfully");
+  ESP_LOGD(TAG, "MQTT client started successfully");
   return ESP_OK;
 }
 
 // Add this new function at the end of mqtt.c:
 esp_mqtt_client_handle_t get_mqtt_client(void) { return global_mqtt_client; }
-
-// Add these placeholder functions or implement them based on your needs
-static void handle_config_message(const char *data) {
-  ESP_LOGI(TAG, "Configuration message: %s", data);
-  // Implement configuration handling logic here
-}
-
-static void handle_device_command(const char *data) {
-  ESP_LOGI(TAG, "Device command: %s", data);
-  // Implement device command handling logic here
-}
 
 // Helper function to check MQTT connection status with timeout
 bool is_mqtt_connected_with_timeout(uint32_t timeout_ms) {
@@ -140,16 +129,16 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
     msg_id = esp_mqtt_client_subscribe(client, ack_topic, 1);
     if (msg_id >= 0) {
-      ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
+      ESP_LOGI(TAG, "Topic %s subscription sent", ack_topic);
     } else {
       ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
     }
 
     msg_id = esp_mqtt_client_subscribe(client, command_topic, 1);
     if (msg_id >= 0) {
-      ESP_LOGI(TAG, "Data ACK subscription sent, msg_id=%d", msg_id);
+      ESP_LOGI(TAG, "Topic %s subscription sent", command_topic);
     } else {
-      ESP_LOGW(TAG, "Failed to subscribe to data ACK topic");
+      ESP_LOGW(TAG, "Failed to subscribe to command topic");
     }
 
     char status_msg[256];
@@ -163,7 +152,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     break;
   }
   case MQTT_EVENT_DATA: {
-    ESP_LOGI(TAG, "MQTT Data received");
+    ESP_LOGD(TAG, "MQTT Data received");
 
     // Validate data lengths
     if (event->topic_len <= 0 || event->data_len <= 0) {
@@ -188,20 +177,12 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     memcpy(data, event->data, data_copy_len);
     data[data_copy_len] = '\0';
 
-    ESP_LOGI(TAG, "TOPIC: %s", topic);
-    ESP_LOGD(TAG, "DATA: %s", data);
+    ESP_LOGI(TAG, "TOPIC: %s DATA: %s", topic, data);
 
     if (strstr(topic, ack_topic) != NULL) {
       ESP_LOGI(TAG, "Received data acknowledgment: %s", data);
-      // } else if (strstr(topic, ota_topic) != NULL) {
-      //   ESP_LOGI(TAG, "Processing OTA command");
-      //   esp_err_t ota_result = iMqtt_OtaParser(data);
-      //   if (ota_result != ESP_OK) {
-      //     ESP_LOGE(TAG, "OTA parsing failed: %s",
-      //     esp_err_to_name(ota_result));
-      //   }
     } else if (strcmp(topic, command_topic) == 0) {
-      if (strcmp(data, "1") == 0) {
+      if (strcmp(data, "data") == 0) {
         ESP_LOGI(TAG, "Immediate data request received");
         // Signal mqtt_data_task to send data immediately
         if (mqttDataTaskHandle) {
@@ -212,7 +193,7 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         // Construct predefined OTA URL
         char ota_url[256];
         snprintf(ota_url, sizeof(ota_url),
-                 "http://pcb-bins.s3.us-east-1.amazonaws.com/%s_CONDUCTOR.bin",
+                 "http://pcb-bins.s3.us-east-1.amazonaws.com/%s_MASTER.bin",
                  CONFIG_SITE_NAME);
 
         // Create JSON for OTA parser
@@ -317,46 +298,4 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     break;
   }
   }
-}
-
-esp_err_t mqtt_publish_error_log(const char *level_str, const char *tag,
-                                 const char *message) {
-  if (!isMqttConnected || !global_mqtt_client) {
-    // If MQTT is not available, we could optionally buffer the error
-    // or just return silently
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  // Create JSON payload for structured error logging
-  cJSON *error_json = cJSON_CreateObject();
-  if (!error_json) {
-    return ESP_ERR_NO_MEM;
-  }
-
-  // Add minimal error details
-  cJSON_AddStringToObject(error_json, "timestamp", fetchTime());
-  cJSON_AddStringToObject(error_json, "tag", tag);
-  cJSON_AddStringToObject(error_json, "message", message);
-
-  // Convert to string
-  char *json_string = cJSON_Print(error_json);
-  if (!json_string) {
-    cJSON_Delete(error_json);
-    return ESP_ERR_NO_MEM;
-  }
-
-  // Publish to MQTT
-  int msg_id = esp_mqtt_client_publish(global_mqtt_client, error_topic,
-                                       json_string, 0, 1, 0);
-
-  // Cleanup
-  free(json_string);
-  cJSON_Delete(error_json);
-
-  if (msg_id < 0) {
-    ESP_LOGW("MQTT_ERROR", "Failed to publish error log");
-    return ESP_FAIL;
-  }
-
-  return ESP_OK;
 }

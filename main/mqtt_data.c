@@ -23,7 +23,6 @@ extern bool isMqttConnected;
 
 // Internal state tracking
 static bool data_buffer_initialized = false;
-static TickType_t last_transmission_attempt = 0;
 
 // Function declarations
 static esp_err_t init_data_buffer(void);
@@ -34,7 +33,6 @@ static esp_err_t publish_sensor_data(const char *json_data);
 static esp_err_t buffer_sensor_data(const sensor_readings_t *readings,
                                     const char *timestamp);
 static esp_err_t transmit_buffered_data(void);
-static void mark_data_transmitted(uint32_t sequence_number);
 
 static esp_err_t validate_mqtt_data_config(void) {
   ESP_LOGD(TAG, "Validating MQTT data configuration...");
@@ -211,6 +209,8 @@ static esp_err_t publish_sensor_data(const char *json_data) {
     return ESP_FAIL;
   }
 
+  ESP_LOGD(TAG, "Payload: %s", json_data);
+
   ESP_LOGI(TAG, "Data published successfully (msg_id: %d, topic: %s)", msg_id,
            topic);
   ESP_LOGD(TAG, "Payload: %s", json_data);
@@ -342,7 +342,7 @@ void mqtt_data_task(void *pvParameters) {
     if (xTaskNotifyWait(0, 0xFFFFFFFF, &notification_value, 0) == pdTRUE) {
       if (notification_value & 1) {
         immediate_request = true;
-        ESP_LOGI(TAG, "Processing immediate data request");
+        ESP_LOGD(TAG, "Processing immediate data request");
       }
     }
 

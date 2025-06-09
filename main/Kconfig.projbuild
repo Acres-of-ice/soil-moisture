@@ -129,52 +129,52 @@ menu "App Configuration"
         default y if MASTER
         default n if VALVE || SOIL || PUMP || SOLENOID
 
-config SMS_RECIPIENT_DATA
-  choice
-    prompt "Select Data SMS Recipient"
-    default SMS_RECIPIENT_DATA_AWS
-    help
-        Select the recipient who will receive data messages.
+# config SMS_RECIPIENT_DATA
+#   choice
+#     prompt "Select Data SMS Recipient"
+#     default SMS_RECIPIENT_DATA_AWS
+#     help
+#         Select the recipient who will receive data messages.
+#
+#     config SMS_RECIPIENT_DATA_AWS
+#         bool "AWS Server"
+#
+#     config SMS_RECIPIENT_DATA_NIDHIN
+#         bool "Nidhin"
+#
+#     config SMS_RECIPIENT_DATA_SURYA
+#         bool "Surya"
+# endchoice
+#
+# config SMS_RECIPIENT_ERROR
+#   choice
+#     prompt "Select Error SMS Recipient"
+#     default SMS_RECIPIENT_ERROR_SURYA
+#     help
+#         Select the recipient who will receive error messages and logs.
+#
+#     config SMS_RECIPIENT_ERROR_AWS
+#         bool "AWS Server"
+#
+#     config SMS_RECIPIENT_ERROR_NIDHIN
+#         bool "Nidhin"
+#
+#     config SMS_RECIPIENT_ERROR_SURYA
+#         bool "Surya"
+# endchoice
 
-    config SMS_RECIPIENT_DATA_AWS
-        bool "AWS Server"
-        
-    config SMS_RECIPIENT_DATA_NIDHIN
-        bool "Nidhin"
-        
-    config SMS_RECIPIENT_DATA_SURYA
-        bool "Surya"
-endchoice
-
-config SMS_RECIPIENT_ERROR
-  choice
-    prompt "Select Error SMS Recipient"
-    default SMS_RECIPIENT_ERROR_SURYA
-    help
-        Select the recipient who will receive error messages and logs.
-
-    config SMS_RECIPIENT_ERROR_AWS
-        bool "AWS Server"
-        
-    config SMS_RECIPIENT_ERROR_NIDHIN
-        bool "Nidhin"
-        
-    config SMS_RECIPIENT_ERROR_SURYA
-        bool "Surya"
-endchoice
-
-# Hidden configs to store the actual phone numbers
-config SMS_DATA_NUMBER
-string
-default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
-
-config SMS_ERROR_NUMBER
-string
-default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
-default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
+# # Hidden configs to store the actual phone numbers
+# config SMS_DATA_NUMBER
+# string
+# default "+918082748893" if SMS_RECIPIENT_DATA_AWS
+# default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
+# default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
+#
+# config SMS_ERROR_NUMBER
+# string
+# default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
+# default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
+# default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
 
 config ENABLE_HW
     bool "Enable Hardware Configuration"
@@ -203,7 +203,6 @@ menu "Hardware Configuration"
 
         config HAS_GSM
             bool "Use GSM"
-            default n if SITE_TEST
             default y
             help
                 Enable GSM for sites
@@ -430,50 +429,17 @@ menu "Plot Moisture Thresholds"
             Example: 70 means irrigation stops when moisture reaches 70%.
 endmenu
 
-config ENABLE_RTC
-	bool "Enable RTC Configuration"
-	default false
-	help
-		Enable to customize RTC settings. If disabled, site defaults will be used.
+config ENABLE_SET_TIME
+    bool "Enable SNTP Time Synchronization"
+    default false
+    help
+        Enable SNTP time synchronization during initialization. 
+        If disabled, weekly updates will still be enabled for time drift correction.
 
-menu "RTC Configuration"
-	visible if ENABLE_RTC
-
-	config RTC_YEAR
-		int "Year"
-		range 2000 2099
-		default 2025
-		help
-			Year to set (2000-2099)
-
-	config RTC_MONTH
-		int "Month"
-		range 1 12
-		default 1
-		help
-			Month to set (1-12)
-
-	config RTC_DAY
-		int "Day"
-		range 1 31
-		default 1
-		help
-			Day to set (1-31)
-
-	config RTC_HOUR
-		int "Hour"
-		range 0 23
-		default 0
-		help
-			Hour to set (0-23)
-
-	config RTC_MINUTE
-		int "Minute"
-		range 0 59
-		default 0
-		help
-			Minute to set (0-59)
-endmenu
+config SET_TIME
+    int
+    default 1 if ENABLE_SET_TIME
+    default 0
 
 endmenu
 

@@ -2,11 +2,13 @@
 #include "button.h"
 #include "data.h"
 #include "define.h"
+#include "errno.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
-#include "gsm.h"
+// #include "gsm.h"
 #include "lcd.h"
+#include "mqtt_notify.h"
 #include "soil_comm.h"
 #include "valve_control.h"
 #include "wifi_app.h"
@@ -42,18 +44,14 @@ void a_btn_short_press(void) {
 
     if (counter % 2 == 0) {
       newState = STATE_VALVE_OPEN;
-      if (gsm_init_success) {
-        snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-      }
+      snprintf(response_sms, sizeof(response_sms), "Force drip sector B");
+      notify(response_sms);
 
       ESP_LOGI(TAG, "Force drip sector B");
     } else {
       newState = STATE_VALVE_OPEN;
-      if (gsm_init_success) {
-        snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
-        sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-      }
+      snprintf(response_sms, sizeof(response_sms), "Force drip sector A");
+      notify(response_sms);
 
       ESP_LOGI(TAG, "Force drip sector A");
     }
@@ -94,10 +92,8 @@ void a_btn_long_press(void) {
   }
 
   // Optional SMS notification
-  if (gsm_init_success) {
-    snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, response_sms);
-  }
+  snprintf(response_sms, sizeof(response_sms), "Demo mode activated");
+  notify(response_sms);
 }
 
 void b_btn_short_press(void) {
@@ -118,24 +114,11 @@ void b_btn_short_press(void) {
   }
 }
 
-void b_btn_long_press(void) {
-  //   if (backupTaskHandle != NULL) {
-  //     xTaskNotifyGive(backupTaskHandle);
-  //     ESP_LOGD(TAG, "Forcing backup task to run (long press)");
-  //   }
-  //   else {
-  ESP_LOGW(TAG, "Backup task handle is NULL");
-  //  }
-}
+void b_btn_long_press(void) { ESP_LOGW(TAG, "Backup task handle is NULL"); }
 
 void c_btn_short_press(void) {
   snprintf(response_sms, sizeof(response_sms), "Counter:%d ", counter);
-  ESP_LOGI(TAG, "%s", response_sms);
-
-  if (gsm_init_success) {
-    snprintf(sms_message, sizeof(sms_message), "%s", response_sms);
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  }
+  notify(response_sms);
 }
 
 void c_btn_long_press(void) {
@@ -156,49 +139,70 @@ void c_btn_long_press(void) {
     ESP_LOGE(TAG, "Error deleting log file");
   }
 
-  // Check if the file exists and its size
   FILE *dataFile = fopen(data_path, "r");
   if (!dataFile) {
-    ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
+    ESP_LOGI(TAG, "Data file doesn't exist, creating new one");
+
+    // Generate header first and log it
+    generate_data_file_header(header_buffer, sizeof(header_buffer));
+    ESP_LOGD(TAG, "Generated header: %s", header_buffer);
+    ESP_LOGD(TAG, "Header length: %d", strlen(header_buffer));
 
     dataFile = fopen(data_path, "w");
-    vTaskDelay(10);
     if (dataFile) {
-      fputs(header_buffer, dataFile);
+      ESP_LOGD(TAG, "Successfully opened data file for writing");
+
+      int bytes_written = fputs(header_buffer, dataFile);
+      ESP_LOGD(TAG, "fputs returned: %d", bytes_written);
+
+      fflush(dataFile);
+      ESP_LOGD(TAG, "fflush completed");
+
       fclose(dataFile);
+      ESP_LOGD(TAG, "File closed successfully");
+    } else {
+      ESP_LOGE("SYSTEM",
+               "Error opening sensor_data.csv for initialization. Errno: %d",
+               errno);
+      char err_buf[100];
+      strerror_r(errno, err_buf, sizeof(err_buf));
+      ESP_LOGE(TAG, "Error details: %s", err_buf);
     }
+  } else {
+    ESP_LOGI("SYSTEM", "Sensor data file already exists");
+    fclose(dataFile);
   }
 
-  // Check if the file exists and its size
+  // Same for log file...
   FILE *logFile = fopen(log_path, "r");
   if (!logFile) {
     ESP_LOGI("SYSTEM", "Initialising empty log file");
+
     logFile = fopen(log_path, "w");
-    vTaskDelay(10);
     if (logFile) {
       const char *header = "Time,Level,Tag,Message\n";
       fputs(header, logFile);
+      fflush(logFile);
       fclose(logFile);
+      ESP_LOGI("SYSTEM", "Log file header written successfully");
+    } else {
+      ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
+               errno);
+      char err_buf[100];
+      strerror_r(errno, err_buf, sizeof(err_buf));
+      ESP_LOGE(TAG, "Error details: %s", err_buf);
     }
+  } else {
+    ESP_LOGI("SYSTEM", "Log file already exists");
+    fclose(logFile);
   }
 
   // Reinitialize logging
   init_logging();
 
-  // Notify the user through LCD
-  if (xSemaphoreTake(i2c_mutex, portMAX_DELAY) == pdTRUE) {
-    lcd_put_cur(1, 0);
-    lcd_send_string("Files Cleared   ");
-    xSemaphoreGive(i2c_mutex);
-  }
-
-  ESP_LOGI(TAG, "All files cleared and reinitialized");
-
   // Optional: Send SMS notification
-  if (gsm_init_success) {
-    snprintf(sms_message, sizeof(sms_message), "Files cleared");
-    sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
-  }
+  snprintf(sms_message, sizeof(sms_message), "Files cleared");
+  notify(sms_message);
 }
 
 void d_btn_short_press(void) {

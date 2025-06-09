@@ -6,6 +6,7 @@
 #include "sys/socket.h"
 #include "sys/time.h"
 #include "time.h"
+#include <stdlib.h>
 
 static const char *TAG = "PPPOS";
 
@@ -141,7 +142,7 @@ esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
 
       // Final check - but only accept if time has actually changed from SNTP
       time_t now = time(NULL);
-      if (abs((long long)(now - time_before_sntp)) >
+      if (llabs((long long)(now - time_before_sntp)) >
           5) { // Time changed by more than 5 seconds
         struct tm timeinfo;
         localtime_r(&now, &timeinfo);
@@ -164,7 +165,7 @@ esp_err_t wait_for_time_sync(uint32_t timeout_ms) {
     // callback Only use this as a fallback after significant time passage
     if (check_count > 30) { // After 30 seconds of trying
       time_t now = time(NULL);
-      if (abs((long long)(now - time_before_sntp)) >
+      if (llabs((long long)(now - time_before_sntp)) >
           10) { // Time changed significantly
         struct tm timeinfo;
         localtime_r(&now, &timeinfo);
@@ -589,38 +590,47 @@ esp_err_t iPPPOS_Init(void) {
   }
 
   ESP_LOGI(TAG, "PPP connection established successfully");
-
   // Initialize SNTP and wait for time synchronization
-  ret = initialize_sntp_enhanced();
-  if (ret != ESP_OK) {
-    ESP_LOGW(TAG, "SNTP initialization failed: %s", esp_err_to_name(ret));
-    // Don't fail the whole initialization for SNTP failure
-  } else {
-    // Try time sync with increased timeout for cellular connections
-    ret = wait_for_time_sync(120000); // 2 minutes timeout
+  if (CONFIG_SET_TIME) {
+    ret = initialize_sntp_enhanced();
     if (ret != ESP_OK) {
-      ESP_LOGW(TAG, "Time synchronization failed: %s", esp_err_to_name(ret));
+      ESP_LOGW(TAG, "SNTP initialization failed: %s", esp_err_to_name(ret));
+      // Don't fail the whole initialization for SNTP failure
+    } else {
+      // Try time sync with increased timeout for cellular connections
+      ret = wait_for_time_sync(120000); // 2 minutes timeout
+      if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Time synchronization failed: %s", esp_err_to_name(ret));
 
-      // Try alternative approach - restart SNTP with different servers
-      ESP_LOGD(TAG, "Attempting SNTP restart with global servers...");
+        // Try alternative approach - restart SNTP with different servers
+        ESP_LOGD(TAG, "Attempting SNTP restart with global servers...");
 
-      esp_sntp_stop();
-      vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_sntp_stop();
+        vTaskDelay(pdMS_TO_TICKS(2000));
 
-      // Reinitialize with different server configuration
-      esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-      esp_sntp_setservername(0, "time.google.com"); // Google's reliable time
-      esp_sntp_setservername(1, "time.cloudflare.com"); // Cloudflare time
-      esp_sntp_setservername(2, "pool.ntp.org");        // Global pool
-      esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);     // Try immediate mode
-      esp_sntp_set_sync_interval(10000);                // 10 second intervals
-      esp_sntp_init();
+        // Reinitialize with different server configuration
+        esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+        esp_sntp_setservername(0, "time.google.com"); // Google's reliable time
+        esp_sntp_setservername(1, "time.cloudflare.com"); // Cloudflare time
+        esp_sntp_setservername(2, "pool.ntp.org");        // Global pool
+        esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);     // Try immediate mode
+        esp_sntp_set_sync_interval(10000);                // 10 second intervals
+        esp_sntp_init();
 
-      // Try one more time with shorter timeout
-      ESP_LOGI(TAG, "Retry with global servers...");
-      wait_for_time_sync(90000); // 1.5 minutes
+        // Try one more time with shorter timeout
+        ESP_LOGI(TAG, "Retry with global servers...");
+        wait_for_time_sync(90000); // 1.5 minutes
 
-      // Continue anyway - time sync is not critical for basic operation
+        // Continue anyway - time sync is not critical for basic operation
+      }
+    }
+  } else {
+    ESP_LOGI(TAG, "SNTP time synchronization disabled by configuration");
+
+    // Still initialize SNTP for weekly updates but don't wait for initial sync
+    ret = initialize_sntp_enhanced();
+    if (ret == ESP_OK) {
+      ESP_LOGI(TAG, "SNTP initialized for weekly updates only");
     }
   }
 
