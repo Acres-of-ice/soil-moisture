@@ -74,6 +74,15 @@ static bool is_mqtt_circuit_breaker_active(void) {
 }
 
 static esp_err_t mqtt_publish_notification(const char *message, bool is_error) {
+
+  // Check if MQTT is available
+  esp_mqtt_client_handle_t client = get_mqtt_client();
+  extern bool isMqttConnected;
+  if (!client || !isMqttConnected) {
+    ESP_LOGD(TAG, "MQTT not available, message not sent: %s", message);
+    return ESP_ERR_INVALID_STATE;
+  }
+
   if (!message) {
     return ESP_ERR_INVALID_ARG;
   }
@@ -82,22 +91,13 @@ static esp_err_t mqtt_publish_notification(const char *message, bool is_error) {
   if (is_mqtt_related_error(message)) {
     ESP_LOGW(TAG, "MQTT-related error detected, using ESP_LOG only: %s",
              message);
+    update_mqtt_circuit_breaker(false); // Record failure
     return ESP_ERR_INVALID_STATE; // Don't try to send MQTT errors via MQTT
   }
 
   // Check circuit breaker
   if (is_mqtt_circuit_breaker_active()) {
     ESP_LOGD(TAG, "MQTT circuit breaker active, message not sent: %s", message);
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  // Check if MQTT is available
-  esp_mqtt_client_handle_t client = get_mqtt_client();
-  extern bool isMqttConnected;
-
-  if (!client || !isMqttConnected) {
-    ESP_LOGD(TAG, "MQTT not available, message not sent: %s", message);
-    update_mqtt_circuit_breaker(false); // Record failure
     return ESP_ERR_INVALID_STATE;
   }
 

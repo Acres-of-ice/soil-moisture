@@ -227,7 +227,6 @@ void updateValveState(void *pvParameters) {
       if (plot_to_irrigate >= 0) {
         current_plot = plot_to_irrigate;
         newState = STATE_VALVE_OPEN;
-        counter++;
         ESP_LOGI(TAG, "Starting irrigation for plot %d (soil: %d%%)",
                  current_plot + 1, current_readings.soil[current_plot]);
       } else {
@@ -248,8 +247,8 @@ void updateValveState(void *pvParameters) {
       uint8_t valve_address = DEVICE_TYPE_VALVE | (current_plot + 1);
 
       if (!sendCommandWithRetry(valve_address, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed for plot %d\n",
-                 valveStateToString(newState), current_plot + 1);
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
@@ -264,8 +263,8 @@ void updateValveState(void *pvParameters) {
       ESP_LOGI(TAG, "Starting pump for plot %d", current_plot + 1);
 
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed for plot %d\n",
-                 valveStateToString(newState), current_plot + 1);
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
@@ -305,8 +304,8 @@ void updateValveState(void *pvParameters) {
       ESP_LOGI(TAG, "Stopping pump for plot %d", current_plot + 1);
 
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed for plot %d\n",
-                 valveStateToString(newState), current_plot + 1);
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
@@ -329,8 +328,8 @@ void updateValveState(void *pvParameters) {
       uint8_t valve_address_close = DEVICE_TYPE_VALVE | (current_plot + 1);
 
       if (!sendCommandWithRetry(valve_address_close, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed for plot %d\n",
-                 valveStateToString(newState), current_plot + 1);
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
