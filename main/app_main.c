@@ -168,6 +168,7 @@ void app_main(void) {
   esp_log_level_set("ESPNOW", ESP_LOG_NONE);
   esp_log_level_set("espnow_lib", ESP_LOG_NONE);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
   // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
   // esp_log_level_set("GSM", ESP_LOG_DEBUG);

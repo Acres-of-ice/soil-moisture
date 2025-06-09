@@ -209,6 +209,8 @@ static esp_err_t publish_sensor_data(const char *json_data) {
     return ESP_FAIL;
   }
 
+  ESP_LOGD(TAG, "Payload: %s", json_data);
+
   ESP_LOGI(TAG, "Data published successfully (msg_id: %d, topic: %s)", msg_id,
            topic);
   ESP_LOGD(TAG, "Payload: %s", json_data);
