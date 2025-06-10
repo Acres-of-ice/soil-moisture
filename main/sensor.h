@@ -24,8 +24,6 @@
 
 // Voltage monitoring definitions
 #define LOW_CUTOFF_VOLTAGE 10.9f // Voltage threshold for low voltage cutoff
-#define LOW_VOLTAGE_SLEEP_TIME                                                 \
-  (1 * 60) // Sleep time in seconds for low voltage cutoff
 #define VOLTAGE_ADC_CHANNEL ADC_CHANNEL_7 // GPIO35
 #define VOLTAGE_ADC_UNIT ADC_UNIT_1
 #define VOLTAGE_ADC_ATTEN ADC_ATTEN_DB_12

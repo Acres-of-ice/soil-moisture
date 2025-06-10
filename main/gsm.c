@@ -686,4 +686,11 @@ void unified_sms_task(void *pvParameters) {
     // Prevent tight loop
     vTaskDelay(pdMS_TO_TICKS(100));
   }
+  uart_event_t event;
+  if (xQueueReceive(uart_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
+      if (event.type == UART_BREAK) {
+          ESP_LOGW(TAG, "UART RX break detected!");
+      }
+      // Handle other UART events...
+  }
 }

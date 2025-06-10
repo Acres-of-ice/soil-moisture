@@ -134,19 +134,7 @@ esp_err_t voltage_monitor_init(void) {
   // Initialize ADC calibration
   adc_cali_handle = NULL;
 
-  // Try to use factory calibration scheme first
-#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
-  adc_cali_curve_fitting_config_t cali_config = {
-      .unit_id = VOLTAGE_ADC_UNIT,
-      .atten = VOLTAGE_ADC_ATTEN,
-      .bitwidth = VOLTAGE_ADC_WIDTH,
-  };
-  ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
-  if (ret == ESP_OK) {
-    adc_cali_initialized = true;
-    ESP_LOGI(TAG, "Using curve fitting calibration scheme");
-  }
-#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+#if CONFIG_IDF_TARGET_ESP32
   adc_cali_line_fitting_config_t cali_config = {
       .unit_id = VOLTAGE_ADC_UNIT,
       .atten = VOLTAGE_ADC_ATTEN,
@@ -158,9 +146,19 @@ esp_err_t voltage_monitor_init(void) {
     adc_cali_initialized = true;
     ESP_LOGI(TAG, "Using line fitting calibration scheme");
   }
+#elif CONFIG_IDF_TARGET_ESP32C3
+  adc_cali_curve_fitting_config_t cali_config = {
+      .unit_id = VOLTAGE_ADC_UNIT,
+      .atten = VOLTAGE_ADC_ATTEN,
+      .bitwidth = VOLTAGE_ADC_WIDTH,
+  };
+  ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
+  if (ret == ESP_OK) {
+    adc_cali_initialized = true;
+    ESP_LOGI(TAG, "Using curve fitting calibration scheme");
+  }
 #endif
 
-  // If calibration schemes are not supported or initialization failed
   if (!adc_cali_initialized) {
     ESP_LOGW(
         TAG,
@@ -174,14 +172,13 @@ esp_err_t voltage_monitor_init(void) {
 // Add cleanup function for ADC calibration
 void voltage_monitor_deinit(void) {
   if (adc_cali_handle != NULL) {
-#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
-    adc_cali_delete_scheme_curve_fitting(adc_cali_handle);
-#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+#if CONFIG_IDF_TARGET_ESP32
     adc_cali_delete_scheme_line_fitting(adc_cali_handle);
+#elif CONFIG_IDF_TARGET_ESP32C3
+    adc_cali_delete_scheme_curve_fitting(adc_cali_handle);
 #endif
     adc_cali_handle = NULL;
   }
-
   if (adc_handle != NULL) {
     adc_oneshot_del_unit(adc_handle);
     adc_handle = NULL;
@@ -451,6 +448,7 @@ void sensor_task(void *pvParameters) {
 
     if (site_config.has_voltage_cutoff && adc_handle != NULL) {
       local_readings.voltage = measure_voltage();
+      ESP_LOGD(TAG, "Measured voltage: %.2f V", local_readings.voltage);
 
       if (local_readings.voltage < LOW_CUTOFF_VOLTAGE) {
         ESP_LOGE(
@@ -466,8 +464,8 @@ void sensor_task(void *pvParameters) {
 
         // Enter deep sleep
         esp_sleep_enable_timer_wakeup(
-            (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
-            1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+            (uint64_t)LOW_VOLTAGE_SLEEP_US); // Wake up after
+                                             // LOW_VOLTAGE_SLEEP_TIME seconds
         esp_deep_sleep_start();
       }
     } else if (!site_config.has_voltage_cutoff) {

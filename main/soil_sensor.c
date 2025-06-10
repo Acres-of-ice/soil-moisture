@@ -6,8 +6,10 @@
 #include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
+// #include "esp_adc/adc_digi.h"
 #include "esp_log.h"
 #include "esp_now.h"
+#include "esp_sleep.h"
 #include "esp_wifi.h"
 #include "espnow_lib.h"
 #include "nvs.h"
@@ -370,7 +372,7 @@ int read_soil_moisture(void) {
            raw_moisture, soil_mv, supply_voltage, filtered_ratio,
            calibrated_moisture);
 
-  return calibrated_moisture;
+  return calibrated_moisture; //   replace
 }
 
 /**
@@ -664,8 +666,18 @@ void soil_sensor_task(void *pvParameters) {
 
   while (1) {
     // Read soil moisture
-    soil = read_soil_moisture();
-    battery = read_battery_level();
+    int moisture = read_soil_moisture();
+    float battery = read_battery_level();
+
+    if (battery <= SOIL_BATT_MIN_VOLTAGE) {
+      ESP_LOGW(TAG,
+               "Battery voltage low (%.2fV)! Entering deep sleep for 1 hour...",
+               battery);
+      vTaskDelay(pdMS_TO_TICKS(100));
+      esp_sleep_enable_timer_wakeup(
+          LOW_VOLTAGE_SLEEP_US); // 1 hour in microseconds
+      esp_deep_sleep_start();
+    }
 
     if (soil >= 0) {
       // Prepare ESP-NOW data structure for transmission
