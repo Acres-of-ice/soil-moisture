@@ -36,7 +36,6 @@ char header_buffer[512] = "";
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
-data_statistics_t data_stats = {0};
 
 void generate_data_file_header(char *header_buffer, size_t buffer_size) {
   // Start with the base header

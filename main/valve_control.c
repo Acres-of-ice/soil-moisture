@@ -32,22 +32,32 @@ int counter = 1;
 int current_plot = -1; // -1 means no plot active
 bool errorConditionMet = false;
 
-static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
-                                       [TEMP_TOO_HIGH] = "TEMP:HIGH",
-                                       [TEMP_TOO_LOW] = "TEMP:LOW"};
-
-static const char *PRESSURE_STATE_STR[] = {
-    [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
+// static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
+//                                        [TEMP_TOO_HIGH] = "TEMP:HIGH",
+//                                        [TEMP_TOO_LOW] = "TEMP:LOW"};
+//
+// static const char *PRESSURE_STATE_STR[] = {
+//     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
 
 const char *valveStateToString(ValveState state) {
   switch (state) {
   case STATE_IDLE:
     return "IDLE";
   case STATE_VALVE_OPEN:
-    return current_plot >= 0 ? (current_plot == 0   ? "Valve 1 Open"
-                                : current_plot == 1 ? "Valve 2 Open"
-                                                    : "Valve Open")
-                             : "Valve Open";
+    if (current_plot >= 0 && current_plot < CONFIG_NUM_PLOTS) {
+      uint8_t addr = get_valve_controller_address(current_plot);
+      uint8_t device_type = GET_DEVICE_TYPE(addr);
+      if (device_type == DEVICE_TYPE_VALVE) {
+        return current_plot == 0   ? "Valve 1 Open"
+               : current_plot == 1 ? "Valve 2 Open"
+                                   : "Valve Open";
+      } else if (device_type == DEVICE_TYPE_SOLENOID) {
+        return current_plot == 0   ? "Solenoid 1 Open"
+               : current_plot == 1 ? "Solenoid 2 Open"
+                                   : "Solenoid Open";
+      }
+    }
+    return "Controller Open";
   case STATE_PUMP_ON:
     return "PUMP ON";
   case STATE_IRR_START:
@@ -58,10 +68,20 @@ const char *valveStateToString(ValveState state) {
   case STATE_PUMP_OFF:
     return "PUMP OFF";
   case STATE_VALVE_CLOSE:
-    return current_plot >= 0 ? (current_plot == 0   ? "Valve 1 Close"
-                                : current_plot == 1 ? "Valve 2 Close"
-                                                    : "Valve Close")
-                             : "Valve Close";
+    if (current_plot >= 0 && current_plot < CONFIG_NUM_PLOTS) {
+      uint8_t addr = get_valve_controller_address(current_plot);
+      uint8_t device_type = GET_DEVICE_TYPE(addr);
+      if (device_type == DEVICE_TYPE_VALVE) {
+        return current_plot == 0   ? "Valve 1 Close"
+               : current_plot == 1 ? "Valve 2 Close"
+                                   : "Valve Close";
+      } else if (device_type == DEVICE_TYPE_SOLENOID) {
+        return current_plot == 0   ? "Solenoid 1 Close"
+               : current_plot == 1 ? "Solenoid 2 Close"
+                                   : "Solenoid Close";
+      }
+    }
+    return "Controller Close";
   case STATE_IRR_DONE:
     return current_plot >= 0 ? (current_plot == 0   ? "IRR 1 Done"
                                 : current_plot == 1 ? "IRR 2 Done"
@@ -72,6 +92,15 @@ const char *valveStateToString(ValveState state) {
   default:
     return "Unknown";
   }
+}
+
+uint8_t get_valve_controller_address(int plot_number) {
+  if (plot_number < 0 || plot_number >= CONFIG_NUM_PLOTS) {
+    ESP_LOGE(TAG, "Invalid plot number: %d", plot_number);
+    return 0; // Invalid address
+  }
+
+  return discovered_valve_addresses[plot_number];
 }
 
 // Helper function to convert nodeAddress to PCB name
@@ -240,21 +269,43 @@ void updateValveState(void *pvParameters) {
         newState = STATE_IDLE;
         break;
       }
-
-      ESP_LOGI(TAG, "Opening valve for plot %d", current_plot + 1);
-
-      // Calculate valve address based on plot number
-      uint8_t valve_address = DEVICE_TYPE_VALVE | (current_plot + 1);
-
-      if (!sendCommandWithRetry(valve_address, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+      // Get the discovered valve controller address for this plot
+      uint8_t valve_controller_address =
+          get_valve_controller_address(current_plot);
+      if (valve_controller_address == 0) {
+        ESP_LOGE(TAG, "No valve controller found for plot %d",
                  current_plot + 1);
+        newState = STATE_IDLE;
+        current_plot = -1;
+        break;
+      }
+
+      ESP_LOGI(TAG, "Opening valve controller (0x%02X) for plot %d",
+               valve_controller_address, current_plot + 1);
+
+      if (!sendCommandWithRetry(valve_controller_address, 0x11, nodeAddress)) {
+        ESP_LOGE(TAG, "%s Send Failed for plot %d (controller 0x%02X)\n",
+                 valveStateToString(newState), current_plot + 1,
+                 valve_controller_address);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
+
+      // Different delay based on valve type
+      uint8_t device_type = GET_DEVICE_TYPE(valve_controller_address);
+      if (device_type == DEVICE_TYPE_SOLENOID) {
+        ESP_LOGD(TAG, "Using 1 second delay for solenoid controller");
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 second for solenoid
+      } else {
+        ESP_LOGD(TAG,
+                 "Using standard valve timeout (%d ms) for valve controller",
+                 VALVE_TIMEOUT_MS);
+        vTaskDelay(
+            pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // Standard timeout for valve
+      }
+
       newState = STATE_PUMP_ON;
       stateEntryTime = xTaskGetTickCount();
       break;
@@ -322,20 +373,46 @@ void updateValveState(void *pvParameters) {
         break;
       }
 
-      ESP_LOGI(TAG, "Closing valve for plot %d", current_plot + 1);
+      // Get the discovered valve controller address for this plot
+      uint8_t valve_controller_address_close =
+          get_valve_controller_address(current_plot);
 
-      // Calculate valve address based on plot number
-      uint8_t valve_address_close = DEVICE_TYPE_VALVE | (current_plot + 1);
-
-      if (!sendCommandWithRetry(valve_address_close, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+      if (valve_controller_address_close == 0) {
+        ESP_LOGE(TAG, "No valve controller found for plot %d",
                  current_plot + 1);
+        newState = STATE_IDLE;
+        current_plot = -1;
+        break;
+      }
+
+      ESP_LOGI(TAG, "Closing valve controller (0x%02X) for plot %d",
+               valve_controller_address_close, current_plot + 1);
+
+      if (!sendCommandWithRetry(valve_controller_address_close, 0x10,
+                                nodeAddress)) {
+        ESP_LOGE(TAG, "%s Send Failed for plot %d (controller 0x%02X)\n",
+                 valveStateToString(newState), current_plot + 1,
+                 valve_controller_address_close);
         newState = STATE_IDLE;
         current_plot = -1;
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
+
+      // Different delay based on valve type
+      uint8_t device_type_close =
+          GET_DEVICE_TYPE(valve_controller_address_close);
+      if (device_type_close == DEVICE_TYPE_SOLENOID) {
+        ESP_LOGD(TAG, "Using 1 second delay for solenoid controller");
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 second for solenoid
+      } else {
+        ESP_LOGD(TAG,
+                 "Using standard valve timeout (%d ms) for valve controller",
+                 VALVE_TIMEOUT_MS);
+        vTaskDelay(
+            pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // Standard timeout for valve
+      }
+
       newState = STATE_IRR_DONE;
       vTaskDelay(1000);
       break;

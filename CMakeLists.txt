@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.30)
 
 set(EXTRA_COMPONENT_DIRS ${CMAKE_SOURCE_DIR}/components)
 set(SPIFFS_IMAGE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/spiffs_image")
@@ -87,20 +87,33 @@ message(STATUS "=== Configuration Debug ===")
 message(STATUS "ACTUAL_PROJECT_NAME: ${ACTUAL_PROJECT_NAME}")
 message(STATUS "===========================")
 
+# Ensure images directory exists at configure time
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/images)
+
 # Custom target to handle all image copying after build
+# This will run as part of the default build after binaries are created
 add_custom_target(create_images ALL
-    DEPENDS ${CMAKE_PROJECT_NAME}.elf
     COMMENT "Creating images with PCB-specific naming"
 )
 
-# Copy main binary with appropriate name - FORCE OVERWRITE
+# Make sure create_images depends on the ESP-IDF target that generates binary files
+# In ESP-IDF, 'gen_project_binary' target creates the .bin file from .elf
+add_dependencies(create_images gen_project_binary)
+
+# Copy main binary with appropriate name - only if different
 add_custom_command(TARGET create_images POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/images/${OUTPUT_BINARY_NAME}.bin
-    COMMAND ${CMAKE_COMMAND} -E copy 
+    # Ensure destination directory exists
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/images
+    
+    # Copy only if file content or timestamp is different
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin 
         ${CMAKE_SOURCE_DIR}/images/${ACTUAL_PROJECT_NAME}.bin
-        COMMENT "Copying ${ACTUAL_PROJECT_NAME}.bin to images/ (forced overwrite)"
+    
+    COMMENT "Copying ${ACTUAL_PROJECT_NAME}.bin to images/ (only if different)"
+    VERBATIM
 )
+
 
 # Copy partition table with size-specific naming (determined at build time)
 add_custom_command(TARGET create_images POST_BUILD
@@ -122,7 +135,7 @@ add_custom_command(TARGET create_images POST_BUILD
 
 # Optional: Clean target for images - removes only old files of same type
 add_custom_target(clean_images
-    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/images/${ACTUAL_PROJECT_NAME}.bin
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/images/${ACTUAL_PROJECT_NAME}.bin
     COMMENT "Cleaning specific image files for current configuration"
 )
 

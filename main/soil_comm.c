@@ -36,6 +36,7 @@ sensor_readings_t soil_readings = {0};
 // Global variable to track current pump state
 static uint8_t current_pump_state = 0;  // 0 = off, 1 = on
 static uint8_t current_valve_state = 0; // 0 = off, 1 = on
+uint8_t discovered_valve_addresses[CONFIG_NUM_PLOTS] = {0};
 
 static uint8_t device_type = 0;
 static uint8_t plot_number = 0;
@@ -1672,6 +1673,11 @@ void espnow_discovery_task(void *pvParameters) {
   bool run_discovery = true;
   bool devices_initialized = false;
 
+  // Initialize valve addresses array to 0 (no device found)
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    discovered_valve_addresses[i] = 0;
+  }
+
 #ifdef CONFIG_ESPNOW_USE_STORED_MAPPINGS
   // Check if we should try to load mappings from NVS
   ESP_LOGI(TAG, "Checking for stored device mappings in NVS");
@@ -1824,6 +1830,43 @@ void espnow_discovery_task(void *pvParameters) {
                  i);
       }
     }
+    // Populate the discovered_valve_addresses array after successful
+    // discovery
+    ESP_LOGI(TAG, "Populating valve controller addresses for %d plots",
+             CONFIG_NUM_PLOTS);
+    for (int plot = 1; plot <= CONFIG_NUM_PLOTS; plot++) {
+      // Check for valve controller first
+      uint8_t valve_addr = DEVICE_TYPE_VALVE | plot; // 0x10 | plot
+      bool valve_found = false;
+
+      // Check if this device exists in our mappings
+      for (int j = 0; j < num_device_mappings; j++) {
+        if (device_mappings[j].device_addr == valve_addr) {
+          discovered_valve_addresses[plot - 1] = valve_addr;
+          ESP_LOGI(TAG, "Plot %d: Using Valve controller at 0x%02X", plot,
+                   valve_addr);
+          valve_found = true;
+          break;
+        }
+      }
+
+      if (!valve_found) {
+        // Check for solenoid controller
+        uint8_t solenoid_addr = DEVICE_TYPE_SOLENOID | plot; // 0x20 | plot
+        for (int j = 0; j < num_device_mappings; j++) {
+          if (device_mappings[j].device_addr == solenoid_addr) {
+            discovered_valve_addresses[plot - 1] = solenoid_addr;
+            ESP_LOGI(TAG, "Plot %d: Using Solenoid controller at 0x%02X", plot,
+                     solenoid_addr);
+            break;
+          }
+        }
+      }
+
+      if (discovered_valve_addresses[plot - 1] == 0) {
+        ESP_LOGW(TAG, "Plot %d: No valve controller found", plot);
+      }
+    }
   } else {
     ESP_LOGE(TAG, "Device initialization failed, resuming tasks anyway to "
                   "prevent deadlock");
@@ -1927,8 +1970,8 @@ void vTaskESPNOW(void *pvParameters) {
         // Give a little time for authentication to complete
         vTaskDelay(pdMS_TO_TICKS(50));
 
-        // If still not authenticated after attempt, log and continue with send
-        // anyway
+        // If still not authenticated after attempt, log and continue with
+        // send anyway
         if (!espnow_is_authenticated(dest_mac)) {
           ESP_LOGW(TAG, "Authentication pending for " MACSTR,
                    MAC2STR(dest_mac));

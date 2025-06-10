@@ -18,7 +18,7 @@ menu "App Configuration"
     config NUM_PLOTS
         int "Number of irrigation plots"
         range 1 8
-        default 1
+        default 2
         help
             Set the number of irrigation plots (soil sensors + valves).
             Each plot has one soil sensor and one valve.
@@ -129,53 +129,6 @@ menu "App Configuration"
         default y if MASTER
         default n if VALVE || SOIL || PUMP || SOLENOID
 
-# config SMS_RECIPIENT_DATA
-#   choice
-#     prompt "Select Data SMS Recipient"
-#     default SMS_RECIPIENT_DATA_AWS
-#     help
-#         Select the recipient who will receive data messages.
-#
-#     config SMS_RECIPIENT_DATA_AWS
-#         bool "AWS Server"
-#
-#     config SMS_RECIPIENT_DATA_NIDHIN
-#         bool "Nidhin"
-#
-#     config SMS_RECIPIENT_DATA_SURYA
-#         bool "Surya"
-# endchoice
-#
-# config SMS_RECIPIENT_ERROR
-#   choice
-#     prompt "Select Error SMS Recipient"
-#     default SMS_RECIPIENT_ERROR_SURYA
-#     help
-#         Select the recipient who will receive error messages and logs.
-#
-#     config SMS_RECIPIENT_ERROR_AWS
-#         bool "AWS Server"
-#
-#     config SMS_RECIPIENT_ERROR_NIDHIN
-#         bool "Nidhin"
-#
-#     config SMS_RECIPIENT_ERROR_SURYA
-#         bool "Surya"
-# endchoice
-
-# # Hidden configs to store the actual phone numbers
-# config SMS_DATA_NUMBER
-# string
-# default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-# default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-# default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
-#
-# config SMS_ERROR_NUMBER
-# string
-# default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-# default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
-# default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
-
 config ENABLE_HW
     bool "Enable Hardware Configuration"
     default false
@@ -243,7 +196,7 @@ menu "Hardware Configuration"
 
         config HAS_VOLTAGE_CUTOFF
             bool "Enable Low Voltage Auto Cutoff"
-            default n
+            default y
             help
                 Enable low voltage auto cutoff for sites
         config ENABLE_VOLTAGE_CUTOFF
@@ -299,20 +252,20 @@ menu "Drip Timer Configuration"
 			Set the minute when the forced drain time ends.
 endmenu
 
-config ENABLE_RESET_SENSOR_CONFIG
-  bool "Enable Reset Sensor Configuration"
-  default false
-
-menu "Reset Time Configuration"
-	visible if ENABLE_RESET_SENSOR_CONFIG
-
-	config RESET_HOUR
-		int "Reset hour (0-23)"
-		default 0
-		range 0 23
-		help
-			Set the hour to reset the sensor readings (24-hour format).
-endmenu
+# config ENABLE_RESET_SENSOR_CONFIG
+#   bool "Enable Reset Sensor Configuration"
+#   default false
+#
+# menu "Reset Time Configuration"
+# 	visible if ENABLE_RESET_SENSOR_CONFIG
+#
+# 	config RESET_HOUR
+# 		int "Reset hour (0-23)"
+# 		default 0
+# 		range 0 23
+# 		help
+# 			Set the hour to reset the sensor readings (24-hour format).
+# endmenu
 
 config ENABLE_TIME_CONFIG
     bool "Enable Timeout Configuration"

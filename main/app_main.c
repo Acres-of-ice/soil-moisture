@@ -50,6 +50,7 @@ TaskHandle_t soilTaskHandle = NULL;
 TaskHandle_t TXTaskHandle = NULL;
 TaskHandle_t spOtaTaskHandle = NULL;
 TaskHandle_t mqttDataTaskHandle = NULL;
+TaskHandle_t mqttTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
@@ -165,8 +166,8 @@ void app_main(void) {
   // esp_log_level_set("*", ESP_LOG_ERROR);
 
   // esp_log_level_set("PPPOS", ESP_LOG_DEBUG);
-  esp_log_level_set("ESPNOW", ESP_LOG_NONE);
-  esp_log_level_set("espnow_lib", ESP_LOG_NONE);
+  // esp_log_level_set("ESPNOW", ESP_LOG_NONE);
+  // esp_log_level_set("espnow_lib", ESP_LOG_NONE);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
