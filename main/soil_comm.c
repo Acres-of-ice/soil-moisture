@@ -725,7 +725,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
   // Log signal quality if needed
   if (rssi < -75) {
-    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+    ESP_LOGW(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
     update_status_message("Poor signal: RSSI: %d dBm", rssi);
   }
 
@@ -757,7 +757,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
     ESP_LOGD(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
-    ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil);
+    ESP_LOGD(TAG, "Soil Moisture: %d%%", recv_data.soil);
     ESP_LOGD(TAG, "Battery Level: %d%%",
              recv_data.battery); // Added battery logging
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
@@ -784,7 +784,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
         soil_readings.soil[plot_index] = recv_data.soil;
         soil_readings.battery[plot_index] = recv_data.battery;
 
-        ESP_LOGI(TAG, "Updated plot %d (0x%02X): Soil=%d%%, Battery=%d%%",
+        ESP_LOGD(TAG, "Updated plot %d (0x%02X): Soil=%d%%, Battery=%d%%",
                  plot_index + 1, recv_data.node_address, recv_data.soil,
                  recv_data.battery);
       } else {
