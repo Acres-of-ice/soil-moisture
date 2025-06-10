@@ -85,15 +85,7 @@ typedef enum {
 // Irrigation Demo mode
 extern bool demo_mode_active;
 extern TickType_t demo_mode_start_time;
-#define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
-
-typedef struct {
-  uint32_t total_data_points;
-  uint32_t
-      site_data_points[MAX_SITES]; // Assuming you define MAX_SITES in define.h
-  char last_data_time[32];
-} data_statistics_t;
-extern data_statistics_t data_stats;
+extern uint8_t discovered_valve_addresses[CONFIG_NUM_PLOTS];
 
 // ==================== Soil Sensor Calibration ====================
 
