@@ -7,7 +7,8 @@
 #include <string.h>
 
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "mqtt_notify.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "soil_sensor.h"
@@ -24,99 +25,167 @@ bool DRAIN_mode = pdFALSE;
 
 static ValveState currentState = STATE_IDLE;
 static TickType_t stateEntryTime = 0;
-
 static TickType_t errorEntryTime = 0; // Track when we entered error state
-// bool errorConditionMet = false;
 static sensor_readings_t current_readings;
 
 int counter = 1;
-
+int current_plot = -1; // -1 means no plot active
 bool errorConditionMet = false;
 
-static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
-                                       [TEMP_TOO_HIGH] = "TEMP:HIGH",
-                                       [TEMP_TOO_LOW] = "TEMP:LOW"};
-
-static const char *PRESSURE_STATE_STR[] = {
-    [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
-
-bool Valve_A_Acknowledged = false;
-bool Valve_B_Acknowledged = false;
-bool Pump_Acknowledged = false;
-bool Soil_pcb_Acknowledged = false;
-bool AIR_NOTE_acknowledged = false;
-bool DRAIN_NOTE_feedback = false;
-bool SOURCE_NOTE_feedback = false;
-bool heat_on = false;
-
-static int moisture_level = 0;
-
-void update_moisture_readings(int a) { moisture_level = a; }
-
-static moisture_state_t get_moisture_state(float humidity) {
-  if (humidity >= 80)
-    return MOISTURE_HIGH;
-  if (humidity >= 20)
-    return MOISTURE_NORMAL;
-  return MOISTURE_LOW;
-}
+// static const char *TEMP_STATE_STR[] = {[TEMP_NORMAL] = "TEMP:OK",
+//                                        [TEMP_TOO_HIGH] = "TEMP:HIGH",
+//                                        [TEMP_TOO_LOW] = "TEMP:LOW"};
+//
+// static const char *PRESSURE_STATE_STR[] = {
+//     [PRESSURE_NORMAL] = "PRESS:OK", [PRESSURE_OUT_OF_RANGE] = "PRESS:ERR"};
 
 const char *valveStateToString(ValveState state) {
   switch (state) {
   case STATE_IDLE:
     return "IDLE";
-  case STATE_IRR_START_A:
-    return "IRR A Start";
-  case STATE_IRR_START_B:
-    return "IRR B Start";
-  case STATE_VALVE_A_OPEN:
-    return "Valve A open";
-  case STATE_VALVE_B_OPEN:
-    return "Valve B open";
-  case STATE_VALVE_A_CLOSE:
-    return "Valve A close";
-  case STATE_VALVE_B_CLOSE:
-    return "Valve B close";
-  case STATE_PUMP_ON_A:
+  case STATE_VALVE_OPEN:
+    if (current_plot >= 0 && current_plot < CONFIG_NUM_PLOTS) {
+      uint8_t addr = get_valve_controller_address(current_plot);
+      uint8_t device_type = GET_DEVICE_TYPE(addr);
+      if (device_type == DEVICE_TYPE_VALVE) {
+        return current_plot == 0   ? "Valve 1 Open"
+               : current_plot == 1 ? "Valve 2 Open"
+                                   : "Valve Open";
+      } else if (device_type == DEVICE_TYPE_SOLENOID) {
+        return current_plot == 0   ? "Solenoid 1 Open"
+               : current_plot == 1 ? "Solenoid 2 Open"
+                                   : "Solenoid Open";
+      }
+    }
+    return "Controller Open";
+  case STATE_PUMP_ON:
     return "PUMP ON";
-  case STATE_PUMP_ON_B:
-    return "PUMP ON";
-  case STATE_PUMP_OFF_A:
+  case STATE_IRR_START:
+    return current_plot >= 0 ? (current_plot == 0   ? "IRR 1 Start"
+                                : current_plot == 1 ? "IRR 2 Start"
+                                                    : "IRR Start")
+                             : "IRR Start";
+  case STATE_PUMP_OFF:
     return "PUMP OFF";
-  case STATE_PUMP_OFF_B:
-    return "PUMP OFF";
-  case STATE_IRR_DONE_A:
-    return "IRR A Done";
-  case STATE_IRR_DONE_B:
-    return "IRR B Done";
+  case STATE_VALVE_CLOSE:
+    if (current_plot >= 0 && current_plot < CONFIG_NUM_PLOTS) {
+      uint8_t addr = get_valve_controller_address(current_plot);
+      uint8_t device_type = GET_DEVICE_TYPE(addr);
+      if (device_type == DEVICE_TYPE_VALVE) {
+        return current_plot == 0   ? "Valve 1 Close"
+               : current_plot == 1 ? "Valve 2 Close"
+                                   : "Valve Close";
+      } else if (device_type == DEVICE_TYPE_SOLENOID) {
+        return current_plot == 0   ? "Solenoid 1 Close"
+               : current_plot == 1 ? "Solenoid 2 Close"
+                                   : "Solenoid Close";
+      }
+    }
+    return "Controller Close";
+  case STATE_IRR_DONE:
+    return current_plot >= 0 ? (current_plot == 0   ? "IRR 1 Done"
+                                : current_plot == 1 ? "IRR 2 Done"
+                                                    : "IRR Done")
+                             : "IRR Done";
   case STATE_ERROR:
-    return "SM Error";
+    return "Error";
   default:
     return "Unknown";
   }
 }
 
-// Helper function to convert nodeAddress to PCB name
-const char *get_pcb_name(uint8_t nodeAddress) {
-  switch (nodeAddress) {
-  case MASTER_ADDRESS:
-    return "Master";
-  case VALVE_A_ADDRESS:
-    return "Valve A";
-  case VALVE_B_ADDRESS:
-    return "Valve B";
-  case SOIL_A_ADDRESS:
-    return "Soil A";
-  case SOIL_B_ADDRESS:
-    return "Soil B";
-  case PUMP_ADDRESS:
-    return "Pump";
-  default:
-    return "UNKNOWN PCB";
+uint8_t get_valve_controller_address(int plot_number) {
+  if (plot_number < 0 || plot_number >= CONFIG_NUM_PLOTS) {
+    ESP_LOGE(TAG, "Invalid plot number: %d", plot_number);
+    return 0; // Invalid address
   }
+
+  return discovered_valve_addresses[plot_number];
 }
 
-static bool isStateTimedOut(ValveState state) {
+// Helper function to convert nodeAddress to PCB name
+const char *get_pcb_name(uint8_t nodeAddress) {
+  // Static buffer for dynamic names (thread-safe since it's read-only after
+  // assignment)
+  static char dynamic_name[32];
+
+  // Check for fixed addresses first
+  if (nodeAddress == MASTER_ADDRESS) {
+    return "Master";
+  }
+  if (nodeAddress == PUMP_ADDRESS) {
+    return "Pump";
+  }
+
+  // Extract device type (high nibble) and plot number (low nibble)
+  uint8_t device_type = nodeAddress & 0xF0;
+  uint8_t plot_number = nodeAddress & 0x0F;
+
+  switch (device_type) {
+  case DEVICE_TYPE_VALVE:
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      snprintf(dynamic_name, sizeof(dynamic_name), "Valve %d", plot_number);
+      return dynamic_name;
+    }
+    break;
+
+  case DEVICE_TYPE_SOLENOID:
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      snprintf(dynamic_name, sizeof(dynamic_name), "Solenoid %d", plot_number);
+      return dynamic_name;
+    }
+    break;
+
+  case DEVICE_TYPE_SOIL:
+    if (plot_number >= 1 && plot_number <= CONFIG_NUM_PLOTS) {
+      snprintf(dynamic_name, sizeof(dynamic_name), "Soil %d", plot_number);
+      return dynamic_name;
+    }
+    break;
+
+  case DEVICE_TYPE_WEATHER:
+    if (plot_number >= 1 &&
+        plot_number <= 8) { // Assuming max 8 weather stations
+      snprintf(dynamic_name, sizeof(dynamic_name), "Weather %d", plot_number);
+      return dynamic_name;
+    }
+    break;
+
+  case DEVICE_TYPE_MASTER:
+    // Handle multiple masters if needed in the future
+    if (plot_number >= 1 && plot_number <= 8) {
+      if (plot_number == 1) {
+        return "Master"; // Primary master
+      } else {
+        snprintf(dynamic_name, sizeof(dynamic_name), "Master %d", plot_number);
+        return dynamic_name;
+      }
+    }
+    break;
+
+  case DEVICE_TYPE_PUMP:
+    if (plot_number >= 1 && plot_number <= 8) { // Assuming max 8 pumps
+      if (plot_number == 2 && nodeAddress == PUMP_ADDRESS) {
+        return "Pump"; // Primary pump (matches current PUMP_ADDRESS)
+      } else {
+        snprintf(dynamic_name, sizeof(dynamic_name), "Pump %d", plot_number);
+        return dynamic_name;
+      }
+    }
+    break;
+
+  default:
+    // Unknown device type
+    snprintf(dynamic_name, sizeof(dynamic_name), "Unknown-0x%02X", nodeAddress);
+    return dynamic_name;
+  }
+
+  // If we get here, the plot number was out of range for the device type
+  snprintf(dynamic_name, sizeof(dynamic_name), "Invalid-0x%02X", nodeAddress);
+  return dynamic_name;
+}
+
+bool isStateTimedOut(ValveState state) {
   // Don't timeout in IDLE or calibration state
   if ((state == STATE_IDLE) || (state == STATE_ERROR)) {
     return false;
@@ -135,6 +204,7 @@ static bool isStateTimedOut(ValveState state) {
 
 void updateValveState(void *pvParameters) {
   uint8_t nodeAddress = *(uint8_t *)pvParameters;
+
   while (1) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
       ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
@@ -145,7 +215,7 @@ void updateValveState(void *pvParameters) {
     if (isStateTimedOut(newState)) {
       ESP_LOGE(TAG, "Timeout State machine");
       setCurrentState(STATE_IDLE);
-      reset_acknowledgements();
+      current_plot = -1;               // Reset current plot
       vTaskDelay(pdMS_TO_TICKS(1000)); // Short delay before continuing
       continue;
     }
@@ -153,183 +223,218 @@ void updateValveState(void *pvParameters) {
     switch (newState) {
 
     case STATE_IDLE:
-      reset_acknowledgements();
+      current_plot = -1; // No active plot
       ESP_LOGI(TAG, "IDLE");
-      if (isResetTime()) {
-        current_readings.soil_A = 0;
-        current_readings.soil_B = 0;
+
+      // Get current sensor readings
+      get_sensor_readings(&current_readings);
+
+      // Log current readings for all plots
+      char soil_log[128] = {0};
+      int offset = 0;
+      for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+        offset += snprintf(soil_log + offset, sizeof(soil_log) - offset,
+                           "%sPlot %d: %d%%", (i > 0) ? ", " : "", i + 1,
+                           current_readings.soil[i]);
       }
-      ESP_LOGD(TAG, "Current Readings - Soil A: %d, Soil B: %d",
-               current_readings.soil_A, current_readings.soil_B);
+      ESP_LOGD(TAG, "Current Readings - %s", soil_log);
       ESP_LOGD(TAG, "Drip Timer %s", dripTimer() ? "enabled" : "disabled");
+
       vTaskDelay(1000);
 
-      if (current_readings.soil_A < CONFIG_SOIL_DRY && dripTimer()) {
-        newState = STATE_VALVE_A_OPEN;
-        counter++;
-      } else if (current_readings.soil_B < CONFIG_SOIL_DRY && dripTimer()) {
-        newState = STATE_VALVE_B_OPEN;
-        counter++;
+      // Check all plots for irrigation need (prioritize lower plot numbers)
+      int plot_to_irrigate = -1;
+      if (dripTimer()) {
+        for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+          if (current_readings.soil[i] < CONFIG_PLOT_DRY) {
+            plot_to_irrigate = i;
+            break; // Take the first plot that needs irrigation
+          }
+        }
+      }
+
+      if (plot_to_irrigate >= 0) {
+        current_plot = plot_to_irrigate;
+        newState = STATE_VALVE_OPEN;
+        ESP_LOGI(TAG, "Starting irrigation for plot %d (soil: %d%%)",
+                 current_plot + 1, current_readings.soil[current_plot]);
       } else {
         newState = STATE_IDLE;
       }
       break;
 
-    case STATE_VALVE_A_OPEN:
-      ESP_LOGI(TAG, "A VALVE OPEN");
-      if (!sendCommandWithRetry(VALVE_A_ADDRESS, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    case STATE_VALVE_OPEN:
+      if (current_plot < 0 || current_plot >= CONFIG_NUM_PLOTS) {
+        ESP_LOGE(TAG, "Invalid plot number: %d", current_plot);
         newState = STATE_IDLE;
+        break;
+      }
+      // Get the discovered valve controller address for this plot
+      uint8_t valve_controller_address =
+          get_valve_controller_address(current_plot);
+      if (valve_controller_address == 0) {
+        ESP_LOGE(TAG, "No valve controller found for plot %d",
+                 current_plot + 1);
+        newState = STATE_IDLE;
+        current_plot = -1;
+        break;
+      }
+
+      ESP_LOGI(TAG, "Opening valve controller (0x%02X) for plot %d",
+               valve_controller_address, current_plot + 1);
+
+      if (!sendCommandWithRetry(valve_controller_address, 0x11, nodeAddress)) {
+        ESP_LOGE(TAG, "%s Send Failed for plot %d (controller 0x%02X)\n",
+                 valveStateToString(newState), current_plot + 1,
+                 valve_controller_address);
+        newState = STATE_IDLE;
+        current_plot = -1;
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // 100 seconds
-      newState = STATE_PUMP_ON_A;
+
+      // Different delay based on valve type
+      uint8_t device_type = GET_DEVICE_TYPE(valve_controller_address);
+      if (device_type == DEVICE_TYPE_SOLENOID) {
+        ESP_LOGD(TAG, "Using 1 second delay for solenoid controller");
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 second for solenoid
+      } else {
+        ESP_LOGD(TAG,
+                 "Using standard valve timeout (%d ms) for valve controller",
+                 VALVE_TIMEOUT_MS);
+        vTaskDelay(
+            pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // Standard timeout for valve
+      }
+
+      newState = STATE_PUMP_ON;
       stateEntryTime = xTaskGetTickCount();
       break;
 
-    case STATE_PUMP_ON_A:
+    case STATE_PUMP_ON:
+      ESP_LOGI(TAG, "Starting pump for plot %d", current_plot + 1);
+
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
+        current_plot = -1;
         vTaskDelay(1000);
         break;
       }
       stateEntryTime = xTaskGetTickCount();
-      newState = STATE_IRR_START_A;
+      newState = STATE_IRR_START;
       break;
 
-    case STATE_IRR_START_A:
-      if (current_readings.soil_A >= CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Soil A moisture reached threshold: %d",
-                 current_readings.soil_A);
-        reset_acknowledgements();
-        newState = STATE_PUMP_OFF_A;
+    case STATE_IRR_START:
+      if (current_plot < 0 || current_plot >= CONFIG_NUM_PLOTS) {
+        ESP_LOGE(TAG, "Invalid plot number in IRR_START: %d", current_plot);
+        newState = STATE_IDLE;
+        break;
+      }
+
+      // Update sensor readings
+      get_sensor_readings(&current_readings);
+
+      if (current_readings.soil[current_plot] >= CONFIG_PLOT_WET) {
+        ESP_LOGI(TAG, "Plot %d moisture reached threshold: %d%%",
+                 current_plot + 1, current_readings.soil[current_plot]);
+        newState = STATE_PUMP_OFF;
       } else if (xTaskGetTickCount() - stateEntryTime >
                  pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
-        ESP_LOGW(TAG, "Irrigation timeout for Soil A: %d",
-                 current_readings.soil_A);
-        reset_acknowledgements();
-        current_readings.soil_A = 90;
-        current_readings.soil_B = 0;
-        newState = STATE_PUMP_OFF_A;
+        ESP_LOGW(TAG, "Irrigation timeout for plot %d: %d%%", current_plot + 1,
+                 current_readings.soil[current_plot]);
+        newState = STATE_PUMP_OFF;
       } else {
-        // // Update the sensor readings inside the loop
-        // get_sensor_readings(&current_readings);
-        ESP_LOGI(TAG, "Waiting for Soil A: %d", current_readings.soil_A);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        ESP_LOGI(TAG, "Waiting for plot %d: %d%%", current_plot + 1,
+                 current_readings.soil[current_plot]);
+        vTaskDelay(pdMS_TO_TICKS(10000));
       }
       break;
 
-    case STATE_PUMP_OFF_A:
+    case STATE_PUMP_OFF:
+      ESP_LOGI(TAG, "Stopping pump for plot %d", current_plot + 1);
+
       if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+        ESP_LOGE(TAG, "%s Failed for plot %d\n", valveStateToString(newState),
+                 current_plot + 1);
         newState = STATE_IDLE;
+        current_plot = -1;
         vTaskDelay(1000);
         break;
       }
-      ESP_LOGI(TAG, "Closing Pump");
-      newState = STATE_VALVE_A_CLOSE;
+      ESP_LOGI(TAG, "Pump stopped");
+      newState = STATE_VALVE_CLOSE;
       break;
 
-    case STATE_VALVE_A_CLOSE:
-      if (!sendCommandWithRetry(VALVE_A_ADDRESS, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
+    case STATE_VALVE_CLOSE:
+      if (current_plot < 0 || current_plot >= CONFIG_NUM_PLOTS) {
+        ESP_LOGE(TAG, "Invalid plot number in VALVE_CLOSE: %d", current_plot);
         newState = STATE_IDLE;
+        break;
+      }
+
+      // Get the discovered valve controller address for this plot
+      uint8_t valve_controller_address_close =
+          get_valve_controller_address(current_plot);
+
+      if (valve_controller_address_close == 0) {
+        ESP_LOGE(TAG, "No valve controller found for plot %d",
+                 current_plot + 1);
+        newState = STATE_IDLE;
+        current_plot = -1;
+        break;
+      }
+
+      ESP_LOGI(TAG, "Closing valve controller (0x%02X) for plot %d",
+               valve_controller_address_close, current_plot + 1);
+
+      if (!sendCommandWithRetry(valve_controller_address_close, 0x10,
+                                nodeAddress)) {
+        ESP_LOGE(TAG, "%s Send Failed for plot %d (controller 0x%02X)\n",
+                 valveStateToString(newState), current_plot + 1,
+                 valve_controller_address_close);
+        newState = STATE_IDLE;
+        current_plot = -1;
         vTaskDelay(1000);
         break;
       }
-      vTaskDelay(pdMS_TO_TICKS(VALVE_TIMEOUT_MS));
-      newState = STATE_IRR_DONE_A;
+
+      // Different delay based on valve type
+      uint8_t device_type_close =
+          GET_DEVICE_TYPE(valve_controller_address_close);
+      if (device_type_close == DEVICE_TYPE_SOLENOID) {
+        ESP_LOGD(TAG, "Using 1 second delay for solenoid controller");
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 second for solenoid
+      } else {
+        ESP_LOGD(TAG,
+                 "Using standard valve timeout (%d ms) for valve controller",
+                 VALVE_TIMEOUT_MS);
+        vTaskDelay(
+            pdMS_TO_TICKS(VALVE_TIMEOUT_MS)); // Standard timeout for valve
+      }
+
+      newState = STATE_IRR_DONE;
       vTaskDelay(1000);
       break;
 
-    case STATE_IRR_DONE_A:
-      ESP_LOGI(TAG, "IRR A done");
+    case STATE_IRR_DONE:
+      ESP_LOGI(TAG, "Irrigation for plot %d completed", current_plot + 1);
       counter++;
+      current_plot = -1; // Reset current plot
       newState = STATE_IDLE;
       break;
 
-    case STATE_VALVE_B_OPEN:
-      if (!sendCommandWithRetry(VALVE_B_ADDRESS, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-        newState = STATE_IDLE;
-        vTaskDelay(1000);
-        break;
-      }
-      vTaskDelay(2000);
-      newState = STATE_PUMP_ON_B;
-      stateEntryTime = xTaskGetTickCount();
-      break;
-
-    case STATE_PUMP_ON_B:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x11, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-        newState = STATE_IDLE;
-        vTaskDelay(1000);
-        break;
-      }
-      stateEntryTime = xTaskGetTickCount();
-      newState = STATE_IRR_START_B;
-      break;
-
-    case STATE_IRR_START_B:
-      if (current_readings.soil_B >= CONFIG_SOIL_WET) {
-        ESP_LOGI(TAG, "Soil B moisture reached threshold: %d",
-                 current_readings.soil_B);
-        reset_acknowledgements();
-        newState = STATE_PUMP_OFF_B;
-      } else if (xTaskGetTickCount() - stateEntryTime >
-                 pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
-        ESP_LOGW(TAG, "Irrigation timeout for Soil B: %d",
-                 current_readings.soil_B);
-        reset_acknowledgements();
-        current_readings.soil_B = 90;
-        current_readings.soil_A = 90;
-        newState = STATE_PUMP_OFF_B;
-      } else {
-        // // Update the sensor readings inside the loop
-        // get_sensor_readings(&current_readings);
-        ESP_LOGI(TAG, "Waiting for Soil B: %d", current_readings.soil_B);
-        vTaskDelay(pdMS_TO_TICKS(5000));
-      }
-      break;
-
-    case STATE_PUMP_OFF_B:
-      if (!sendCommandWithRetry(PUMP_ADDRESS, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-        newState = STATE_IDLE;
-        vTaskDelay(1000);
-        break;
-      }
-      vTaskDelay(2000);
-      ESP_LOGI(TAG, "Closing Pump");
-      newState = STATE_VALVE_B_CLOSE;
-      break;
-
-    case STATE_VALVE_B_CLOSE:
-      if (!sendCommandWithRetry(VALVE_B_ADDRESS, 0x10, nodeAddress)) {
-        ESP_LOGE(TAG, "%s Send Failed\n", valveStateToString(newState));
-        newState = STATE_IDLE;
-        vTaskDelay(1000);
-        break;
-      }
-      newState = STATE_IRR_DONE_B;
-      vTaskDelay(1000);
-      break;
-    case STATE_IRR_DONE_B:
-      ESP_LOGI(TAG, "Irrigation for sector B done");
-      counter++;
-      newState = STATE_IDLE;
-      break;
     default:
       ESP_LOGW(TAG, "Unexpected state: %s", valveStateToString(newState));
+      current_plot = -1; // Reset on unexpected state
+      newState = STATE_IDLE;
       break;
     }
+
     // Update the state if it has changed
     if (newState != getCurrentState()) {
       setCurrentState(newState);
-      update_status_message(valveStateToString(newState));
+      notify(valveStateToString(newState));
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
   }

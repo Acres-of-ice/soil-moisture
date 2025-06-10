@@ -5,6 +5,7 @@ menu "App Configuration"
         
         config SITE_SKUAST
             bool "Skuast"
+
         config SITE_TEST
             bool "Test"
     endchoice
@@ -14,6 +15,15 @@ menu "App Configuration"
         default "Test" if SITE_TEST
         default "Skuast" if SITE_SKUAST
 
+    config NUM_PLOTS
+        int "Number of irrigation plots"
+        range 1 8
+        default 2
+        help
+            Set the number of irrigation plots (soil sensors + valves).
+            Each plot has one soil sensor and one valve.
+            Default is 2 for backward compatibility.
+
     choice PCB
         prompt "Select PCB Configuration"
         help
@@ -22,22 +32,18 @@ menu "App Configuration"
             bool "MASTER as sensor master"
             help
                 Configure MASTER
-        config SOIL_A
-            bool "Soil A as soil sensor A"
+        config SOIL
+            bool "Soil Sensor"
             help
-                Configure SOIL_A the soil sensor.
-        config SOIL_B
-            bool "Soil B as soil sensor B"
+                Configure as soil sensor. The plot number will be set separately.
+        config VALVE
+            bool "Valve Controller"
             help
-                Configure SOIL_B the soil sensor.
-        config VALVE_A
-            bool "Valve A"
+                Configure as valve controller. The plot number will be set separately.
+        config SOLENOID
+            bool "Solenoid Controller"
             help
-                Configure VALVE_A the valve A.
-        config VALVE_B
-            bool "Valve B"
-            help
-                Configure VALVE_B the valve B.
+                Configure as solenoid controller. The plot number will be set separately.
         config PUMP
             bool "PUMP"
             help
@@ -51,111 +57,84 @@ menu "App Configuration"
     help
         If enabled, the ESP will enter deep sleep for 1 hour when battery voltage falls below SOIL_BATT_MIN_VOLTAGE.
 
+    config PLOT_NUMBER
+        int "Plot Number (1-8)"
+        range 1 8
+        default 1
+        depends on SOIL || VALVE || SOLENOID
+        help
+            Set the plot number for this soil sensor or valve.
+            This will determine the device address and PCB name.
+            Plot 1 = Soil 1/Valve 1, Plot 2 = Soil 2/Valve 2, etc.
+
     config ESPTOOLPY_FLASHSIZE
         string
         default "8MB" if MASTER
-        default "4MB" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "4MB" if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_8MB
         string
         default "y" if MASTER
-        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "n" if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_4MB
         string
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default y if VALVE || SOIL || PUMP || SOLENOID
 
     config ESPTOOLPY_FLASHSIZE_2MB
         string
         default "n" if MASTER
-        default "n" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "n" if VALVE || SOIL || PUMP || SOLENOID
+
+    config PARTITION_TABLE_SINGLE_APP
+        bool
+        default n
+        help
+            Use custom partition table based on PCB type
+
+    config PARTITION_TABLE_CUSTOM
+        bool
+        default y
+        help
+            Use custom partition table based on PCB type
 
     config PARTITION_TABLE_CUSTOM_FILENAME
         string
         default "partitions/master.csv" if MASTER
-        default "partitions/valves.csv" if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default "partitions/valves.csv" if VALVE || SOIL || PUMP || SOLENOID
 
     # CPU Frequency Configuration
+    config ESP_DEFAULT_CPU_FREQ_MHZ_80
+        bool
+        default y if (VALVE || SOIL || PUMP || SOLENOID)
+        default n if MASTER
+
+    config ESP_DEFAULT_CPU_FREQ_MHZ_160  
+        bool
+        default n
+        
+    config ESP_DEFAULT_CPU_FREQ_MHZ_240
+        bool  
+        default y if MASTER
+        default n if (VALVE || SOIL || PUMP || SOLENOID)
+
+    # Also set the main frequency value to match
     config ESP_DEFAULT_CPU_FREQ_MHZ
         int
         default 240 if MASTER
-        default 80 if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
-        help
-            CPU frequency to be set on application startup.
-            Master gets highest performance (240MHz), others get lowest (80MHz) for power saving.
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_80
-        bool
-        default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_160
-        bool
-        default n
-
-    config ESP_DEFAULT_CPU_FREQ_MHZ_240
-        bool
-        default y if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default 80 if (VALVE || SOIL || PUMP || SOLENOID)
 
     # Debugging
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_UART
         bool
         default n if MASTER
-        default y if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
+        default y if VALVE || SOIL || PUMP || SOLENOID
 
     config CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH
         bool
         default y if MASTER
-        default n if VALVE_A || VALVE_B || SOIL_A || SOIL_B || PUMP
-
-config SMS_RECIPIENT_DATA
-  choice
-    prompt "Select Data SMS Recipient"
-    default SMS_RECIPIENT_DATA_AWS
-    help
-        Select the recipient who will receive data messages.
-
-    config SMS_RECIPIENT_DATA_AWS
-        bool "AWS Server"
-        
-    config SMS_RECIPIENT_DATA_NIDHIN
-        bool "Nidhin"
-        
-    config SMS_RECIPIENT_DATA_SURYA
-        bool "Surya"
-endchoice
-
-config SMS_RECIPIENT_ERROR
-  choice
-    prompt "Select Error SMS Recipient"
-    default SMS_RECIPIENT_ERROR_SURYA
-    help
-        Select the recipient who will receive error messages and logs.
-
-    config SMS_RECIPIENT_ERROR_AWS
-        bool "AWS Server"
-        
-    config SMS_RECIPIENT_ERROR_NIDHIN
-        bool "Nidhin"
-        
-    config SMS_RECIPIENT_ERROR_SURYA
-        bool "Surya"
-endchoice
-
-# Hidden configs to store the actual phone numbers
-config SMS_DATA_NUMBER
-string
-default "+918082748893" if SMS_RECIPIENT_DATA_AWS
-default "+918606163820" if SMS_RECIPIENT_DATA_NIDHIN
-default "+919840803518" if SMS_RECIPIENT_DATA_SURYA
-
-config SMS_ERROR_NUMBER
-string
-default "+918082748893" if SMS_RECIPIENT_ERROR_AWS
-default "+918606163820" if SMS_RECIPIENT_ERROR_NIDHIN
-default "+919840803518" if SMS_RECIPIENT_ERROR_SURYA
+        default n if VALVE || SOIL || PUMP || SOLENOID
 
 config ENABLE_HW
     bool "Enable Hardware Configuration"
@@ -184,7 +163,6 @@ menu "Hardware Configuration"
 
         config HAS_GSM
             bool "Use GSM"
-            default n if SITE_TEST
             default y
             help
                 Enable GSM for sites
@@ -225,7 +203,7 @@ menu "Hardware Configuration"
 
         config HAS_VOLTAGE_CUTOFF
             bool "Enable Low Voltage Auto Cutoff"
-            default n
+            default y
             help
                 Enable low voltage auto cutoff for sites
         config ENABLE_VOLTAGE_CUTOFF
@@ -281,20 +259,20 @@ menu "Drip Timer Configuration"
 			Set the minute when the forced drain time ends.
 endmenu
 
-config ENABLE_RESET_SENSOR_CONFIG
-  bool "Enable Reset Sensor Configuration"
-  default false
-
-menu "Reset Time Configuration"
-	visible if ENABLE_RESET_SENSOR_CONFIG
-
-	config RESET_HOUR
-		int "Reset hour (0-23)"
-		default 0
-		range 0 23
-		help
-			Set the hour to reset the sensor readings (24-hour format).
-endmenu
+# config ENABLE_RESET_SENSOR_CONFIG
+#   bool "Enable Reset Sensor Configuration"
+#   default false
+#
+# menu "Reset Time Configuration"
+# 	visible if ENABLE_RESET_SENSOR_CONFIG
+#
+# 	config RESET_HOUR
+# 		int "Reset hour (0-23)"
+# 		default 0
+# 		range 0 23
+# 		help
+# 			Set the hour to reset the sensor readings (24-hour format).
+# endmenu
 
 config ENABLE_TIME_CONFIG
     bool "Enable Timeout Configuration"
@@ -369,16 +347,16 @@ menu "Time Configuration"
 
     config POLL_INTERVAL_S
         int "Poll interval (seconds)"
-        default 1 if SITE_TEST
-        default 3
-        range 1 60
+        default 3 if SITE_TEST
+        default 60
+        range 1 600
         help
             Set the interval in seconds between sensor readings.
 
     config SMS_CHECK_M
         int "SMS Check Interval (minutes)"
         default 1 if SITE_TEST
-        default 3
+        default 10
         range 1 60
         help
             Set the interval in minutes to check for new data to send via SMS.
@@ -391,9 +369,9 @@ config ENABLE_SIMULATION_MODE
     help
         Enable simulation mode which uses fixed simulated sensor readings instead of real sensor data.
 
-menu "Soil Moisture Thresholds"
-    config SOIL_DRY
-        int "Soil Dry Threshold (%)"
+menu "Plot Moisture Thresholds"
+    config PLOT_DRY
+        int "Plot Dry Threshold (%)"
         range 0 100
         default 40
         help
@@ -401,8 +379,8 @@ menu "Soil Moisture Thresholds"
             Value is a percentage (0-100). Lower values mean drier soil.
             Example: 40 means irrigation starts when moisture falls below 40%.
             
-    config SOIL_WET
-        int "Soil Wet Threshold (%)"
+    config PLOT_WET
+        int "Plot Wet Threshold (%)"
         range 0 100
         default 70
         help
@@ -411,50 +389,17 @@ menu "Soil Moisture Thresholds"
             Example: 70 means irrigation stops when moisture reaches 70%.
 endmenu
 
-config ENABLE_RTC
-	bool "Enable RTC Configuration"
-	default false
-	help
-		Enable to customize RTC settings. If disabled, site defaults will be used.
+config ENABLE_SET_TIME
+    bool "Enable SNTP Time Synchronization"
+    default false
+    help
+        Enable SNTP time synchronization during initialization. 
+        If disabled, weekly updates will still be enabled for time drift correction.
 
-menu "RTC Configuration"
-	visible if ENABLE_RTC
-
-	config RTC_YEAR
-		int "Year"
-		range 2000 2099
-		default 2025
-		help
-			Year to set (2000-2099)
-
-	config RTC_MONTH
-		int "Month"
-		range 1 12
-		default 1
-		help
-			Month to set (1-12)
-
-	config RTC_DAY
-		int "Day"
-		range 1 31
-		default 1
-		help
-			Day to set (1-31)
-
-	config RTC_HOUR
-		int "Hour"
-		range 0 23
-		default 0
-		help
-			Hour to set (0-23)
-
-	config RTC_MINUTE
-		int "Minute"
-		range 0 59
-		default 0
-		help
-			Minute to set (0-59)
-endmenu
+config SET_TIME
+    int
+    default 1 if ENABLE_SET_TIME
+    default 0
 
 endmenu
 

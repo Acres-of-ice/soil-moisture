@@ -72,7 +72,7 @@ typedef struct {
 /**
  * @brief Main ESP-NOW task for handling events and periodic operations
  */
-static void espnow_task(void *pvParameter) {
+void espnow_task(void *pvParameter) {
   uint8_t recv_state = 0;
   uint16_t recv_seq = 0;
   uint32_t recv_magic = 0;
@@ -407,7 +407,7 @@ bool espnow_is_trusted_peer(const uint8_t *mac_addr) {
 
 /* Static function implementations */
 
-static void init_own_mac(void) {
+void init_own_mac(void) {
   esp_err_t ret = esp_wifi_get_mac(WIFI_IF_AP, s_own_mac);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to get own MAC address, err: %d", ret);
@@ -417,11 +417,11 @@ static void init_own_mac(void) {
   ESP_LOGD(TAG, "Own MAC address: " MACSTR, MAC2STR(s_own_mac));
 }
 
-static bool is_own_mac(const uint8_t *mac_addr) {
+bool is_own_mac(const uint8_t *mac_addr) {
   return (memcmp(mac_addr, s_own_mac, ESP_NOW_ETH_ALEN) == 0);
 }
 
-static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
+void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
   static const char *TAG = "STORE_PCB";
 
   if (mac_addr == NULL || pcb_name == NULL) {
@@ -511,8 +511,8 @@ static void store_peer_pcb_name(const uint8_t *mac_addr, const char *pcb_name) {
   }
 }
 
-static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
-                                      size_t len, bool include_pcb_name) {
+esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
+                               size_t len, bool include_pcb_name) {
   if (mac_addr == NULL || data == NULL || len == 0) {
     return ESP_ERR_INVALID_ARG;
   }
@@ -578,8 +578,8 @@ static esp_err_t espnow_send_internal(const uint8_t *mac_addr, const void *data,
   }
 }
 
-static int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
-                             uint16_t *seq, uint32_t *magic, char *pcb_name) {
+int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
+                      uint16_t *seq, uint32_t *magic, char *pcb_name) {
   espnow_data_t *buf = (espnow_data_t *)data;
   uint16_t crc, crc_cal = 0;
 
@@ -608,7 +608,7 @@ static int parse_espnow_data(uint8_t *data, uint16_t data_len, uint8_t *state,
   return -1;
 }
 
-static void add_authenticated_peer(const uint8_t *mac_addr) {
+void add_authenticated_peer(const uint8_t *mac_addr) {
   // Check if already authenticated
   if (espnow_is_authenticated(mac_addr)) {
     ESP_LOGV(TAG, "AUTH: Peer " MACSTR " was already authenticated",
@@ -630,8 +630,7 @@ static void add_authenticated_peer(const uint8_t *mac_addr) {
   }
 }
 
-static void espnow_send_cb(const uint8_t *mac_addr,
-                           esp_now_send_status_t status) {
+void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
   if (mac_addr == NULL) {
     ESP_LOGE(TAG, "Send cb arg error");
     return;
@@ -698,8 +697,8 @@ static bool should_respond_to_peer(const uint8_t *mac_addr) {
   return false;
 }
 
-static void espnow_recv_cb(const esp_now_recv_info_t *recv_info,
-                           const uint8_t *data, int len) {
+void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data,
+                    int len) {
   if (recv_info == NULL || data == NULL || len <= 0) {
     ESP_LOGE(TAG, "Receive cb arg error");
     return;

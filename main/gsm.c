@@ -13,7 +13,7 @@
 
 #include "hex_data.h"
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "tasks_common.h"
 #include "valve_control.h"
@@ -668,20 +668,20 @@ void unified_sms_task(void *pvParameters) {
     // Handle outgoing SMS
     payload = get_hex_from_buffer();
 
-    if (payload) {
-      if (!send_sms(CONFIG_SMS_DATA_NUMBER, payload)) {
-        ESP_LOGW(TAG, "Failed to send hex data SMS");
-      }
-      free(payload);
-    }
-
-    // Check SMS queue
-    if (xQueueReceive(sms_queue, &sms, pdMS_TO_TICKS(1000)) == pdTRUE) {
-      ESP_LOGI(TAG, "Sending SMS to %s", sms.phone_number);
-      if (!send_sms(sms.phone_number, sms.message)) {
-        ESP_LOGW(TAG, "Failed to send queued SMS");
-      }
-    }
+    // if (payload) {
+    //   if (!send_sms(CONFIG_SMS_DATA_NUMBER, payload)) {
+    //     ESP_LOGW(TAG, "Failed to send hex data SMS");
+    //   }
+    //   free(payload);
+    // }
+    //
+    // // Check SMS queue
+    // if (xQueueReceive(sms_queue, &sms, pdMS_TO_TICKS(1000)) == pdTRUE) {
+    //   ESP_LOGI(TAG, "Sending SMS to %s", sms.phone_number);
+    //   if (!send_sms(sms.phone_number, sms.message)) {
+    //     ESP_LOGW(TAG, "Failed to send queued SMS");
+    //   }
+    // }
 
     // Prevent tight loop
     vTaskDelay(pdMS_TO_TICKS(100));

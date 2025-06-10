@@ -8,7 +8,7 @@
 #include <driver/i2c_master.h>
 #include <math.h>
 
-#include "gsm.h"
+// #include "gsm.h"
 #include "sensor.h"
 #include "valve_control.h"
 
@@ -272,7 +272,7 @@ void update_lcd_row_one(const char *uptime_str,
     return;
   }
 
-  char display_str[16] = {0};
+  // char display_str[16] = {0};
   char first_part[9] = {0};
   char second_part[7] = {0};
 
@@ -299,13 +299,13 @@ void update_lcd_row_one(const char *uptime_str,
   snprintf(press_str, sizeof(press_str), "%3dP", press);
   // snprintf(press_str, sizeof(press_str), "%3.1f", press);
 
-  int soilA = (int)(lcd_readings->soil_A);
-  char soilA_str[5];
-  snprintf(soilA_str, sizeof(soilA_str), "%3u", soilA);
-
-  int soilB = (int)(lcd_readings->soil_B);
-  char soilB_str[5];
-  snprintf(soilB_str, sizeof(soilB_str), "%3u", soilB);
+  // int soilA = (int)(lcd_readings->soil_A);
+  // char soilA_str[5];
+  // snprintf(soilA_str, sizeof(soilA_str), "%3u", soilA);
+  //
+  // int soilB = (int)(lcd_readings->soil_B);
+  // char soilB_str[5];
+  // snprintf(soilB_str, sizeof(soilB_str), "%3u", soilB);
 
   // Counter formatting
   unsigned int Counter = (counter > 999) ? 999 : counter;
@@ -314,10 +314,10 @@ void update_lcd_row_one(const char *uptime_str,
 
   // Manually construct the strings for before and after position 8
   strncpy(first_part, uptime_str, 4);
-  strncpy(first_part + 4, soilA_str, 4); // Copy first 8 characters
+  // strncpy(first_part + 4, soilA_str, 4); // Copy first 8 characters
 
-  // Second part starts after position 8
-  strncpy(second_part, soilB_str, 4);
+  // // Second part starts after position 8
+  // strncpy(second_part, soilB_str, 4);
   strncpy(second_part + 4, counter_str, 3);
 
   // Write first 8 characters
@@ -329,8 +329,9 @@ void update_lcd_row_one(const char *uptime_str,
 
   lcd_put_cur(SCROLL_ROW, 0);
 
-  ESP_LOGD(TAG, "LCD Row 1: %s (Uptime: %s, soilB: %s, SoilB: %s, Counter: %s)",
-           display_str, uptime_str, soilA_str, soilB_str, counter_str);
+  // ESP_LOGD(TAG, "LCD Row 1: %s (Uptime: %s, soilB: %s, SoilB: %s, Counter:
+  // %s)",
+  //          display_str, uptime_str, soilA_str, soilB_str, counter_str);
 }
 
 void send_daily_status_sms(double uptime_days) {
@@ -339,7 +340,7 @@ void send_daily_status_sms(double uptime_days) {
            CONFIG_SITE_NAME, uptime_days);
 
   // Call your SMS sending function here
-  sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
+  // sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_buffer);
   ESP_LOGI(TAG, "Daily status SMS sent: %s", sms_buffer);
 }
 

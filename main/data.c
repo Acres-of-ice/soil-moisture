@@ -4,10 +4,12 @@
 #include "driver/sdspi_host.h"
 #include "esp_spiffs.h"
 #include "esp_vfs_fat.h"
-#include "gsm.h"
+// #include "gsm.h"
 #include "http_server.h"
 #include "lcd.h"
-#include "rtc_operations.h"
+#include "mqtt.h"
+#include "mqtt_notify.h"
+#include "rtc.h"
 #include "sdmmc_cmd.h"
 #include "sensor.h"
 #include "valve_control.h"
@@ -29,69 +31,29 @@ size_t usedBytes = 0;
 static FILE *logFile = NULL;
 spi_device_handle_t sd_spi = NULL; // SD card handle
 extern SemaphoreHandle_t file_mutex;
-
-const char *DATA_FILE_HEADER =
-    CONFIG_SITE_NAME " Time, Counter, Soil A, Soil B, Temp, Humidity, Voltage,"
-                     "Pressure, Water temp, Discharge\n";
+char header_buffer[512] = "";
 
 // Paths
 char *log_path = SPIFFS_MOUNT_POINT "/log.csv";
 char *data_path = SPIFFS_MOUNT_POINT "/data.csv";
-data_statistics_t data_stats = {0};
 
-// Initialize moving average structure
-void init_data_statistics(void) {
-  memset(&data_stats, 0, sizeof(data_statistics_t));
-  strncpy(data_stats.last_data_time, fetchTime(),
-          sizeof(data_stats.last_data_time) - 1);
-  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
+void generate_data_file_header(char *header_buffer, size_t buffer_size) {
+  // Start with the base header
+  int offset = snprintf(
+      header_buffer, buffer_size,
+      "%s Time,Counter,Temp,Humidity,Voltage,Pressure,Water_temp,Discharge",
+      CONFIG_SITE_NAME);
 
-  // Try to load previous statistics from SPIFFS if you want persistence
-  // This is optional but useful to maintain counts across reboots
-  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "rb");
-  if (stats_file != NULL) {
-    fread(&data_stats, sizeof(data_statistics_t), 1, stats_file);
-    fclose(stats_file);
-    ESP_LOGI(TAG, "Loaded existing statistics: %lu total data points",
-             data_stats.total_data_points);
+  // Add soil and battery columns for each plot
+  for (int i = 1; i <= CONFIG_NUM_PLOTS && offset < buffer_size - 20; i++) {
+    offset += snprintf(header_buffer + offset, buffer_size - offset,
+                       ",Soil_%d,Batt_%d", i, i);
   }
-}
 
-void save_data_statistics(void) {
-  FILE *stats_file = fopen(SPIFFS_MOUNT_POINT "/stats.bin", "wb");
-  if (stats_file != NULL) {
-    fwrite(&data_stats, sizeof(data_statistics_t), 1, stats_file);
-    fclose(stats_file);
+  // Add newline
+  if (offset < buffer_size - 2) {
+    strcat(header_buffer, "\n");
   }
-}
-
-void update_data_statistics(const char *site_name) {
-  data_stats.total_data_points++;
-  strncpy(data_stats.last_data_time, fetchTime(),
-          sizeof(data_stats.last_data_time) - 1);
-  data_stats.last_data_time[sizeof(data_stats.last_data_time) - 1] = '\0';
-
-  // Update site-specific counter
-  if (strcmp(site_name, "Sk") == 0) {
-    data_stats.site_data_points[0]++;
-  }
-  // Save statistics periodically (e.g., every 10 data points)
-  if (data_stats.total_data_points % 10 == 0) {
-    save_data_statistics();
-  }
-}
-
-void print_data_statistics(void) {
-  ESP_LOGI(TAG, "Data Collection Statistics:");
-  ESP_LOGI(TAG, "------------------------");
-  ESP_LOGI(TAG, "Total data points: %lu", data_stats.total_data_points);
-  ESP_LOGI(TAG, "Last data received: %s", data_stats.last_data_time);
-  ESP_LOGI(TAG, "Distribution by site:");
-  ESP_LOGI(TAG, "  Skuast: %lu (%.1f%%)", data_stats.site_data_points[0],
-           (data_stats.total_data_points > 0)
-               ? (float)data_stats.site_data_points[0] * 100.0f /
-                     data_stats.total_data_points
-               : 0.0f);
 }
 
 static int custom_log_function(const char *fmt, va_list args) {
@@ -179,9 +141,9 @@ static int custom_log_function(const char *fmt, va_list args) {
         xSemaphoreGive(i2c_mutex);
       }
     }
-    if (gsm_init_success) {
-      snprintf(sms_message, sizeof(sms_message), "E:%s:%s", tag, short_msg);
-      sms_queue_message(CONFIG_SMS_ERROR_NUMBER, sms_message);
+    esp_err_t mqtt_err = mqtt_notify_error(message);
+    if (mqtt_err != ESP_OK) {
+      printf("Failed to send error to MQTT: %s\n", esp_err_to_name(mqtt_err));
     }
   }
 
@@ -234,7 +196,6 @@ esp_err_t init_data_module(void) {
   return ESP_OK;
 }
 
-// Initialize SPIFFS
 esp_err_t init_spiffs(void) {
   esp_vfs_spiffs_conf_t conf = {.base_path = SPIFFS_MOUNT_POINT,
                                 .partition_label = "storage",
@@ -242,8 +203,7 @@ esp_err_t init_spiffs(void) {
                                 .format_if_mount_failed = true};
   esp_err_t ret = esp_vfs_spiffs_register(&conf);
   if (ret != ESP_OK) {
-    ESP_LOGE("SPIFFS", "Failed to initialize SPIFFS (%s)",
-             esp_err_to_name(ret));
+    ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
     return ret;
   }
 
@@ -253,18 +213,30 @@ esp_err_t init_spiffs(void) {
     return ret;
   }
 
-  // Check if the file exists and its size
+  // Check if the data file exists
   FILE *dataFile = fopen(data_path, "r");
   if (!dataFile) {
-    ESP_LOGI("SYSTEM", "Initialising empty sensor data file");
+    ESP_LOGI(TAG, "Data file doesn't exist, creating new one");
+
+    // Generate header first and log it
+    generate_data_file_header(header_buffer, sizeof(header_buffer));
+    ESP_LOGD(TAG, "Generated header: %s", header_buffer);
+    ESP_LOGD(TAG, "Header length: %d", strlen(header_buffer));
 
     dataFile = fopen(data_path, "w");
-    vTaskDelay(10);
     if (dataFile) {
-      fputs(DATA_FILE_HEADER, dataFile);
+      ESP_LOGD(TAG, "Successfully opened data file for writing");
+
+      int bytes_written = fputs(header_buffer, dataFile);
+      ESP_LOGD(TAG, "fputs returned: %d", bytes_written);
+
+      fflush(dataFile);
+      ESP_LOGD(TAG, "fflush completed");
+
       fclose(dataFile);
+      ESP_LOGD(TAG, "File closed successfully");
     } else {
-      ESP_LOGI("SYSTEM",
+      ESP_LOGE("SYSTEM",
                "Error opening sensor_data.csv for initialization. Errno: %d",
                errno);
       char err_buf[100];
@@ -276,17 +248,18 @@ esp_err_t init_spiffs(void) {
     fclose(dataFile);
   }
 
-  // Check if the file exists and its size
+  // Same for log file...
   FILE *logFile = fopen(log_path, "r");
   if (!logFile) {
     ESP_LOGI("SYSTEM", "Initialising empty log file");
 
     logFile = fopen(log_path, "w");
-    vTaskDelay(10);
     if (logFile) {
       const char *header = "Time,Level,Tag,Message\n";
       fputs(header, logFile);
+      fflush(logFile);
       fclose(logFile);
+      ESP_LOGI("SYSTEM", "Log file header written successfully");
     } else {
       ESP_LOGE(TAG, "Error opening log.csv for initialization. Errno: %d",
                errno);
@@ -315,12 +288,31 @@ void dataLoggingTask(void *pvParameters) {
 
     get_sensor_readings(&data_readings);
 
-    snprintf(data_entry, sizeof(data_entry),
-             "%s,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", fetchTime(),
-             counter, data_readings.soil_A, data_readings.soil_B,
-             data_readings.temperature, data_readings.humidity,
-             data_readings.voltage, data_readings.pressure,
-             data_readings.water_temp, data_readings.discharge);
+    // Build the base data string (without soil data)
+    int offset = snprintf(
+        data_entry, sizeof(data_entry), "%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+        fetchTime(), counter, data_readings.temperature, data_readings.humidity,
+        data_readings.voltage, data_readings.pressure, data_readings.water_temp,
+        data_readings.discharge);
+
+    // Add soil moisture and battery data for each plot
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      if (offset <
+          sizeof(data_entry) - 32) { // Safety check (more space needed)
+        // Add soil moisture percentage
+        offset += snprintf(data_entry + offset, sizeof(data_entry) - offset,
+                           ",%d", data_readings.soil[i]);
+
+        // Add battery percentage (formatted to 1 decimal place)
+        offset += snprintf(data_entry + offset, sizeof(data_entry) - offset,
+                           ",%d", data_readings.battery[i]);
+      }
+    }
+
+    // Add newline
+    if (offset < sizeof(data_entry) - 2) {
+      strcat(data_entry, "\n");
+    }
 
     // Added error handling for file append operation
     if (!appendFile(data_path, data_entry)) {
@@ -400,49 +392,6 @@ esp_err_t remove_oldest_entries(const char *path, double bytes_to_remove) {
   }
 
   fclose(file);
-  return ESP_OK;
-}
-
-// Function to truncate file from the start
-esp_err_t truncate_file_start(const char *path, size_t new_size) {
-  FILE *file = fopen(path, "r+");
-  if (!file) {
-    ESP_LOGE(TAG, "Failed to open file for truncation: %s", path);
-    return ESP_FAIL;
-  }
-
-  fseek(file, 0, SEEK_END);
-  long file_size = ftell(file);
-
-  if (file_size > new_size) {
-    long bytes_to_remove = file_size - new_size;
-    char buffer[1024];
-    size_t bytes_read;
-
-    fseek(file, bytes_to_remove, SEEK_SET);
-
-    FILE *temp = fopen("/spiffs/temp.tmp", "w");
-    if (!temp) {
-      ESP_LOGE(TAG, "Failed to create temporary file");
-      fclose(file);
-      return ESP_FAIL;
-    }
-
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-      fwrite(buffer, 1, bytes_read, temp);
-    }
-
-    fclose(file);
-    fclose(temp);
-
-    if (rename("/spiffs/temp.tmp", path) != 0) {
-      ESP_LOGE(TAG, "Failed to replace original file with truncated file");
-      return ESP_FAIL;
-    }
-  } else {
-    fclose(file);
-  }
-
   return ESP_OK;
 }
 

@@ -1,6 +1,6 @@
 #include "hex_data.h"
 #include "define.h"
-#include "rtc_operations.h"
+#include "rtc.h"
 #include "sensor.h"
 #include "soil_comm.h"
 #include "valve_control.h"
@@ -31,9 +31,10 @@ bool is_data_available(void) {
   return data_available;
 }
 
-// New order: [Site Name (2 bytes)][timestamp (17 bytes)][counter (2
-// bytes)][soil_A (2 bytes)][soil_B (2 bytes)][temperature (2 bytes)][pressure
-// (2 bytes)][water_temp (2 bytes)][discharge (2 bytes)]
+// Updated encoding: [Site Name (2 bytes)][timestamp (17 bytes)][counter (2
+// bytes)] [soil_1 (2 bytes)][soil_2 (2 bytes)]...[soil_N (2 bytes)] [battery_1
+// (2 bytes)][battery_2 (2 bytes)]...[battery_N (2 bytes)] [temperature (2
+// bytes)][pressure (2 bytes)][water_temp (2 bytes)][discharge (2 bytes)]
 void encode_data(hex_data_t *data, uint8_t *buffer) {
   size_t offset = 0;
 
@@ -49,13 +50,19 @@ void encode_data(hex_data_t *data, uint8_t *buffer) {
   memcpy(buffer + offset, &data->counter, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  // Copy sensor data
-  memcpy(buffer + offset, &data->soil_A, sizeof(int16_t));
-  offset += sizeof(int16_t);
+  // Copy soil data for all plots
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    memcpy(buffer + offset, &data->soil[i], sizeof(int16_t));
+    offset += sizeof(int16_t);
+  }
 
-  memcpy(buffer + offset, &data->soil_B, sizeof(int16_t));
-  offset += sizeof(int16_t);
+  // Copy battery data for all plots
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    memcpy(buffer + offset, &data->battery[i], sizeof(int16_t));
+    offset += sizeof(int16_t);
+  }
 
+  // Copy other sensor data
   memcpy(buffer + offset, &data->temperature, sizeof(int16_t));
   offset += sizeof(int16_t);
 
@@ -100,13 +107,19 @@ esp_err_t decode_hex_data(const char *hex_string, hex_data_t *data) {
   memcpy(&data->counter, binary_buffer + offset, sizeof(uint16_t));
   offset += sizeof(uint16_t);
 
-  // Copy sensor data
-  memcpy(&data->soil_A, binary_buffer + offset, sizeof(int16_t));
-  offset += sizeof(int16_t);
+  // Copy soil data for all plots
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    memcpy(&data->soil[i], binary_buffer + offset, sizeof(int16_t));
+    offset += sizeof(int16_t);
+  }
 
-  memcpy(&data->soil_B, binary_buffer + offset, sizeof(int16_t));
-  offset += sizeof(int16_t);
+  // Copy battery data for all plots
+  for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+    memcpy(&data->battery[i], binary_buffer + offset, sizeof(int16_t));
+    offset += sizeof(int16_t);
+  }
 
+  // Copy other sensor data
   memcpy(&data->temperature, binary_buffer + offset, sizeof(int16_t));
   offset += sizeof(int16_t);
 
@@ -137,7 +150,7 @@ static uint64_t convert_timestamp_to_ms(const char *timestamp) {
   return 0; // Return 0 if parsing fails
 }
 
-// Update decode_hex_to_json to remove valve_state
+// Updated decode_hex_to_json for dynamic plots
 char *decode_hex_to_json(const char *hex_string) {
   hex_data_t decoded_data;
   esp_err_t result = decode_hex_data(hex_string, &decoded_data);
@@ -150,32 +163,48 @@ char *decode_hex_to_json(const char *hex_string) {
   // Convert timestamp to milliseconds
   uint64_t time_ms = convert_timestamp_to_ms(decoded_data.timestamp);
 
-  char *json_string = malloc(512);
+  // Calculate buffer size needed for JSON
+  // Base JSON structure + site name + timestamp + counter + other sensors +
+  // time_ms
+  size_t base_size = 256;
+  // Each plot needs approximately: "Soil_X":XX,"Battery_X":XX.X,
+  size_t per_plot_size = 32;
+  size_t total_size = base_size + (CONFIG_NUM_PLOTS * per_plot_size);
+
+  char *json_string = malloc(total_size);
   if (json_string == NULL) {
     ESP_LOGE(TAG, "Failed to allocate memory for JSON string");
     return NULL;
   }
 
-  int written = snprintf(
-      json_string, 512,
-      "{"
-      "\"site_name\":\"%.*s\","
-      "\"timestamp\":\"%s\","
-      "\"counter\":%u,"
-      "\"Soil A\":%u,"
-      "\"Soil B\":%u,"
-      "\"temperature\":%.1f,"
+  // Start building JSON
+  int offset = snprintf(json_string, total_size,
+                        "{"
+                        "\"site_name\":\"%.*s\","
+                        "\"timestamp\":\"%s\","
+                        "\"counter\":%u",
+                        SITE_NAME_LENGTH, decoded_data.site_name,
+                        decoded_data.timestamp, decoded_data.counter);
+
+  // Add soil and battery data for each plot
+  for (int i = 0; i < CONFIG_NUM_PLOTS && offset < total_size - 64; i++) {
+    offset += snprintf(json_string + offset, total_size - offset,
+                       ",\"Soil_%d\":%u,\"Battery_%d\":%u", i + 1,
+                       decoded_data.soil[i], i + 1, decoded_data.battery[i]);
+  }
+
+  // Add other sensor data
+  offset += snprintf(
+      json_string + offset, total_size - offset,
+      ",\"temperature\":%.1f,"
       "\"pressure\":%.1f,"
       "\"water_temp\":%.1f,"
       "\"discharge\":%.1f,"
-      "\"time\":%" PRIu64 "" // Added time in milliseconds
-      "}",
-      SITE_NAME_LENGTH, decoded_data.site_name, decoded_data.timestamp,
-      decoded_data.counter, decoded_data.soil_A, decoded_data.soil_B,
+      "\"time\":%" PRIu64 "}",
       decoded_data.temperature / 10.0f, decoded_data.pressure / 10.0f,
       decoded_data.water_temp / 10.0f, decoded_data.discharge / 10.0f, time_ms);
 
-  if (written >= 512) {
+  if (offset >= total_size) {
     ESP_LOGE(TAG, "JSON string truncated. Increase buffer size.");
     free(json_string);
     return NULL;
@@ -308,14 +337,13 @@ char *get_hex_from_buffer(void) {
   return hex;
 }
 
-// Update hex_data_task to handle shorter site name
+// Updated hex_data_task for dynamic plots
 void hex_data_task(void *pvParameters) {
   hex_data_t hex_data;
   uint8_t binary_buffer[HEX_SIZE];
   char hex_output[2 * (HEX_SIZE) + 1];
 
   // Only use first two characters of site name
-  // strncpy(hex_data.site_name, CONFIG_SITE_NAME, 2);
   memcpy(hex_data.site_name, CONFIG_SITE_NAME, 2);
   for (int i = 2; i < SITE_NAME_LENGTH; i++) {
     hex_data.site_name[i] = ' ';
@@ -339,8 +367,14 @@ void hex_data_task(void *pvParameters) {
     }
 
     hex_data.counter = (uint16_t)counter;
-    hex_data.soil_A = (uint16_t)(hex_readings.soil_A);
-    hex_data.soil_B = (uint16_t)(hex_readings.soil_B);
+
+    // Copy soil and battery data for all plots
+    for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
+      hex_data.soil[i] = (int16_t)(hex_readings.soil[i]);
+      hex_data.battery[i] = (int16_t)(hex_readings.battery[i]);
+    }
+
+    // Copy other sensor data
     hex_data.temperature = (int16_t)(hex_readings.temperature * 10);
     hex_data.pressure = (uint16_t)(hex_readings.pressure * 10);
     hex_data.water_temp = (uint16_t)(hex_readings.water_temp * 10);

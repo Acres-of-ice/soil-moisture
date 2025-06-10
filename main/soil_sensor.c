@@ -2,8 +2,8 @@
 
 #include "soil_sensor.h"
 #include "define.h"
-#include "driver/gpio.h"
 #include "driver/adc.h"
+#include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_oneshot.h"
 // #include "esp_adc/adc_digi.h"      
@@ -12,9 +12,6 @@
 #include "esp_now.h"
 #include "esp_wifi.h"
 #include "espnow_lib.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "soil_comm.h"
@@ -43,23 +40,26 @@ static bool cali_enabled = false;
 extern uint8_t g_nodeAddress;
 extern const uint8_t zero_mac[ESP_NOW_ETH_ALEN];
 
+static int32_t soil_dry_adc_value = 0;
+static int32_t soil_wet_adc_value = 0;
+static int8_t plot_number = -1;
+
 /**
  * @brief Initialize soil moisture sensor ADC and data structures
  */
 void soil_sensor_init(void) {
   ESP_LOGI(TAG, "Initializing soil moisture sensor");
+  // Set node address based on build configuration
+  g_nodeAddress = DEVICE_TYPE_SOIL | g_plot_number;
+  ESP_LOGI(TAG, "Configured as Soil %d sensor (0x%02X)", g_plot_number,
+           g_nodeAddress);
 
-// Set node address based on build configuration
-#if defined(CONFIG_SOIL_A)
-  g_nodeAddress = SOIL_A_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil A sensor (0x%02X)", g_nodeAddress);
-#elif defined(CONFIG_SOIL_B)
-  g_nodeAddress = SOIL_B_ADDRESS;
-  ESP_LOGI(TAG, "Configured as Soil B sensor (0x%02X)", g_nodeAddress);
-#else
-  ESP_LOGE(TAG, "Invalid soil sensor configuration!");
-  return;
-#endif
+  // Validate plot number
+  if (CONFIG_PLOT_NUMBER < 1 || CONFIG_PLOT_NUMBER > CONFIG_NUM_PLOTS) {
+    ESP_LOGE(TAG, "Invalid plot number: %d (valid range: 1-%d)",
+             CONFIG_PLOT_NUMBER, CONFIG_NUM_PLOTS);
+    return;
+  }
 
   // Initialize ESP-NOW sensor data queue
   if (sensor_data_queue == NULL) {
@@ -87,68 +87,70 @@ void soil_sensor_init(void) {
       adc_oneshot_config_channel(adc1_handle, SOIL_ADC_CHANNEL, &config));
   // FOR BATTERY MANAGEMENT
   ESP_ERROR_CHECK(
-      adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));     
-      // Configure battery ADC channel
+      adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));
+  // Configure battery ADC channel
 #if !CONFIG_IDF_TARGET_ESP32C3
-    adc_cali_line_fitting_config_t cali_cfg = {
-        .unit_id = SOIL_BATT_ADC_UNIT,
-        .atten = SOIL_BATT_ADC_ATTEN,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-    if (adc_cali_create_scheme_line_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
-        cali_enabled = true;
-        ESP_LOGI(TAG, "ADC calibration enabled (line fitting)");
-    } else {
-        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
-    }
+  adc_cali_line_fitting_config_t cali_cfg = {
+      .unit_id = SOIL_BATT_ADC_UNIT,
+      .atten = SOIL_BATT_ADC_ATTEN,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+  if (adc_cali_create_scheme_line_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
+    cali_enabled = true;
+    ESP_LOGI(TAG, "ADC calibration enabled (line fitting)");
+  } else {
+    ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+  }
 
-    adc_cali_line_fitting_config_t cali_cfg_soil = {
-        .unit_id = ADC_UNIT_1,
-        .atten = ADC_ATTEN_DB_11,
-        .bitwidth = ADC_BITWIDTH_12,
-    };
-    if (adc_cali_create_scheme_line_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
-        cali_enabled_soil = true;
-        ESP_LOGI(TAG, "Soil ADC calibration enabled (line fitting)");
-    } else {
-        ESP_LOGW(TAG, "Soil ADC calibration not supported");
-    }
+  adc_cali_line_fitting_config_t cali_cfg_soil = {
+      .unit_id = ADC_UNIT_1,
+      .atten = ADC_ATTEN_DB_11,
+      .bitwidth = ADC_BITWIDTH_12,
+  };
+  if (adc_cali_create_scheme_line_fitting(&cali_cfg_soil, &cali_handle_soil) ==
+      ESP_OK) {
+    cali_enabled_soil = true;
+    ESP_LOGI(TAG, "Soil ADC calibration enabled (line fitting)");
+  } else {
+    ESP_LOGW(TAG, "Soil ADC calibration not supported");
+  }
 #else
-    adc_cali_curve_fitting_config_t cali_cfg = {
-        .unit_id = SOIL_BATT_ADC_UNIT,
-        .atten = SOIL_BATT_ADC_ATTEN,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
-        cali_enabled = true;
-        ESP_LOGI(TAG, "ADC calibration enabled (curve fitting)");
-    } else {
-        ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
-    }
+  adc_cali_curve_fitting_config_t cali_cfg = {
+      .unit_id = SOIL_BATT_ADC_UNIT,
+      .atten = SOIL_BATT_ADC_ATTEN,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+  if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &cali_handle) == ESP_OK) {
+    cali_enabled = true;
+    ESP_LOGI(TAG, "ADC calibration enabled (curve fitting)");
+  } else {
+    ESP_LOGW(TAG, "ADC calibration not supported on this hardware");
+  }
 
-    adc_cali_curve_fitting_config_t cali_cfg_soil = {
-        .unit_id = ADC_UNIT_1,
-        .atten = ADC_ATTEN_DB_11,
-        .bitwidth = ADC_BITWIDTH_12,
-    };
-    if (adc_cali_create_scheme_curve_fitting(&cali_cfg_soil, &cali_handle_soil) == ESP_OK) {
-        cali_enabled_soil = true;
-        ESP_LOGI(TAG, "Soil ADC calibration enabled (curve fitting)");
-    } else {
-        ESP_LOGW(TAG, "Soil ADC calibration not supported");
-    }
+  adc_cali_curve_fitting_config_t cali_cfg_soil = {
+      .unit_id = ADC_UNIT_1,
+      .atten = ADC_ATTEN_DB_11,
+      .bitwidth = ADC_BITWIDTH_12,
+  };
+  if (adc_cali_create_scheme_curve_fitting(&cali_cfg_soil, &cali_handle_soil) ==
+      ESP_OK) {
+    cali_enabled_soil = true;
+    ESP_LOGI(TAG, "Soil ADC calibration enabled (curve fitting)");
+  } else {
+    ESP_LOGW(TAG, "Soil ADC calibration not supported");
+  }
 #endif
 
 #if CONFIG_ADC_DIGI_FILTER_ENABLED
-    adc_digi_filter_config_t filter_config = {
-        .unit = ADC_UNIT_1,
-        .channel = SOIL_ADC_CHANNEL,
-        .mode = ADC_DIGI_FILTER_IIR_64, // 64-tap IIR filter
-    };
+  adc_digi_filter_config_t filter_config = {
+      .unit = ADC_UNIT_1,
+      .channel = SOIL_ADC_CHANNEL,
+      .mode = ADC_DIGI_FILTER_IIR_64, // 64-tap IIR filter
+  };
 
-    ESP_ERROR_CHECK(adc_digi_filter_config(&filter_config));
-    ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_UNIT_1, true));
-    ESP_LOGI(TAG, "Enabled ADC digital IIR filter");
+  ESP_ERROR_CHECK(adc_digi_filter_config(&filter_config));
+  ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_UNIT_1, true));
+  ESP_LOGI(TAG, "Enabled ADC digital IIR filter");
 #endif
 }
 
@@ -276,145 +278,6 @@ void calibration_task(void *pvParameters) {
   vTaskDelete(NULL); // Delete this task when done
 }
 
-// #define SAMPLE_WINDOW 16  // Power of 2 for efficient filtering
-
-// typedef struct {
-//     int samples[SAMPLE_WINDOW];
-//     int index;
-//     int sum;
-// } adc_filter_t;
-
-// static adc_filter_t moisture_filter = {0};
-
-// int filtered_adc_read(adc_oneshot_unit_handle_t handle, int channel) {
-//     int raw_value;
-
-//     // Multi-stage sampling
-//     int stage1 = 0;
-//     for (int i = 0; i < 4; i++) {
-//         adc_oneshot_read(handle, channel, &raw_value);
-//         stage1 += raw_value;
-//         ets_delay_us(50); // Spread out samples
-//     }
-//     raw_value = stage1 / 4;
-
-//     // Moving average filter update
-//     moisture_filter.sum -= moisture_filter.samples[moisture_filter.index];
-//     moisture_filter.samples[moisture_filter.index] = raw_value;
-//     moisture_filter.sum += raw_value;
-//     moisture_filter.index = (moisture_filter.index + 1) % SAMPLE_WINDOW;
-
-//     return moisture_filter.sum / SAMPLE_WINDOW;
-// }
-
-/**
- * @brief Read soil moisture from ADC and convert to percentage
- * 
- * @return int Moisture percentage (0-100) or -1 on error
- */
-
-//  int read_soil_moisture(void) {
-//     if (adc1_handle == NULL) {
-//         ESP_LOGE(TAG, "ADC not initialized");
-//         return -1;
-//     }
-
-//     // Get filtered reading
-//     int raw_moisture = filtered_adc_read(adc1_handle, SOIL_ADC_CHANNEL);
-
-//     // Median filter for additional stability
-//     static int median_buffer[5] = {0};
-//     static int median_index = 0;
-//     median_buffer[median_index] = raw_moisture;
-//     median_index = (median_index + 1) % 5;
-
-//     // Simple median (sort 3 middle values)
-//     int temp[5];
-//     memcpy(temp, median_buffer, sizeof(temp));
-//     for(int i = 0; i < 3; i++) {
-//         for(int j = i+1; j < 5; j++) {
-//             if(temp[j] < temp[i]) {
-//                 int swap = temp[i];
-//                 temp[i] = temp[j];
-//                 temp[j] = swap;
-//             }
-//         }
-//     }
-//     raw_moisture = temp[2]; // Take median value
-
-//     // Rest of your calibration remains the same
-//     int calibrated_moisture;
-//     #if CONFIG_SOIL_A
-//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
-//                          (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
-//     #endif
-
-//     #if CONFIG_SOIL_B
-//     calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
-//                          (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
-//     #endif
-
-//     // Clamp to valid range
-//     calibrated_moisture = MAX(0, MIN(100, calibrated_moisture));
-
-//     ESP_LOGD(TAG, "Filtered soil moisture ADC raw: %d -> %d%%",
-//              raw_moisture, calibrated_moisture);
-//     return calibrated_moisture;
-// }
-
-// int read_soil_moisture(void) {
-//   if (adc1_handle == NULL) {
-//     ESP_LOGE(TAG, "ADC not initialized"); 
-//     return -1;
-//   }
-
-//   // Read multiple samples and average for stability
-//   const int NUM_SAMPLES = 5;
-//   int total = 0;
-//   int raw_value = 0;
-
-//   for (int i = 0; i < NUM_SAMPLES; i++) {
-
-//     esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &raw_value);
-//     if (err != ESP_OK) {
-//       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
-//       return -1;
-//     }
-//     total += raw_value;
-//     vTaskDelay(pdMS_TO_TICKS(10)); // Small delay between readings
-//   }
-
-//   int raw_moisture = total / NUM_SAMPLES;
-
-//   // Calibrate moisture value using pre-defined ranges
-//   int calibrated_moisture;
-// // load_calibration_values(&DRY_STATE, &WET_STATE);
-// //  calibrated_moisture = (DRY_STATE - raw_moisture) * 100 /
-// //                           (DRY_STATE - WET_STATE);
-// #if CONFIG_SOIL_A
-//   calibrated_moisture = (SOIL_DRY_ADC_VALUE_A - raw_moisture) * 100 /
-//                         (SOIL_DRY_ADC_VALUE_A - SOIL_MOIST_ADC_VALUE_A);
-// #endif
-
-// #if CONFIG_SOIL_B
-//   calibrated_moisture = (SOIL_DRY_ADC_VALUE_B - raw_moisture) * 100 /
-//                         (SOIL_DRY_ADC_VALUE_B - SOIL_MOIST_ADC_VALUE_B);
-// #endif
-
-//   // Clamp to valid range
-//   if (calibrated_moisture < 0)
-//     calibrated_moisture = 0;
-//   if (calibrated_moisture > 100)
-//     calibrated_moisture = 100;
-
-//   ESP_LOGD(TAG, "Soil moisture ADC raw: %d -> %d%%", raw_moisture,
-//            calibrated_moisture);
-//   return calibrated_moisture;
-//   // return raw_value;
-// }
-
-
-
 int read_soil_moisture(void) {
   if (adc1_handle == NULL) {
     ESP_LOGE(TAG, "ADC not initialized");
@@ -426,7 +289,8 @@ int read_soil_moisture(void) {
 
   // Collect samples for median filtering
   for (int i = 0; i < NUM_SAMPLES; i++) {
-    esp_err_t err = adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &samples[i]);
+    esp_err_t err =
+        adc_oneshot_read(adc1_handle, SOIL_ADC_CHANNEL, &samples[i]);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Error reading ADC: %s", esp_err_to_name(err));
       return -1;
@@ -458,12 +322,12 @@ int read_soil_moisture(void) {
   float supply_voltage = read_battery_voltage(); // in V
   float ratio = soil_mv / (supply_voltage * 1000.0f);
 
-  // Kalman filter for smoothing 
+  // Kalman filter for smoothing
   typedef struct {
     float q, r, x, p;
   } kalman_state;
   static kalman_state kf = {.q = 0.01f, .r = 0.1f, .x = 0, .p = 1};
-  float kalman_update(kalman_state* state, float measurement) {
+  float kalman_update(kalman_state * state, float measurement) {
     state->p += state->q;
     float k = state->p / (state->p + state->r);
     state->x += k * (measurement - state->x);
@@ -477,19 +341,24 @@ int read_soil_moisture(void) {
   int calibrated_moisture;
 
 #if CONFIG_SOIL_A
-  float dry_ratio = (float)SOIL_DRY_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
-  float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
-  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+  float dry_ratio =
+      (float)SOIL_DRY_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
+  float wet_ratio =
+      (float)SOIL_MOIST_ADC_VALUE_A / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture =
+      (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
 
 #endif
 
 #if CONFIG_SOIL_B
-  float dry_ratio = (float)SOIL_DRY_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
-  float wet_ratio = (float)SOIL_MOIST_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
-  calibrated_moisture = (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
+  float dry_ratio =
+      (float)SOIL_DRY_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
+  float wet_ratio =
+      (float)SOIL_MOIST_ADC_VALUE_B / 4095.0f * 3.3f / supply_voltage;
+  calibrated_moisture =
+      (filtered_ratio - dry_ratio) / (wet_ratio - dry_ratio) * 100.0f;
 
 #endif
-
 
   // Clamp to valid range
   if (calibrated_moisture < 0)
@@ -497,16 +366,14 @@ int read_soil_moisture(void) {
   if (calibrated_moisture > 100)
     calibrated_moisture = 100;
 
-  ESP_LOGI(TAG, "Soil ADC median: %d, Calib: %dmV, Vcc: %.2fV, Ratio: %.3f, Moisture: %d%%",
-           raw_moisture, soil_mv, supply_voltage, filtered_ratio, calibrated_moisture);
+  ESP_LOGI(TAG,
+           "Soil ADC median: %d, Calib: %dmV, Vcc: %.2fV, Ratio: %.3f, "
+           "Moisture: %d%%",
+           raw_moisture, soil_mv, supply_voltage, filtered_ratio,
+           calibrated_moisture);
 
     return calibrated_moisture;//   replace 
 }
-
-
-
-
-
 
 /**
  * @brief Get current RSSI value
@@ -533,7 +400,7 @@ int8_t get_current_rssi(void) {
  * @return float Battery level percentage (0-100)
  */
 
-static float read_battery_voltage(void) {
+float read_battery_voltage(void) {
   if (!adc1_handle)
     soil_sensor_init(); // Ensure ADC is initialized
 
@@ -553,16 +420,18 @@ static float read_battery_voltage(void) {
   return battery_voltage;
 }
 
-float read_battery_level(void) {
+int read_battery_level(void) {
   float vbat = read_battery_voltage();
-  float percent = (vbat - SOIL_BATT_MIN_VOLTAGE) /
-                  (SOIL_BATT_MAX_VOLTAGE - SOIL_BATT_MIN_VOLTAGE) * 100.0f;
-  if (percent > 100.0f)
-    percent = 100.0f;
-  if (percent < 0.0f)
-    percent = 0.0f;
-  ESP_LOGI(TAG, "Battery voltage: %.2f V, Battery level: %.1f%%", vbat,
-           percent);
+  int percent =
+      (int)((vbat - SOIL_BATT_MIN_VOLTAGE) /
+                (SOIL_BATT_MAX_VOLTAGE - SOIL_BATT_MIN_VOLTAGE) * 100.0f +
+            0.5f);
+
+  if (percent > 100)
+    percent = 100;
+  if (percent < 0)
+    percent = 0;
+  ESP_LOGI(TAG, "Battery voltage: %.2f V, Battery level: %d%%", vbat, percent);
   return percent;
 }
 
@@ -582,13 +451,11 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
   uint8_t retry_count = 0;
 
   // Format message
-  snprintf(message, sizeof(message), "N[%02X]S[%d]B[%.1f]",
-           sensor_data->node_address, sensor_data->soil_moisture,
-           read_battery_level());
+  snprintf(message, sizeof(message), "N[%02X]S[%d]B[%d]",
+           sensor_data->node_address, sensor_data->soil, read_battery_level());
 
-  ESP_LOGI(TAG, "Node: 0x%02X, Soil: %d%%, Battery: %.1f%%",
-           sensor_data->node_address, sensor_data->soil_moisture,
-           read_battery_level());
+  ESP_LOGI(TAG, "Node: 0x%02X, Soil: %d%%, Battery: %d%%",
+           sensor_data->node_address, sensor_data->soil, read_battery_level());
 
   ESP_LOGD(TAG, "Sending to master: %s", message);
 
@@ -598,10 +465,9 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
 
     if (result == ESP_OK) {
       ESP_LOGI(TAG,
-               "Data sent successfully to master (Soil %c): moisture=%d%%, "
-               "battery=%.1f%%",
-               (sensor_data->node_address == SOIL_A_ADDRESS) ? 'A' : 'B',
-               sensor_data->soil_moisture, read_battery_level());
+               "Data sent successfully to master (Soil %d): moisture=%d%%, "
+               "battery=%d%%",
+               plot_number, sensor_data->soil, read_battery_level());
       return true;
     } else {
       retry_count++;
@@ -622,19 +488,6 @@ bool send_sensor_data_to_master(const espnow_recv_data_t *sensor_data,
   return true;
 }
 
-/**
- * @brief Function to queue sensor data
- *
- * @param data Pointer to sensor data structure to queue
- * @return true if data was successfully queued, false otherwise
- */
-// bool queue_sensor_data(const espnow_recv_data_t *data) {
-//   if (sensor_data_queue == NULL)
-//     ESP_LOGD(TAG, "Queued sensor data");
-//   return false;
-//   return xQueueSend(sensor_data_queue, data, 0) == pdTRUE;
-// }
-
 bool queue_sensor_data(const espnow_recv_data_t *data) {
   if (sensor_data_queue == NULL) {
     ESP_LOGE(TAG, "Sensor data queue not initialized");
@@ -649,21 +502,6 @@ bool queue_sensor_data(const espnow_recv_data_t *data) {
   ESP_LOGW(TAG, "Failed to queue sensor data, queue might be full");
   return false;
 }
-
-/**
- * @brief Function to receive sensor data from queue
- *
- * @param data Pointer to sensor data structure to fill
- * @param timeout_ms Timeout in milliseconds to wait for data
- * @return true if data was successfully received, false otherwise
- */
-// bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
-//   if (sensor_data_queue == NULL)
-//     ESP_LOGW(TAG, "Sensor queue null");
-//   return false;
-//   return xQueueReceive(sensor_data_queue, data, pdMS_TO_TICKS(timeout_ms)) ==
-//          pdTRUE;
-// }
 
 bool receive_sensor_data(espnow_recv_data_t *data, uint32_t timeout_ms) {
   if (sensor_data_queue == NULL) {
@@ -706,8 +544,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
   // Initialize state variables
   uint8_t own_node_address = g_nodeAddress;
-  bool is_soil_sensor = (own_node_address == SOIL_A_ADDRESS ||
-                         own_node_address == SOIL_B_ADDRESS);
+  uint8_t device_type = GET_DEVICE_TYPE(own_node_address);
+  uint8_t plot_number = GET_PLOT_NUMBER(own_node_address);
+  bool is_soil_sensor = (device_type == DEVICE_TYPE_SOIL);
 
   // Master device MAC address
   uint8_t master_mac[ESP_NOW_ETH_ALEN] = {0};
@@ -719,6 +558,12 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
   ESP_LOGI(TAG, "ESP-NOW transmission task started for node 0x%02X (%s)",
            own_node_address, get_pcb_name(own_node_address));
+
+  if (is_soil_sensor) {
+    ESP_LOGI(TAG, "Configured as soil sensor for plot %d", plot_number);
+  } else {
+    ESP_LOGI(TAG, "Device type: 0x%02X, not a soil sensor", device_type);
+  }
 
   // Main task loop
   while (1) {
@@ -735,6 +580,11 @@ void vTaskESPNOW_TX(void *pvParameters) {
                  "Master MAC address not available, retrying in next cycle");
         vTaskDelay(pdMS_TO_TICKS(TRANSMISSION_CYCLE_MS));
         continue;
+      } else {
+        ESP_LOGI(TAG,
+                 "Master MAC address acquired: %02x:%02x:%02x:%02x:%02x:%02x",
+                 master_mac[0], master_mac[1], master_mac[2], master_mac[3],
+                 master_mac[4], master_mac[5]);
       }
     }
 
@@ -745,23 +595,32 @@ void vTaskESPNOW_TX(void *pvParameters) {
 
       // Try to get new data from queue, but don't block if empty
       if (receive_sensor_data(&sensor_data, 0)) {
-        ESP_LOGI(TAG, "Got fresh sensor data from queue: moisture=%d%%",
-                 sensor_data.soil_moisture);
+        ESP_LOGI(TAG,
+                 "Got fresh sensor data from queue (Plot %d): moisture=%d%%",
+                 plot_number, sensor_data.soil);
         got_data = true;
       } else {
-        ESP_LOGD(TAG, "No new sensor data in queue, using last known values");
+        ESP_LOGD(
+            TAG,
+            "No new sensor data in queue for plot %d, using last known values",
+            plot_number);
       }
 
       // 4. Send sensor data to master (either new or last known)
-      if (got_data || sensor_data.soil_moisture > 0) {
+      if (got_data || sensor_data.soil > 0) {
+        ESP_LOGD(TAG, "Sending data for plot %d: moisture=%d%%, battery=%d%%",
+                 plot_number, sensor_data.soil, sensor_data.battery);
         send_sensor_data_to_master(&sensor_data, master_mac,
                                    MAX_TRANSMISSION_RETRIES);
       } else {
-        ESP_LOGW(TAG, "No valid sensor data available, skipping transmission");
+        ESP_LOGW(
+            TAG,
+            "No valid sensor data available for plot %d, skipping transmission",
+            plot_number);
       }
     } else {
-      ESP_LOGD(TAG, "Device 0x%02X is not a soil sensor, idling",
-               own_node_address);
+      ESP_LOGD(TAG, "Device 0x%02X (%s) is not a soil sensor, idling",
+               own_node_address, get_pcb_name(own_node_address));
     }
 
     // 5. Wait for next transmission cycle
@@ -778,6 +637,9 @@ void vTaskESPNOW_TX(void *pvParameters) {
  * @param pvParameters Task parameters (not used)
  */
 void soil_sensor_task(void *pvParameters) {
+
+  int soil = 999;
+  int battery = 999;
   // Ensure sensor is initialized
   if (adc1_handle == NULL) {
     soil_sensor_init();
@@ -814,21 +676,21 @@ void soil_sensor_task(void *pvParameters) {
       esp_deep_sleep_start();
     }
 
-    if (moisture >= 0) {
+    if (soil >= 0) {
       // Prepare ESP-NOW data structure for transmission
       espnow_recv_data_t espnow_data;
       espnow_data.node_address = g_nodeAddress;
-      espnow_data.soil_moisture = moisture;
-      espnow_data.battery_level = battery;
+      espnow_data.soil = soil;
+      espnow_data.battery = battery;
       espnow_data.rssi = get_current_rssi();
 
       // Queue the ESP-NOW data
       if (queue_sensor_data(&espnow_data)) {
         ESP_LOGD(TAG,
-                 "Queued data: Moisture: %d%%, Battery: %.1f%%, RSSI: %d "
+                 "Queued data: Moisture: %d%%, Battery: %d%%, RSSI: %d "
                  "(Node: 0x%02X)",
-                 espnow_data.soil_moisture, espnow_data.battery_level,
-                 espnow_data.rssi, espnow_data.node_address);
+                 espnow_data.soil, espnow_data.battery, espnow_data.rssi,
+                 espnow_data.node_address);
       } else {
         ESP_LOGW(TAG, "Failed to queue sensor data, queue might be full");
       }
@@ -837,29 +699,6 @@ void soil_sensor_task(void *pvParameters) {
     }
 
     // Delay before next reading (3 seconds)
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
   }
-}
-
-/**
- * @brief Creates and starts the soil sensor and communication tasks
- *
- * This function initializes the soil sensor and starts the necessary tasks.
- * The soil_sensor_task reads sensor data and queues it for transmission.
- * The vTaskESPNOW_TX task picks data from the queue and sends it via ESP-NOW.
- */
-void start_soil_sensor_tasks(void) {
-  // Initialize sensor hardware
-  soil_sensor_init();
-
-  // Start sensor reading task
-  xTaskCreate(soil_sensor_task, "soil_sensor", 4096, NULL, 5, NULL);
-
-// Start ESP-NOW transmission task if this is a soil sensor
-#if defined(CONFIG_SOIL_A) || defined(CONFIG_SOIL_B)
-  xTaskCreate(vTaskESPNOW_TX, "espnow_tx", 4096, NULL, 5, NULL);
-  ESP_LOGI(TAG, "ESP-NOW TX transmission task started");
-#endif
-
-  ESP_LOGI(TAG, "Soil sensor tasks started");
 }

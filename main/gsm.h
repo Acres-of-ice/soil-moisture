@@ -42,18 +42,18 @@ typedef struct {
   void (*handler)(void);
 } sms_command_t;
 
-typedef struct {
-  bool tasks_deleted;
-  bool send_task_active;
-  uint8_t signal_fail_count;
-  char last_recovery_time[20];
-} sms_state_t;
-
-static sms_state_t sms_state = {
-    .tasks_deleted = false,
-    .send_task_active = false,
-    .signal_fail_count = 0,
-    .last_recovery_time = {0},
-};
+// typedef struct {
+//   bool tasks_deleted;
+//   bool send_task_active;
+//   uint8_t signal_fail_count;
+//   char last_recovery_time[20];
+// } sms_state_t;
+//
+// static sms_state_t sms_state = {
+//     .tasks_deleted = false,
+//     .send_task_active = false,
+//     .signal_fail_count = 0,
+//     .last_recovery_time = {0},
+// };
 
 #endif // GSM_SMS_HANDLER_H

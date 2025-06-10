@@ -11,33 +11,40 @@
 #include <string.h>
 #include <time.h>
 
-// Standard includes
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include <stdio.h>
 
 extern uint8_t g_nodeAddress;
-extern const char *DATA_FILE_HEADER; // Declaration
+extern uint8_t g_plot_number;
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
-extern int soil_A_Live;
 
-// Device type identifiers (high nibble)
-#define DEVICE_TYPE_MASTER 0xA0
-#define DEVICE_TYPE_VALVE 0xB0
-#define DEVICE_TYPE_SOIL 0xC0
-#define DEVICE_TYPE_PUMP 0xD0    // Reserved for future use
-#define DEVICE_TYPE_WEATHER 0xE0 // Reserved for future use
+//// Device Type Constants (High Nibble)
+#define DEVICE_TYPE_MASTER 0x00
+#define DEVICE_TYPE_VALVE 0x10
+#define DEVICE_TYPE_SOLENOID 0x20
+#define DEVICE_TYPE_SOIL 0x30
+#define DEVICE_TYPE_WEATHER 0x40
+#define DEVICE_TYPE_PUMP 0x50
 
-// Device addresses (high nibble = type, low nibble = instance ID)
-#define MASTER_ADDRESS (DEVICE_TYPE_MASTER | 0x01) // 0xA1 - Master node
-#define VALVE_A_ADDRESS (DEVICE_TYPE_VALVE | 0x01) // 0xB1 - Valve A
-#define VALVE_B_ADDRESS (DEVICE_TYPE_VALVE | 0x02) // 0xB2 - Valve B
-#define SOIL_A_ADDRESS (DEVICE_TYPE_SOIL | 0x01)   // 0xC1 - Soil sensor A
-#define SOIL_B_ADDRESS (DEVICE_TYPE_SOIL | 0x02)   // 0xC2 - Soil sensor B
-#define PUMP_ADDRESS (DEVICE_TYPE_PUMP | 0x02)     // 0xE2 - Pump
+// Fixed Device Addresses
+#define MASTER_ADDRESS 0x01
+#define PUMP_ADDRESS 0x51
+
+// Helper macros for address calculation
+#define GET_DEVICE_TYPE(addr) ((addr) & 0xF0)
+#define GET_PLOT_NUMBER(addr) ((addr) & 0x0F)
+#define MAKE_DEVICE_ADDR(type, plot) ((type) | (plot))
+
+// Validation macros
+#define IS_SOIL_SENSOR(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_SOIL)
+#define IS_VALVE_CONTROLLER(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_VALVE)
+#define IS_MASTER_DEVICE(addr) ((addr) == MASTER_ADDRESS)
+#define IS_PUMP_DEVICE(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_PUMP)
+#define IS_SOLENOID_DEVICE(addr) (GET_DEVICE_TYPE(addr) == DEVICE_TYPE_SOLENOID)
 
 // ==================== GPIO Definitions ====================
 #define RELAY_1 GPIO_NUM_16
@@ -50,6 +57,12 @@ extern int soil_A_Live;
 #define feed1_GPIO GPIO_NUM_26
 #define feed2_GPIO GPIO_NUM_27
 #define VTG_SENS_GPIO 35
+
+typedef enum {
+  BUTTON_IDLE,
+  BUTTON_START_PRESSED,
+  BUTTON_STOP_PRESSED
+} button_state_t;
 
 #define A_btn 25 // Replace with actual GPIO pin for WiFi button
 #define B_btn 26 // Replace with actual GPIO pin for Demo mode button
@@ -72,15 +85,7 @@ extern int soil_A_Live;
 // Irrigation Demo mode
 extern bool demo_mode_active;
 extern TickType_t demo_mode_start_time;
-#define DEMO_MODE_DURATION_MS (5 * 60 * 1000) // 5 minutes
-
-typedef struct {
-  uint32_t total_data_points;
-  uint32_t
-      site_data_points[MAX_SITES]; // Assuming you define MAX_SITES in define.h
-  char last_data_time[32];
-} data_statistics_t;
-extern data_statistics_t data_stats;
+extern uint8_t discovered_valve_addresses[CONFIG_NUM_PLOTS];
 
 // ==================== Soil Sensor Calibration ====================
 
@@ -91,12 +96,6 @@ extern data_statistics_t data_stats;
 #define MY_ADC_ATTEN ADC_ATTEN_DB_12
 #define SAMPLE_DURATION_MS 30000
 #define SAMPLE_INTERVAL_MS 1000
-// #define SOIL_DRY_ADC_VALUE 0
-// #define SOIL_MOIST_ADC_VALUE 0
-static int32_t DRY_STATE = 0;
-static int32_t WET_STATE = 0;
-static int32_t soil_dry_adc_value = 0;
-static int32_t soil_wet_adc_value = 0;
 
 // ==================== SMS Definitions ====================
 
@@ -112,10 +111,11 @@ extern char sms_message[SMS_BUFFER_SIZE], last_sms_message[SMS_BUFFER_SIZE];
 // ==================== Main Definitions ====================
 #define SITE_NAME_LENGTH 2  // Fixed length for site name
 #define TIMESTAMP_LENGTH 17 // 16 chars + null terminator
+// New calculation: 2 + 17 + 2 + (2*CONFIG_NUM_PLOTS) + (2*CONFIG_NUM_PLOTS) + 2
+// + 2 + 2 + 2
 #define HEX_SIZE                                                               \
-  (SITE_NAME_LENGTH + TIMESTAMP_LENGTH +                                       \
-   sizeof(uint16_t) *                                                          \
-       7) // 2 bytes site name + timestamp + counter + sensor data
+  (23 + (4 * CONFIG_NUM_PLOTS)) // 4 bytes per plot (2 for soil + 2 for battery)
+
 typedef struct {
   uint8_t address;
   uint8_t command;
@@ -137,7 +137,6 @@ extern QueueHandle_t message_queue;
 #define POLL_INTERVAL_MS (CONFIG_POLL_INTERVAL_S * 1000)
 #define MODE_TIMEOUT_MS (CONFIG_MODE_TIMEOUT_M * 60000)
 #define VALVE_TIMEOUT_MS (CONFIG_VALVE_TIMEOUT_S * 1000)
-#define RETRY_DELAY_MS (CONFIG_RETRY_DELAY_S * 1000)
 #define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 #define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
@@ -164,6 +163,10 @@ extern TaskHandle_t smsTaskHandle;
 extern TaskHandle_t smsReceiveTaskHandle;
 extern TaskHandle_t smsManagerTaskHandle;
 extern TaskHandle_t simulationTaskHandle;
+extern TaskHandle_t soilTaskHandle;
+extern TaskHandle_t TXTaskHandle;
+extern TaskHandle_t spOtaTaskHandle;
+extern TaskHandle_t discoveryTaskHandle;
 
 // ==================== UART Definitions ====================
 #define UART_NUM UART_NUM_0
@@ -225,14 +228,15 @@ typedef struct {
   float pressure;
   float water_temp;
   float discharge;
-  float voltage;
-  int soil_A;
-  int soil_B;
+  float voltage;                 // Master device voltage
+  int soil[CONFIG_NUM_PLOTS];    // Soil moisture % for each plot
+  int battery[CONFIG_NUM_PLOTS]; // Battery % for each soil sensor
 } sensor_readings_t;
 
 // Declare the globals
 extern sensor_readings_t simulated_readings;
 extern sensor_readings_t readings;
+extern sensor_readings_t soil_readings;
 
 extern float mean_pressure;
 extern float tpipe_normal;
@@ -241,10 +245,10 @@ extern float tpipe_hot;
 // ==================== ESP-NOW communication ====================
 typedef struct {
   uint8_t
-      node_address;    // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
-  int soil_moisture;   // Soil moisture percentage (0-100)
-  float battery_level; // Battery level percentage (0-100)
-  int8_t rssi;         // Signal strength in dBm
+      node_address; // Device address (e.g., SOIL_A_ADDRESS, VALVE_B_ADDRESS)
+  int soil;         // Soil moisture percentage (0-100)
+  int battery;      // Battery level percentage (0-100)
+  int8_t rssi;      // Signal strength in dBm
 } espnow_recv_data_t;
 
 extern espnow_recv_data_t recv_data;
@@ -261,10 +265,6 @@ extern bool wifi_enabled, sta_enabled;
 extern bool SPRAY_mode, DRAIN_mode, AUTO_mode;
 extern float Twater_cal;
 
-extern SemaphoreHandle_t DRAIN_NOTE_AckSemaphore;
-extern SemaphoreHandle_t SOURCE_NOTE_AckSemaphore;
-extern SemaphoreHandle_t AIR_NOTE_AckSemaphore;
-extern SemaphoreHandle_t HEAT_AckSemaphore;
 extern SemaphoreHandle_t readings_mutex;
 extern SemaphoreHandle_t i2c_mutex;
 extern SemaphoreHandle_t stateMutex;
@@ -300,15 +300,15 @@ extern bool http_server_active;
 #define CIRCULAR_BUFFER_SIZE 10
 
 typedef struct {
-  char site_name[SITE_NAME_LENGTH]; // Site name (2 bytes)
-  char timestamp[TIMESTAMP_LENGTH]; // YYYY-MM-DD HH:MM\0
-  uint16_t counter;                 // On/off counter
-  uint16_t soil_A;                  // Water temperature * 10
-  uint16_t soil_B;                  // Discharge * 10
-  int16_t temperature; // Temperature * 10 to preserve one decimal place
-  uint16_t pressure;   // Fountain pressure * 10
-  int16_t water_temp;  // Fountain pressure * 10
-  uint16_t discharge;  // Fountain pressure * 10
+  char site_name[SITE_NAME_LENGTH];
+  char timestamp[TIMESTAMP_LENGTH];
+  uint16_t counter;
+  int16_t soil[CONFIG_NUM_PLOTS];    // Changed from soil_A, soil_B
+  int16_t battery[CONFIG_NUM_PLOTS]; // Added battery array
+  int16_t temperature;
+  uint16_t pressure;
+  uint16_t water_temp;
+  uint16_t discharge;
 } hex_data_t;
 
 typedef struct {
@@ -333,48 +333,43 @@ typedef struct {
 
 extern HexCircularBuffer hex_buffer;
 
-// ==================== Simulation mode ====================
-// Test case data structure
+// ==================== MQTT Data Transmission ====================
+
+extern bool isMqttConnected;
+// Data buffering for offline periods
+#define DATA_BUFFER_SIZE 12 // Store up to 1 hour of data (12 * 5min intervals)
+#define MQTT_DATA_JSON_SIZE 1024 // Maximum JSON payload size
+
 typedef struct {
-  int soil_A;              // Soil moisture A percentage
-  int soil_B;              // Soil moisture B percentage
-  const char *description; // Test case description
-} test_case_t;
+  char timestamp[32];
+  sensor_readings_t readings;
+  uint32_t sequence_number;
+  bool transmitted;
+  int retry_count;
+} buffered_data_t;
 
-// Test cases for soil moisture simulation
-static const test_case_t test_cases[] = {
-    // Low moisture scenarios (should trigger irrigation)
-    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
-     "Both sensors dry - both should trigger irrigation"},
-    {CONFIG_SOIL_DRY - 5, CONFIG_SOIL_DRY - 15,
-     "Sensor A marginal, B dry - B should trigger irrigation"},
-    {CONFIG_SOIL_DRY - 15, CONFIG_SOIL_DRY - 5,
-     "Sensor A dry, B marginal - A should trigger irrigation"},
+typedef struct {
+  buffered_data_t buffer[DATA_BUFFER_SIZE];
+  int head;
+  int tail;
+  int count;
+  uint32_t sequence_counter;
+  SemaphoreHandle_t mutex;
+} data_buffer_t;
 
-    // Mixed moisture scenarios
-    {CONFIG_SOIL_DRY - 10, CONFIG_SOIL_WET + 5,
-     "Sensor A dry, B wet - only A should trigger irrigation"},
-    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_DRY - 10,
-     "Sensor A wet, B dry - only B should trigger irrigation"},
+// MQTT Data transmission globals
+extern data_buffer_t mqtt_data_buffer;
+extern TaskHandle_t mqttDataTaskHandle;
 
-    // High moisture scenarios (should not trigger irrigation)
-    {CONFIG_SOIL_WET + 5, CONFIG_SOIL_WET + 5,
-     "Both sensors wet - neither should trigger irrigation"},
-    {CONFIG_SOIL_WET + 15, CONFIG_SOIL_WET + 20,
-     "Both sensors very wet - neither should trigger irrigation"},
+// Data transmission timing (using existing CONFIG_DATA_TIME_M)
+#define DATA_RETRY_INTERVAL_MS (30 * 1000) // 30 seconds between retries
+#define MAX_DATA_RETRY_ATTEMPTS 3
 
-    // Edge cases
-    {CONFIG_SOIL_DRY, CONFIG_SOIL_DRY, "Both sensors at threshold - edge case"},
-    {CONFIG_SOIL_DRY - 1, CONFIG_SOIL_WET + 1,
-     "Sensor A just below threshold, B just above threshold"},
-    {CONFIG_SOIL_WET + 1, CONFIG_SOIL_DRY - 1,
-     "Sensor A just above threshold, B just below threshold"},
-
-    // Extreme cases
-    {0, 100, "Sensor A bone dry, B saturated"},
-    {100, 0, "Sensor A saturated, B bone dry"}};
-
-#define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_case_t))
-#define TEST_DELAY_MS (120 * 1000) // 5 second delay between tests
+extern char data_topic[64];
+extern char command_topic[64];
+extern char ack_topic[64];
+extern char ota_topic[64];
+extern char status_topic[64];
+extern char error_topic[64];
 
 #endif // DEFINE_H

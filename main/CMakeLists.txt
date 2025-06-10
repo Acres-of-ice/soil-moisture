@@ -5,22 +5,50 @@ set(SRCS_LIST
     "button_control.c"
     "data.c"
     "lcd.c"
-    "gsm.c"
+    # "gsm.c"
     "soil_comm.c"
-    "soil_sensor.c"
     "sensor.c"
     "ads1x1x.c"
+    "i2cdev.c"
 )
 
 if(CONFIG_MASTER)
+    list(APPEND SRCS_LIST "rtc.c")
+    list(APPEND SRCS_LIST "ota.c")
+    list(APPEND SRCS_LIST "Pppos.c")
+    list(APPEND SRCS_LIST "mqtt.c")
     list(APPEND SRCS_LIST "wifi_app.c")
     list(APPEND SRCS_LIST "http_server.c")
     list(APPEND SRCS_LIST "hex_data.c")
+    list(APPEND SRCS_LIST "mqtt_data.c")
+    list(APPEND SRCS_LIST "mqtt_notify.c")
+endif()
+
+if(CONFIG_SOIL)
+    list(APPEND SRCS_LIST "soil_sensor.c")
 endif()
 
 idf_component_register(SRCS ${SRCS_LIST}
                     INCLUDE_DIRS "."
-                    REQUIRES esp32-button app_update esp_http_server esp_app_format fatfs esp_wifi spiffs nvs_flash rtc espnow_lib espressif__mdns-v1.4.0)
+                    REQUIRES esp32-button 
+                             app_update 
+                             esp_http_server 
+                             esp_app_format 
+                             fatfs 
+                             esp_wifi 
+                             spiffs 
+                             nvs_flash 
+                             esp_adc 
+                             espnow_lib 
+                             espressif__mdns-v1.4.0 
+                             espressif__esp_modem 
+                             mqtt 
+                             json 
+                             esp_http_client 
+                             esp_https_ota
+                             esp_partition  # Add this for OTA operations
+                             bootloader_support  # Add this for OTA operations
+                    )
                   
 # Read version from root directory
 file(READ ${CMAKE_SOURCE_DIR}/version.txt PROJECT_VERSION_FROM_FILE)

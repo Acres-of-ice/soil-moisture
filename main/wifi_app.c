@@ -416,7 +416,7 @@ void wifi_app_espnow_wifi_init(void) {
   while (netif != NULL) {
     if (esp_netif_get_desc(netif) != NULL &&
         strcmp("ap", esp_netif_get_desc(netif)) == 0) {
-      ESP_LOGI(TAG, "Found existing AP interface");
+      ESP_LOGD(TAG, "Found existing AP interface");
       esp_netif_ap = netif;
       break;
     }
