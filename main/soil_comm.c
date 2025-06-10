@@ -758,7 +758,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     ESP_LOGD(TAG, "\n=== Received Sensor Data ===");
     ESP_LOGD(TAG, "Node Address: 0x%02X (%s)", recv_data.node_address,
              get_pcb_name(recv_data.node_address));
-    ESP_LOGI(TAG, "Soil Moisture: %d%%", recv_data.soil);
+    ESP_LOGD(TAG, "Soil Moisture: %d%%", recv_data.soil);
     ESP_LOGD(TAG, "Battery Level: %d%%",
              recv_data.battery); // Added battery logging
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
