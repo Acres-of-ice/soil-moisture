@@ -241,7 +241,7 @@ void app_main(void) {
     float voltage = measure_voltage();
     ESP_LOGI(TAG, "Voltage: %.2f V", voltage);
     if (voltage < LOW_CUTOFF_VOLTAGE) {
-      ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
+      ESP_LOGE(TAG, "Voltage is low, entering deep sleep...");
       esp_sleep_enable_timer_wakeup(
           (uint64_t)LOW_VOLTAGE_SLEEP_US); // Wake up after
                                            // LOW_VOLTAGE_SLEEP_TIME seconds
@@ -399,11 +399,11 @@ void app_main(void) {
   ESP_LOGI(TAG, "v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
            get_pcb_name(g_nodeAddress), g_plot_number);
 
-  // Initialize ESP-NOW communication
-  espnow_init2();
-
   // Initialize soil sensor
   soil_sensor_init();
+
+  // Initialize ESP-NOW communication
+  espnow_init2();
 
   // Start sensor reading task
   xTaskCreate(soil_sensor_task, // New task function from soil_sensor.c

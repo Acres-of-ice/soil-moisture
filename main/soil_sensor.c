@@ -54,12 +54,12 @@ void soil_sensor_init(void) {
   ESP_LOGI(TAG, "Configured as Soil %d sensor (0x%02X)", g_plot_number,
            g_nodeAddress);
 
-  // Validate plot number
-  if (CONFIG_PLOT_NUMBER < 1 || CONFIG_PLOT_NUMBER > CONFIG_NUM_PLOTS) {
-    ESP_LOGE(TAG, "Invalid plot number: %d (valid range: 1-%d)",
-             CONFIG_PLOT_NUMBER, CONFIG_NUM_PLOTS);
-    return;
-  }
+  // // Validate plot number
+  // if (CONFIG_PLOT_NUMBER < 1 || CONFIG_PLOT_NUMBER > CONFIG_NUM_PLOTS) {
+  //   ESP_LOGE(TAG, "Invalid plot number: %d (valid range: 1-%d)",
+  //            CONFIG_PLOT_NUMBER, CONFIG_NUM_PLOTS);
+  //   return;
+  // }
 
   // Initialize ESP-NOW sensor data queue
   if (sensor_data_queue == NULL) {
@@ -88,6 +88,7 @@ void soil_sensor_init(void) {
   // FOR BATTERY MANAGEMENT
   ESP_ERROR_CHECK(
       adc_oneshot_config_channel(adc1_handle, SOIL_BATT_ADC_CHANNEL, &config));
+
   // Configure battery ADC channel
 #if !CONFIG_IDF_TARGET_ESP32C3
   adc_cali_line_fitting_config_t cali_cfg = {
@@ -670,13 +671,9 @@ void soil_sensor_task(void *pvParameters) {
     float battery = read_battery_level();
 
     if (battery <= SOIL_BATT_MIN_VOLTAGE) {
-      ESP_LOGW(TAG,
-               "Battery voltage low (%.2fV)! Entering deep sleep for 1 hour...",
+      ESP_LOGW(TAG, "Battery voltage low (%.2fV)! Entering deep sleep...",
                battery);
-      vTaskDelay(pdMS_TO_TICKS(100));
-      esp_sleep_enable_timer_wakeup(
-          LOW_VOLTAGE_SLEEP_US); // 1 hour in microseconds
-      esp_deep_sleep_start();
+      battery = -99;
     }
 
     if (soil >= 0) {
@@ -699,6 +696,13 @@ void soil_sensor_task(void *pvParameters) {
       }
     } else {
       ESP_LOGW(TAG, "Failed to read soil moisture sensor");
+    }
+
+    if (battery <= SOIL_BATT_MIN_VOLTAGE) {
+      vTaskDelay(pdMS_TO_TICKS(2000));
+      esp_sleep_enable_timer_wakeup(
+          LOW_VOLTAGE_SLEEP_US); // 1 hour in microseconds
+      esp_deep_sleep_start();
     }
 
     // Delay before next reading (3 seconds)

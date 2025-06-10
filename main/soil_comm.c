@@ -764,6 +764,11 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
     ESP_LOGD(TAG, "==========================\n");
 
+    if (recv_data.battery == -99) {
+      ESP_LOGE("SoilBattery", " Node Address: 0x%02X (%s) Entering deep sleep",
+               recv_data.node_address, get_pcb_name(recv_data.node_address));
+    }
+
     // Update sensor readings in the array-based system
     // Take mutex to safely update readings
     if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
