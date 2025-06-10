@@ -139,7 +139,6 @@ void suspend_tasks_for_ota_safe(void) {
       // Non-hardware tasks
       {&buttonTaskHandle, "Button", false},
       {&simulationTaskHandle, "Simulation", false},
-      {&discoveryTaskHandle, "Discovery", false},
 
       // DELIBERATELY EXCLUDE ONLY:
       // mqttTaskHandle - for OTA status updates (if needed)
@@ -629,7 +628,7 @@ void log_task_states(const char *context) {
       {&buttonTaskHandle, "Button"},
       {&valveTaskHandle, "Valve"},
       {&simulationTaskHandle, "Simulation"},
-      {&discoveryTaskHandle, "Discovery"},
+      // {&discoveryTaskHandle, "Discovery"},
       {&soilTaskHandle, "Soil"},
       {&TXTaskHandle, "TX"},
       {&wifiTaskHandle, "WiFi"},
@@ -693,10 +692,9 @@ bool verify_system_recovery(void) {
       {&buttonTaskHandle, "Button", false}, // Not critical
       {&valveTaskHandle, "Valve", true},
       {&simulationTaskHandle, "Simulation",
-       false}, // Not critical if not in sim mode
-      {&discoveryTaskHandle, "Discovery", false}, // Not critical
-      {&soilTaskHandle, "Soil", false},           // Only for soil sensors
-      {&TXTaskHandle, "TX", false},               // Only for soil sensors
+       false},                          // Not critical if not in sim mode
+      {&soilTaskHandle, "Soil", false}, // Only for soil sensors
+      {&TXTaskHandle, "TX", false},     // Only for soil sensors
       {&wifiTaskHandle, "WiFi", true},
       {&mqttDataTaskHandle, "MQTTData", true},
   };
