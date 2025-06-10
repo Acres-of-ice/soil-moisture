@@ -52,8 +52,8 @@ menu "App Configuration"
 
     config SOIL_SENSOR_DEEP_SLEEP_ON_LOW_BATT
     bool "Enable deep sleep on low battery"
-    default y if SOIL_A || SOIL_B
-    depends on SOIL_A || SOIL_B
+    default y if SOIL
+    depends on SOIL
     help
         If enabled, the ESP will enter deep sleep for 1 hour when battery voltage falls below SOIL_BATT_MIN_VOLTAGE.
 
