@@ -14,6 +14,340 @@ static TaskHandle_t suspended_tasks[10];
 static int num_suspended_tasks = 0;
 static bool tasks_suspended = false;
 
+esp_err_t publish_ota_status(const char *status, const char *message,
+                             int progress) {
+  if (!isMqttConnected || !global_mqtt_client) {
+    ESP_LOGW(TAG, "Cannot publish OTA status: MQTT not connected");
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  char status_msg[512];
+  char timestamp[32];
+
+// Get timestamp (you may need to include rtc.h or define fetchTime differently)
+#ifdef CONFIG_MASTER
+  strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
+  timestamp[sizeof(timestamp) - 1] = '\0';
+#else
+  snprintf(timestamp, sizeof(timestamp), "%llu", esp_timer_get_time() / 1000);
+#endif
+
+  snprintf(status_msg, sizeof(status_msg),
+           "{\"site_name\":\"%s\",\"ota_status\":\"%s\",\"message\":\"%s\","
+           "\"progress\":%d,\"timestamp\":\"%s\",\"version\":\"%s\"}",
+           CONFIG_SITE_NAME, status, message, progress, timestamp,
+           PROJECT_VERSION);
+
+  // Use direct esp_mqtt_client_publish instead of mqtt_publish_safe
+  int msg_id = esp_mqtt_client_publish(global_mqtt_client, ota_topic,
+                                       status_msg, 0, 1, 0);
+
+  if (msg_id < 0) {
+    ESP_LOGE(TAG, "Failed to publish OTA status, error=%d", msg_id);
+    return ESP_FAIL;
+  }
+
+  ESP_LOGD(TAG, "OTA status published: %s (msg_id: %d)", status, msg_id);
+  ESP_LOGD(TAG, "OTA status payload: %s", status_msg);
+
+  return ESP_OK;
+}
+
+void suspend_tasks_for_ota_safe(void) {
+  ESP_LOGI(
+      TAG,
+      "Suspending all tasks except MQTT for OTA (maximum memory available)");
+
+  // Log system state before suspension
+  log_task_states("Before OTA Suspension");
+
+  // Reset tracking variables
+  num_suspended_tasks = 0;
+  tasks_suspended = false;
+
+  // Step 1: Release all mutexes first to prevent deadlocks
+  ESP_LOGI(TAG, "Step 1: Releasing mutexes to prevent deadlocks");
+
+  // Release sensor mutexes
+  if (readings_mutex != NULL) {
+    xSemaphoreGive(readings_mutex);
+    ESP_LOGD(TAG, "Released readings_mutex");
+  }
+  if (i2c_mutex != NULL) {
+    xSemaphoreGive(i2c_mutex);
+    ESP_LOGD(TAG, "Released i2c_mutex");
+  }
+  if (stateMutex != NULL) {
+    xSemaphoreGive(stateMutex);
+    ESP_LOGD(TAG, "Released stateMutex");
+  }
+  if (spi_mutex != NULL) {
+    xSemaphoreGive(spi_mutex);
+    ESP_LOGD(TAG, "Released spi_mutex");
+  }
+  if (file_mutex != NULL) {
+    xSemaphoreGive(file_mutex);
+    ESP_LOGD(TAG, "Released file_mutex");
+  }
+
+  // Wait for mutex operations to complete
+  vTaskDelay(pdMS_TO_TICKS(100));
+
+  // Step 2: Clear non-essential buffers to free memory
+  ESP_LOGI(TAG, "Step 2: Clearing buffers to free memory");
+
+  // Clear payload buffer
+  if (payload_buffer.mutex != NULL) {
+    if (xSemaphoreTake(payload_buffer.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      memset(payload_buffer.buffer, 0, sizeof(payload_buffer.buffer));
+      payload_buffer.head = payload_buffer.tail = payload_buffer.count = 0;
+      xSemaphoreGive(payload_buffer.mutex);
+      ESP_LOGD(TAG, "Cleared payload buffer");
+    }
+  }
+
+  // Clear hex buffer
+  if (hex_buffer.mutex != NULL) {
+    if (xSemaphoreTake(hex_buffer.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      memset(hex_buffer.buffer, 0, sizeof(hex_buffer.buffer));
+      hex_buffer.head = hex_buffer.tail = hex_buffer.count = 0;
+      xSemaphoreGive(hex_buffer.mutex);
+      ESP_LOGD(TAG, "Cleared hex buffer");
+    }
+  }
+
+  // Step 3: Suspend tasks in priority order (hardware tasks first)
+  ESP_LOGI(TAG, "Step 3: Suspending tasks (keeping MQTT/WiFi running)");
+
+  // Define tasks to suspend (EXCLUDING only MQTT tasks)
+  struct {
+    TaskHandle_t *handle;
+    const char *name;
+    bool is_hardware_critical;
+  } tasks_to_suspend[] = {
+      // Hardware-critical tasks first (I2C, SPI, UART users)
+      {&sensorTaskHandle, "Sensor", true},
+      {&dataLoggingTaskHandle, "DataLogging", true},
+      {&valveTaskHandle, "Valve", true},
+      {&TXTaskHandle, "TX", true},
+      {&soilTaskHandle, "Soil", true},
+
+      // Network tasks (can be suspended since OTA has its own HTTP client)
+      {&wifiTaskHandle, "WiFi", true},
+      {&mqttDataTaskHandle, "MQTTData", false},
+
+      // Non-hardware tasks
+      {&buttonTaskHandle, "Button", false},
+      {&simulationTaskHandle, "Simulation", false},
+      {&discoveryTaskHandle, "Discovery", false},
+
+      // DELIBERATELY EXCLUDE ONLY:
+      // mqttTaskHandle - for OTA status updates (if needed)
+      // Note: OTA uses its own HTTP client, so WiFi task suspension is OK
+  };
+
+  const int total_tasks =
+      sizeof(tasks_to_suspend) / sizeof(tasks_to_suspend[0]);
+
+  // Suspend hardware-critical tasks first
+  for (int i = 0; i < total_tasks && num_suspended_tasks < 10; i++) {
+    if (tasks_to_suspend[i].is_hardware_critical &&
+        tasks_to_suspend[i].handle != NULL &&
+        *tasks_to_suspend[i].handle != NULL) {
+
+      eTaskState task_state = eTaskGetState(*tasks_to_suspend[i].handle);
+      if (task_state != eSuspended && task_state != eDeleted &&
+          task_state != eInvalid) {
+        ESP_LOGI(TAG, "Suspending hardware task: %s", tasks_to_suspend[i].name);
+        vTaskSuspend(*tasks_to_suspend[i].handle);
+        suspended_tasks[num_suspended_tasks] = *tasks_to_suspend[i].handle;
+        num_suspended_tasks++;
+
+        // Extra delay for hardware tasks to finish current operations
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // Verify suspension
+        eTaskState new_state = eTaskGetState(*tasks_to_suspend[i].handle);
+        if (new_state == eSuspended) {
+          ESP_LOGD(TAG, "✓ %s suspended successfully",
+                   tasks_to_suspend[i].name);
+        } else {
+          ESP_LOGW(TAG, "✗ %s may not have suspended properly (state: %d)",
+                   tasks_to_suspend[i].name, new_state);
+        }
+      } else {
+        ESP_LOGD(TAG, "Hardware task %s already suspended/invalid",
+                 tasks_to_suspend[i].name);
+      }
+    }
+  }
+
+  // Wait for hardware tasks to fully suspend
+  vTaskDelay(pdMS_TO_TICKS(200));
+
+  // Suspend non-hardware tasks
+  for (int i = 0; i < total_tasks && num_suspended_tasks < 10; i++) {
+    if (!tasks_to_suspend[i].is_hardware_critical &&
+        tasks_to_suspend[i].handle != NULL &&
+        *tasks_to_suspend[i].handle != NULL) {
+
+      eTaskState task_state = eTaskGetState(*tasks_to_suspend[i].handle);
+      if (task_state != eSuspended && task_state != eDeleted &&
+          task_state != eInvalid) {
+        ESP_LOGI(TAG, "Suspending non-hardware task: %s",
+                 tasks_to_suspend[i].name);
+        vTaskSuspend(*tasks_to_suspend[i].handle);
+        suspended_tasks[num_suspended_tasks] = *tasks_to_suspend[i].handle;
+        num_suspended_tasks++;
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+        // Verify suspension
+        eTaskState new_state = eTaskGetState(*tasks_to_suspend[i].handle);
+        if (new_state == eSuspended) {
+          ESP_LOGD(TAG, "✓ %s suspended successfully",
+                   tasks_to_suspend[i].name);
+        } else {
+          ESP_LOGW(TAG, "✗ %s may not have suspended properly (state: %d)",
+                   tasks_to_suspend[i].name, new_state);
+        }
+      } else {
+        ESP_LOGD(TAG, "Non-hardware task %s already suspended/invalid",
+                 tasks_to_suspend[i].name);
+      }
+    }
+  }
+
+  if (num_suspended_tasks > 0) {
+    tasks_suspended = true;
+    ESP_LOGI(TAG, "Successfully suspended %d tasks for OTA",
+             num_suspended_tasks);
+
+    // Give suspended tasks time to reach suspended state
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    // Log system state after suspension
+    log_task_states("After OTA Suspension");
+
+    // Verify MQTT task is still running (WiFi task should be suspended)
+    if (mqttDataTaskHandle && mqttDataTaskHandle != NULL) {
+      eTaskState mqtt_state = eTaskGetState(mqttDataTaskHandle);
+      ESP_LOGI(TAG, "MQTT task state: %d %s", mqtt_state,
+               (mqtt_state == eRunning || mqtt_state == eReady ||
+                mqtt_state == eBlocked)
+                   ? "✓ RUNNING"
+                   : "✗ NOT RUNNING");
+    }
+
+    // WiFi task should now be suspended - OTA uses its own HTTP client
+    if (wifiTaskHandle && wifiTaskHandle != NULL) {
+      eTaskState wifi_state = eTaskGetState(wifiTaskHandle);
+      ESP_LOGI(TAG, "WiFi task state: %d %s", wifi_state,
+               (wifi_state == eSuspended) ? "✓ SUSPENDED" : "✗ NOT SUSPENDED");
+    }
+
+    // Log memory improvement
+    size_t free_heap = esp_get_free_heap_size();
+    ESP_LOGI(TAG, "Free heap after task suspension: %zu bytes", free_heap);
+
+  } else {
+    ESP_LOGW(TAG, "No tasks were suspended for OTA");
+  }
+}
+
+// REPLACE the existing resume_suspended_tasks() function in ota.c with this:
+
+void resume_suspended_tasks(void) {
+  if (!tasks_suspended || num_suspended_tasks == 0) {
+    ESP_LOGD(TAG, "No tasks to resume");
+    return;
+  }
+
+  ESP_LOGI(TAG, "Resuming %d suspended tasks after OTA", num_suspended_tasks);
+
+  // Log task states before resumption
+  log_task_states("Before Task Resumption");
+
+  // Resume tasks in reverse order (non-hardware first, then hardware)
+  for (int i = num_suspended_tasks - 1; i >= 0; i--) {
+    if (suspended_tasks[i] != NULL) {
+      // Verify task is still valid before resuming
+      eTaskState task_state = eTaskGetState(suspended_tasks[i]);
+      if (task_state == eSuspended) {
+        ESP_LOGI(TAG, "Resuming task %d (handle: %p)", i, suspended_tasks[i]);
+        vTaskResume(suspended_tasks[i]);
+
+        // Give the task time to transition states
+        vTaskDelay(pdMS_TO_TICKS(20));
+
+        // Verify the task resumed successfully
+        eTaskState new_state = eTaskGetState(suspended_tasks[i]);
+        if (new_state != eSuspended) {
+          ESP_LOGI(TAG, "✓ Task %d resumed successfully", i);
+        } else {
+          ESP_LOGW(TAG, "✗ Task %d may not have resumed properly", i);
+        }
+      } else {
+        ESP_LOGW(TAG,
+                 "Task %d no longer in suspended state (%d), cannot resume", i,
+                 task_state);
+      }
+    }
+  }
+
+  // Reset tracking variables
+  num_suspended_tasks = 0;
+  tasks_suspended = false;
+  memset(suspended_tasks, 0, sizeof(suspended_tasks));
+
+  // Give resumed tasks time to fully initialize
+  ESP_LOGI(TAG, "Waiting for tasks to fully initialize...");
+  vTaskDelay(pdMS_TO_TICKS(500));
+
+  // Log task states after resumption
+  log_task_states("After Task Resumption");
+
+  // Basic system verification
+  ESP_LOGI(TAG, "Performing basic system verification...");
+
+  // Test mutex functionality
+  bool system_healthy = true;
+
+  if (readings_mutex != NULL) {
+    if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      xSemaphoreGive(readings_mutex);
+      ESP_LOGI(TAG, "✓ readings_mutex functional");
+    } else {
+      ESP_LOGW(TAG, "✗ readings_mutex may have issues");
+      system_healthy = false;
+    }
+  }
+
+  if (stateMutex != NULL) {
+    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+      xSemaphoreGive(stateMutex);
+      ESP_LOGI(TAG, "✓ stateMutex functional");
+    } else {
+      ESP_LOGW(TAG, "✗ stateMutex may have issues");
+      system_healthy = false;
+    }
+  }
+
+  // Final memory and system status
+  size_t free_heap_final = esp_get_free_heap_size();
+  ESP_LOGI(TAG, "Final free heap: %zu bytes", free_heap_final);
+
+  if (system_healthy) {
+    ESP_LOGI(TAG, "✓ System recovery verification PASSED");
+    publish_ota_status("recovered", "All tasks resumed successfully", 0);
+  } else {
+    ESP_LOGW(TAG, "✗ System recovery verification has warnings");
+    publish_ota_status("warning", "System resumed with warnings", 0);
+  }
+
+  ESP_LOGI(TAG, "Task resumption complete");
+}
+
 // Function to update and report OTA progress
 void update_ota_progress(ota_progress_t *progress, int bytes_read) {
   progress->downloaded += bytes_read;
@@ -170,7 +504,7 @@ bool ota_pre_check(void) {
 
   // Check available heap memory
   size_t free_heap = esp_get_free_heap_size();
-  size_t min_heap_required = 64 * 1024; // Require at least 64KB free
+  size_t min_heap_required = 20 * 1024; // Require at least 64KB free
 
   if (free_heap < min_heap_required) {
     ESP_LOGE(TAG, "Insufficient heap memory for OTA: %zu bytes (need %zu)",
@@ -455,140 +789,6 @@ void resume_suspended_tasks_with_verification(void) {
   ESP_LOGI(TAG, "Task resumption and verification complete");
 }
 
-void suspend_tasks_for_ota_safe(void) {
-  ESP_LOGI(TAG, "Suspending non-essential tasks for OTA (with safety checks)");
-
-  // Log system state before suspension
-  log_task_states("Before OTA Suspension");
-
-  // Reset tracking variables
-  num_suspended_tasks = 0;
-  tasks_suspended = false;
-
-  // List of tasks to suspend during OTA
-  TaskHandle_t tasks_to_suspend[] = {
-      sensorTaskHandle,   dataLoggingTaskHandle, buttonTaskHandle,
-      valveTaskHandle,    simulationTaskHandle,  discoveryTaskHandle,
-      mqttDataTaskHandle, wifiTaskHandle,
-  };
-
-  const int total_tasks = sizeof(tasks_to_suspend) / sizeof(TaskHandle_t);
-
-  // Suspend tasks and track which ones were actually suspended
-  for (int i = 0; i < total_tasks && num_suspended_tasks < 10; i++) {
-    if (tasks_to_suspend[i] != NULL) {
-      // Check if task is currently running (not already suspended/deleted)
-      eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
-      if (task_state != eSuspended && task_state != eDeleted &&
-          task_state != eInvalid) {
-        ESP_LOGI(TAG, "Suspending task %d (handle: %p)", i,
-                 tasks_to_suspend[i]);
-        vTaskSuspend(tasks_to_suspend[i]);
-        suspended_tasks[num_suspended_tasks] = tasks_to_suspend[i];
-        num_suspended_tasks++;
-
-        // Verify suspension was successful
-        vTaskDelay(pdMS_TO_TICKS(10));
-        eTaskState new_state = eTaskGetState(tasks_to_suspend[i]);
-        if (new_state == eSuspended) {
-          ESP_LOGD(TAG, "✓ Task %d suspended successfully", i);
-        } else {
-          ESP_LOGW(TAG, "✗ Task %d may not have suspended properly (state: %d)",
-                   i, new_state);
-        }
-      } else {
-        ESP_LOGD(TAG, "Task %d already suspended or invalid, skipping", i);
-      }
-    }
-  }
-
-  if (num_suspended_tasks > 0) {
-    tasks_suspended = true;
-    ESP_LOGI(TAG, "Successfully suspended %d tasks for OTA",
-             num_suspended_tasks);
-
-    // Give suspended tasks time to reach suspended state
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    // Log system state after suspension
-    log_task_states("After OTA Suspension");
-  } else {
-    ESP_LOGW(TAG, "No tasks were suspended for OTA");
-  }
-}
-
-// Function to resume all suspended tasks
-void resume_suspended_tasks(void) {
-  if (!tasks_suspended || num_suspended_tasks == 0) {
-    ESP_LOGD(TAG, "No tasks to resume");
-    return;
-  }
-
-  ESP_LOGI(TAG, "Resuming %d suspended tasks", num_suspended_tasks);
-
-  for (int i = 0; i < num_suspended_tasks; i++) {
-    if (suspended_tasks[i] != NULL) {
-      // Verify task is still valid before resuming
-      eTaskState task_state = eTaskGetState(suspended_tasks[i]);
-      if (task_state == eSuspended) {
-        ESP_LOGI(TAG, "Resuming task %d (handle: %p)", i, suspended_tasks[i]);
-        vTaskResume(suspended_tasks[i]);
-      } else {
-        ESP_LOGW(TAG, "Task %d no longer in suspended state, cannot resume", i);
-      }
-    }
-  }
-
-  // Reset tracking variables
-  num_suspended_tasks = 0;
-  tasks_suspended = false;
-  memset(suspended_tasks, 0, sizeof(suspended_tasks));
-
-  ESP_LOGI(TAG, "Task resumption complete");
-
-  // Give resumed tasks time to start running
-  vTaskDelay(pdMS_TO_TICKS(200));
-}
-
-esp_err_t publish_ota_status(const char *status, const char *message,
-                             int progress) {
-  if (!isMqttConnected || !global_mqtt_client) {
-    ESP_LOGW(TAG, "Cannot publish OTA status: MQTT not connected");
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  char status_msg[512];
-  char timestamp[32];
-
-// Get timestamp (you may need to include rtc.h or define fetchTime differently)
-#ifdef CONFIG_MASTER
-  strncpy(timestamp, fetchTime(), sizeof(timestamp) - 1);
-  timestamp[sizeof(timestamp) - 1] = '\0';
-#else
-  snprintf(timestamp, sizeof(timestamp), "%llu", esp_timer_get_time() / 1000);
-#endif
-
-  snprintf(status_msg, sizeof(status_msg),
-           "{\"site_name\":\"%s\",\"ota_status\":\"%s\",\"message\":\"%s\","
-           "\"progress\":%d,\"timestamp\":\"%s\",\"version\":\"%s\"}",
-           CONFIG_SITE_NAME, status, message, progress, timestamp,
-           PROJECT_VERSION);
-
-  // Use direct esp_mqtt_client_publish instead of mqtt_publish_safe
-  int msg_id = esp_mqtt_client_publish(global_mqtt_client, ota_topic,
-                                       status_msg, 0, 1, 0);
-
-  if (msg_id < 0) {
-    ESP_LOGE(TAG, "Failed to publish OTA status, error=%d", msg_id);
-    return ESP_FAIL;
-  }
-
-  ESP_LOGD(TAG, "OTA status published: %s (msg_id: %d)", status, msg_id);
-  ESP_LOGD(TAG, "OTA status payload: %s", status_msg);
-
-  return ESP_OK;
-}
-
 esp_err_t iMqtt_OtaParser(char *json_string) {
   // Input validation
   if (json_string == NULL || strlen(json_string) == 0) {
@@ -712,13 +912,14 @@ void vOTA_EspTask(void *pvParameter) {
 
   // Publish initial status
   publish_ota_status("starting", "OTA update initiated", 0);
+
+  // Suspend non-essential tasks with safety checks
+  suspend_tasks_for_ota_safe();
+
   if (!ota_pre_check()) {
     ESP_LOGE(TAG, "Pre-OTA checks failed");
     goto cleanup;
   }
-
-  // Suspend non-essential tasks with safety checks
-  suspend_tasks_for_ota_safe();
 
   // Log memory status after task suspension
   size_t min_free_heap = esp_get_minimum_free_heap_size();

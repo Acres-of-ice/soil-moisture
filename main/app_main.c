@@ -50,6 +50,7 @@ TaskHandle_t soilTaskHandle = NULL;
 TaskHandle_t TXTaskHandle = NULL;
 TaskHandle_t spOtaTaskHandle = NULL;
 TaskHandle_t mqttDataTaskHandle = NULL;
+TaskHandle_t mqttTaskHandle = NULL;
 
 static const char *TAG = "APP";
 
