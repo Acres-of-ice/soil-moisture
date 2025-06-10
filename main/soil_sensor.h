@@ -14,8 +14,8 @@
 #define SOIL_ADC_CHANNEL ADC_CHANNEL_3
 
 // Soil moisture calibration values
-#define SOIL_DRY_ADC_VALUE_A 3350
-#define SOIL_MOIST_ADC_VALUE_A 1660
+#define SOIL_DRY_ADC_VALUE_A 1000
+#define SOIL_MOIST_ADC_VALUE_A 700
 
 #define SOIL_DRY_ADC_VALUE_B 3346
 #define SOIL_MOIST_ADC_VALUE_B 2192

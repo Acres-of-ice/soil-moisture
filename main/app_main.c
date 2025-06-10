@@ -243,8 +243,8 @@ void app_main(void) {
     if (voltage < LOW_CUTOFF_VOLTAGE) {
       ESP_LOGW(TAG, "Voltage is low, entering deep sleep...");
       esp_sleep_enable_timer_wakeup(
-          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
-          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+          (uint64_t)LOW_VOLTAGE_SLEEP_US); // Wake up after
+                                           // LOW_VOLTAGE_SLEEP_TIME seconds
       gpio_hold_dis(SIM_GPIO);
       esp_deep_sleep_start();
       gpio_hold_dis(SIM_GPIO); // Release the GPIO hold
@@ -386,8 +386,8 @@ void app_main(void) {
 
       // Enter deep sleep
       esp_sleep_enable_timer_wakeup(
-          (uint64_t)LOW_VOLTAGE_SLEEP_TIME * 1000 *
-          1000); // Wake up after LOW_VOLTAGE_SLEEP_TIME seconds
+          (uint64_t)LOW_VOLTAGE_SLEEP_US); // Wake up after
+                                           // LOW_VOLTAGE_SLEEP_TIME seconds
       esp_deep_sleep_start();
     }
   }
