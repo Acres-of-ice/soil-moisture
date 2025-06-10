@@ -259,21 +259,6 @@ menu "Drip Timer Configuration"
 			Set the minute when the forced drain time ends.
 endmenu
 
-# config ENABLE_RESET_SENSOR_CONFIG
-#   bool "Enable Reset Sensor Configuration"
-#   default false
-#
-# menu "Reset Time Configuration"
-# 	visible if ENABLE_RESET_SENSOR_CONFIG
-#
-# 	config RESET_HOUR
-# 		int "Reset hour (0-23)"
-# 		default 0
-# 		range 0 23
-# 		help
-# 			Set the hour to reset the sensor readings (24-hour format).
-# endmenu
-
 config ENABLE_TIME_CONFIG
     bool "Enable Timeout Configuration"
     default false
@@ -353,13 +338,14 @@ menu "Time Configuration"
         help
             Set the interval in seconds between sensor readings.
 
-    config SMS_CHECK_M
-        int "SMS Check Interval (minutes)"
-        default 1 if SITE_TEST
-        default 10
-        range 1 60
+    config LOW_VOLTAGE_SLEEP_M
+        int "Low Voltage sleep"
+        default 5 if SITE_TEST
+        default 60
+        range 1 600
         help
             Set the interval in minutes to check for new data to send via SMS.
+
 endmenu
 
 config ENABLE_SIMULATION_MODE
