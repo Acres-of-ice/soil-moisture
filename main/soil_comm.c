@@ -1867,147 +1867,144 @@ void espnow_discovery_task(void *pvParameters) {
         ESP_LOGW(TAG, "Plot %d: No valve controller found", plot);
       }
     }
-    else {
-      ESP_LOGE(TAG, "Device initialization failed, resuming tasks anyway to "
-                    "prevent deadlock");
-      // Resume tasks even on failure to prevent permanent suspension
-      for (int i = 0; i < num_tasks_to_suspend; i++) {
-        if (task_was_suspended[i] && tasks_to_suspend[i] != NULL) {
-          eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
-          if (task_state == eSuspended) {
-            vTaskResume(tasks_to_suspend[i]);
-            ESP_LOGI(TAG, "Emergency resumed task %d", i);
-          }
+  } else {
+    ESP_LOGE(TAG, "Device initialization failed, resuming tasks anyway to "
+                  "prevent deadlock");
+    // Resume tasks even on failure to prevent permanent suspension
+    for (int i = 0; i < num_tasks_to_suspend; i++) {
+      if (task_was_suspended[i] && tasks_to_suspend[i] != NULL) {
+        eTaskState task_state = eTaskGetState(tasks_to_suspend[i]);
+        if (task_state == eSuspended) {
+          vTaskResume(tasks_to_suspend[i]);
+          ESP_LOGI(TAG, "Emergency resumed task %d", i);
         }
       }
     }
-
-    ESP_LOGI(TAG, "ESP-NOW discovery task completed");
-
-    // Task completed, delete itself
-    vTaskDelete(NULL);
   }
 
-  /**
-   * @brief Check if NVS has valid device-to-MAC mappings
-   *
-   * @return bool true if valid mappings exist, false otherwise
-   */
-  bool nvs_has_valid_mappings(void) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-    bool result = false;
+  ESP_LOGI(TAG, "ESP-NOW discovery task completed");
 
-    // Open NVS namespace
-    err = nvs_open(NVS_MAPPING_NAMESPACE, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-      ESP_LOGW(TAG, "NVS namespace not found: %s", esp_err_to_name(err));
-      return false;
-    }
+  // Task completed, delete itself
+  vTaskDelete(NULL);
+}
 
-    // Check if the count key exists and has a value > 0
-    uint8_t count = 0;
-    err = nvs_get_u8(nvs_handle, NVS_MAPPING_COUNT_KEY, &count);
-    if (err == ESP_OK && count > 0) {
-      result = true;
-      ESP_LOGI(TAG, "Found %d device mappings in NVS", count);
-    } else {
-      ESP_LOGI(TAG, "No valid device mappings in NVS: %s",
-               err != ESP_OK ? esp_err_to_name(err) : "count is 0");
-    }
+/**
+ * @brief Check if NVS has valid device-to-MAC mappings
+ *
+ * @return bool true if valid mappings exist, false otherwise
+ */
+bool nvs_has_valid_mappings(void) {
+  nvs_handle_t nvs_handle;
+  esp_err_t err;
+  bool result = false;
 
-    // Close NVS
-    nvs_close(nvs_handle);
-    return result;
+  // Open NVS namespace
+  err = nvs_open(NVS_MAPPING_NAMESPACE, NVS_READONLY, &nvs_handle);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "NVS namespace not found: %s", esp_err_to_name(err));
+    return false;
   }
 
-  void vTaskESPNOW(void *pvParameters) {
-    comm_t message = {0};
+  // Check if the count key exists and has a value > 0
+  uint8_t count = 0;
+  err = nvs_get_u8(nvs_handle, NVS_MAPPING_COUNT_KEY, &count);
+  if (err == ESP_OK && count > 0) {
+    result = true;
+    ESP_LOGI(TAG, "Found %d device mappings in NVS", count);
+  } else {
+    ESP_LOGI(TAG, "No valid device mappings in NVS: %s",
+             err != ESP_OK ? esp_err_to_name(err) : "count is 0");
+  }
 
-    // Initialize message queue if not already done
+  // Close NVS
+  nvs_close(nvs_handle);
+  return result;
+}
+
+void vTaskESPNOW(void *pvParameters) {
+  comm_t message = {0};
+
+  // Initialize message queue if not already done
+  if (message_queue == NULL) {
+    message_queue = xQueueCreate(20, sizeof(comm_t));
     if (message_queue == NULL) {
-      message_queue = xQueueCreate(20, sizeof(comm_t));
-      if (message_queue == NULL) {
-        ESP_LOGE(TAG, "Failed to create message queue");
-        vTaskDelete(NULL);
-        return;
-      }
-    }
-
-    while (1) {
-      // Check stack space
-      if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
-        ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
-      }
-
-      // Handle outgoing messages from queue
-      if (xQueueReceive(message_queue, &message, pdMS_TO_TICKS(100)) ==
-          pdTRUE) {
-        // Get MAC address for the destination
-        uint8_t dest_mac[ESP_NOW_ETH_ALEN];
-        get_mac_for_device(message.address, dest_mac);
-
-        // Check if the MAC is valid (not all zeros)
-        bool valid_mac = false;
-        for (int i = 0; i < ESP_NOW_ETH_ALEN; i++) {
-          if (dest_mac[i] != 0) {
-            valid_mac = true;
-            break;
-          }
-        }
-
-        if (!valid_mac) {
-          ESP_LOGE(TAG, "Cannot send to device 0x%02X: No valid MAC mapping",
-                   message.address);
-          continue; // Skip this message
-        }
-
-        // Check if peer is authenticated
-        if (!espnow_is_authenticated(dest_mac)) {
-          ESP_LOGW(TAG, "Peer " MACSTR " not authenticated, authenticating...",
-                   MAC2STR(dest_mac));
-          espnow_authenticate_peer(dest_mac);
-
-          // Give a little time for authentication to complete
-          vTaskDelay(pdMS_TO_TICKS(50));
-
-          // If still not authenticated after attempt, log and continue with
-          // send anyway
-          if (!espnow_is_authenticated(dest_mac)) {
-            ESP_LOGW(TAG, "Authentication pending for " MACSTR,
-                     MAC2STR(dest_mac));
-          }
-        }
-
-        // Serialize the message to a buffer
-        size_t buffer_size = sizeof(comm_t) + 1; // +1 for command type byte
-        uint8_t *buffer = malloc(buffer_size);
-        if (buffer == NULL) {
-          ESP_LOGE(TAG, "Failed to allocate buffer for message");
-          continue;
-        }
-
-        // Serialize the message directly into the buffer
-        serialize_message(&message, buffer);
-        ESP_LOGD(TAG,
-                 "Sending command 0x%02X to " MACSTR " (device 0x%02X), seq %d",
-                 message.command, MAC2STR(dest_mac), message.address,
-                 message.seq_num);
-
-        esp_err_t result = espnow_send(dest_mac, buffer, buffer_size);
-        if (result != ESP_OK) {
-          ESP_LOGE(TAG, "Failed to send ESP-NOW message: %s",
-                   esp_err_to_name(result));
-        } else {
-          ESP_LOGD(
-              TAG,
-              "Sent packet: address 0x%02X, command 0x%02X, seq %d, retry %d",
-              message.address, message.command, message.seq_num,
-              message.retries);
-        }
-
-        free(buffer);
-      }
-      vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
+      ESP_LOGE(TAG, "Failed to create message queue");
+      vTaskDelete(NULL);
+      return;
     }
   }
+
+  while (1) {
+    // Check stack space
+    if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+      ESP_LOGE(TAG, "Low stack: %d", uxTaskGetStackHighWaterMark(NULL));
+    }
+
+    // Handle outgoing messages from queue
+    if (xQueueReceive(message_queue, &message, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // Get MAC address for the destination
+      uint8_t dest_mac[ESP_NOW_ETH_ALEN];
+      get_mac_for_device(message.address, dest_mac);
+
+      // Check if the MAC is valid (not all zeros)
+      bool valid_mac = false;
+      for (int i = 0; i < ESP_NOW_ETH_ALEN; i++) {
+        if (dest_mac[i] != 0) {
+          valid_mac = true;
+          break;
+        }
+      }
+
+      if (!valid_mac) {
+        ESP_LOGE(TAG, "Cannot send to device 0x%02X: No valid MAC mapping",
+                 message.address);
+        continue; // Skip this message
+      }
+
+      // Check if peer is authenticated
+      if (!espnow_is_authenticated(dest_mac)) {
+        ESP_LOGW(TAG, "Peer " MACSTR " not authenticated, authenticating...",
+                 MAC2STR(dest_mac));
+        espnow_authenticate_peer(dest_mac);
+
+        // Give a little time for authentication to complete
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        // If still not authenticated after attempt, log and continue with
+        // send anyway
+        if (!espnow_is_authenticated(dest_mac)) {
+          ESP_LOGW(TAG, "Authentication pending for " MACSTR,
+                   MAC2STR(dest_mac));
+        }
+      }
+
+      // Serialize the message to a buffer
+      size_t buffer_size = sizeof(comm_t) + 1; // +1 for command type byte
+      uint8_t *buffer = malloc(buffer_size);
+      if (buffer == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate buffer for message");
+        continue;
+      }
+
+      // Serialize the message directly into the buffer
+      serialize_message(&message, buffer);
+      ESP_LOGD(
+          TAG, "Sending command 0x%02X to " MACSTR " (device 0x%02X), seq %d",
+          message.command, MAC2STR(dest_mac), message.address, message.seq_num);
+
+      esp_err_t result = espnow_send(dest_mac, buffer, buffer_size);
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send ESP-NOW message: %s",
+                 esp_err_to_name(result));
+      } else {
+        ESP_LOGD(
+            TAG,
+            "Sent packet: address 0x%02X, command 0x%02X, seq %d, retry %d",
+            message.address, message.command, message.seq_num, message.retries);
+      }
+
+      free(buffer);
+    }
+    vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
+  }
+}

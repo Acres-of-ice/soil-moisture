@@ -20,7 +20,6 @@ sensor_readings_t readings = {0};
 static adc_oneshot_unit_handle_t adc_handle = NULL;
 static adc_cali_handle_t adc_cali_handle = NULL;
 static bool adc_cali_initialized = false;
-static float current_voltage = 0.0f;
 
 // Initialization Functions
 void sensors_init(void) {
@@ -559,37 +558,6 @@ void get_sensor_readings(sensor_readings_t *output_readings) {
   }
 }
 
-// Random sensor value generation functions
-static float generate_random_temperature(void) {
-  // Generate temperature between 15°C and 45°C
-  return 15.0f + ((float)rand() / RAND_MAX) * 30.0f;
-}
-
-static float generate_random_humidity(void) {
-  // Generate humidity between 20% and 95%
-  return 20.0f + ((float)rand() / RAND_MAX) * 75.0f;
-}
-
-static float generate_random_pressure(void) {
-  // Generate pressure between 0.5 and 4.0 bar
-  return 0.5f + ((float)rand() / RAND_MAX) * 3.5f;
-}
-
-static float generate_random_water_temp(void) {
-  // Generate water temperature between 10°C and 40°C
-  return 10.0f + ((float)rand() / RAND_MAX) * 30.0f;
-}
-
-static float generate_random_discharge(void) {
-  // Generate discharge between 0.2 and 5.0 l/s
-  return 0.2f + ((float)rand() / RAND_MAX) * 4.8f;
-}
-
-static float generate_random_voltage(void) {
-  // Generate voltage between 10.0V and 14.5V (typical 12V system range)
-  return 10.0f + ((float)rand() / RAND_MAX) * 4.5f;
-}
-
 // Updated set simulated values function with all sensor types
 void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
                           int battery_values[CONFIG_NUM_PLOTS], float temp,
@@ -743,7 +711,6 @@ void simulation_task(void *pvParameters) {
 
       // Wait for irrigation to start
       ESP_LOGI(TAG, "Waiting for irrigation to start...");
-      bool irrigation_started = false;
 
       // Wait for system to leave IDLE state
       while (getCurrentState() == STATE_IDLE) {

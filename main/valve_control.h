@@ -25,6 +25,7 @@ typedef enum {
 void update_moisture_readings(int a);
 bool isStateTimedOut(ValveState state);
 void updateValveState(void *pvParameters);
+uint8_t get_valve_controller_address(int plot_number);
 ValveState getCurrentState();
 void setCurrentState(ValveState newState);
 bool isTimeoutReached(TickType_t timeout);
