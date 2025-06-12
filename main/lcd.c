@@ -377,44 +377,6 @@ void update_lcd_row_one(const char *uptime_str, const sensor_readings_t *lcd_rea
     strncpy(second_part, counter_str, 7);
     second_part[7] = '\0';  // Ensure null termination
 
-
-    // // ✅ ENHANCED: Dynamic counter formatting with automatic spacing
-    // unsigned int Counter = (counter > 9999) ? 9999 : counter;  // Max 4 digits
-    // char counter_str[8];  // Increased size for safety
-    
-    // // Determine number of digits in counter
-    // int digits;
-    // if (Counter == 0) {
-    //     digits = 1;
-    // } else {
-    //     digits = 0;
-    //     unsigned int temp_counter = Counter;
-    //     while (temp_counter > 0) {
-    //         digits++;
-    //         temp_counter /= 10;
-    //     }
-    // }
-    
-    // char spacing[5] = "";  // Max 4 spaces + null terminator
-    // int num_spaces = digits - 1;
-    
-    // // Generate the required number of spaces
-    // for (int i = 0; i < num_spaces && i < 4; i++) {
-    //     spacing[i] = ' ';
-    // }
-    // spacing[num_spaces] = '\0';  // Null terminate
-    
-    // // Build the counter string with calculated spacing
-    // snprintf(counter_str, sizeof(counter_str), "C%s%u", spacing, Counter);
-
-    // // First part: uptime (positions 0-7, skip position 8)
-    // strncpy(first_part, uptime_str, 8);
-    // first_part[8] = '\0';  // Ensure null termination
-
-    // // Second part: counter (positions 9-15)
-    // strncpy(second_part, counter_str, 7);
-    // second_part[7] = '\0';  // Ensure null termination
-
     // Take mutex for thread-safe LCD access
     if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         // Write first part (uptime) - positions 0-7
