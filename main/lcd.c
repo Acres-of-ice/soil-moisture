@@ -265,73 +265,179 @@ double get_uptime_days(void) {
          (1000000.0 * 60 * 60 * 24); // Convert microseconds to days
 }
 
-void update_lcd_row_one(const char *uptime_str,
-                        const sensor_readings_t *lcd_readings) {
-  if (!lcd_device_ready) {
-    ESP_LOGD(TAG, "LCD device not ready. Skipping update_lcd_row_one.");
-    return;
-  }
+// void update_lcd_row_one(const char *uptime_str,
+//                         const sensor_readings_t *lcd_readings) {
+//   if (!lcd_device_ready) {
+//     ESP_LOGD(TAG, "LCD device not ready. Skipping update_lcd_row_one.");
+//     return;
+//   }
 
-  // char display_str[16] = {0};
-  char first_part[9] = {0};
-  char second_part[7] = {0};
+//   // char display_str[16] = {0};
+//   char first_part[9] = {0};
+//   char second_part[7] = {0};
 
-  // Temperature formatting
-  int temp;
-  if (lcd_readings->temperature < 0) {
-    temp = (int)(lcd_readings->temperature -
-                 0.5); // Subtract 0.5 for negative numbers
-  } else {
-    temp =
-        (int)(lcd_readings->temperature + 0.5); // Add 0.5 for positive numbers
-  }
-  temp = (temp > 999) ? 999 : (temp < -99 ? -99 : temp);
-  char temp_str[5];
-  snprintf(temp_str, sizeof(temp_str), temp < 0 ? "%d" : "%3d", temp);
-  // Add 'C' after the number
-  strncat(temp_str, "C", sizeof(temp_str) - strlen(temp_str) - 1);
+//   // Temperature formatting
+//   int temp;
+//   if (lcd_readings->temperature < 0) {
+//     temp = (int)(lcd_readings->temperature -
+//                  0.5); // Subtract 0.5 for negative numbers
+//   } else {
+//     temp =
+//         (int)(lcd_readings->temperature + 0.5); // Add 0.5 for positive numbers
+//   }
+//   temp = (temp > 999) ? 999 : (temp < -99 ? -99 : temp);
+//   char temp_str[5];
+//   snprintf(temp_str, sizeof(temp_str), temp < 0 ? "%d" : "%3d", temp);
+//   // Add 'C' after the number
+//   strncat(temp_str, "C", sizeof(temp_str) - strlen(temp_str) - 1);
 
-  // Pressure formatting with validation and float display
-  int press = (int)(lcd_readings->pressure + 0.5); // Added: Rounding
-  press = (press < 0) ? 0 : (press > 10) ? 10 : press;
-  char press_str[5];
-  // Display pressure with one decimal place
-  snprintf(press_str, sizeof(press_str), "%3dP", press);
-  // snprintf(press_str, sizeof(press_str), "%3.1f", press);
+//   // Pressure formatting with validation and float display
+//   int press = (int)(lcd_readings->pressure + 0.5); // Added: Rounding
+//   press = (press < 0) ? 0 : (press > 10) ? 10 : press;
+//   char press_str[5];
+//   // Display pressure with one decimal place
+//   snprintf(press_str, sizeof(press_str), "%3dP", press);
+//   // snprintf(press_str, sizeof(press_str), "%3.1f", press);
 
-  // int soilA = (int)(lcd_readings->soil_A);
-  // char soilA_str[5];
-  // snprintf(soilA_str, sizeof(soilA_str), "%3u", soilA);
-  //
-  // int soilB = (int)(lcd_readings->soil_B);
-  // char soilB_str[5];
-  // snprintf(soilB_str, sizeof(soilB_str), "%3u", soilB);
+//   // int soilA = (int)(lcd_readings->soil_A);
+//   // char soilA_str[5];
+//   // snprintf(soilA_str, sizeof(soilA_str), "%3u", soilA);
+//   //
+//   // int soilB = (int)(lcd_readings->soil_B);
+//   // char soilB_str[5];
+//   // snprintf(soilB_str, sizeof(soilB_str), "%3u", soilB);
 
-  // Counter formatting
-  unsigned int Counter = (counter > 999) ? 999 : counter;
-  char counter_str[5];
-  snprintf(counter_str, sizeof(counter_str), "%3u", Counter);
+//   // Counter formatting
+//   unsigned int Counter = (counter > 999) ? 999 : counter;
+//   char counter_str[5];
+//   snprintf(counter_str, sizeof(counter_str), "C%3u", Counter);
 
-  // Manually construct the strings for before and after position 8
-  strncpy(first_part, uptime_str, 4);
-  // strncpy(first_part + 4, soilA_str, 4); // Copy first 8 characters
 
-  // // Second part starts after position 8
-  // strncpy(second_part, soilB_str, 4);
-  strncpy(second_part + 4, counter_str, 3);
+//   // Manually construct the strings for before and after position 8
+//   strncpy(first_part, uptime_str, 4);
+//   // strncpy(first_part + 4, soilA_str, 4); // Copy first 8 characters
 
-  // Write first 8 characters
-  lcd_put_cur(0, 0);
-  lcd_send_string(first_part);
-  // Skip position 8 and write the rest
-  lcd_put_cur(0, 9); // Changed from 8 to 9 to preserve position 8
-  lcd_send_string(second_part);
+//   // // Second part starts after position 8
+//   // strncpy(second_part, soilB_str, 4);
+//  // strncpy(second_part + 4, counter_str, 3);
+//    strncpy(second_part, counter_str, 7); 
 
-  lcd_put_cur(SCROLL_ROW, 0);
+//   // Write first 8 characters
+//   lcd_put_cur(0, 0);
+//   lcd_send_string(first_part);
+//   // Skip position 8 and write the rest
+//   lcd_put_cur(0, 9); // Changed from 8 to 9 to preserve position 8
+//   lcd_send_string(second_part);
 
-  // ESP_LOGD(TAG, "LCD Row 1: %s (Uptime: %s, soilB: %s, SoilB: %s, Counter:
-  // %s)",
-  //          display_str, uptime_str, soilA_str, soilB_str, counter_str);
+//   lcd_put_cur(SCROLL_ROW, 0);
+
+//   // ESP_LOGD(TAG, "LCD Row 1: %s (Uptime: %s, soilB: %s, SoilB: %s, Counter:
+//   // %s)",
+//   //          display_str, uptime_str, soilA_str, soilB_str, counter_str);
+// }
+
+void update_lcd_row_one(const char *uptime_str, const sensor_readings_t *lcd_readings) {
+    if (!lcd_device_ready) {
+        ESP_LOGD(TAG, "LCD device not ready. Skipping update_lcd_row_one.");
+        return;
+    }
+
+    char first_part[9] = {0};   // For uptime (positions 0-7)
+    char second_part[8] = {0};  // For counter (positions 9-15)
+
+    // Temperature formatting (if you want to use it later)
+    int temp;
+    if (lcd_readings->temperature < 0) {
+        temp = (int)(lcd_readings->temperature - 0.5);
+    } else {
+        temp = (int)(lcd_readings->temperature + 0.5);
+    }
+    temp = (temp > 999) ? 999 : (temp < -99 ? -99 : temp);
+    char temp_str[5];
+    snprintf(temp_str, sizeof(temp_str), temp < 0 ? "%d" : "%3d", temp);
+    strncat(temp_str, "C", sizeof(temp_str) - strlen(temp_str) - 1);
+
+    // Pressure formatting (if you want to use it later)
+    int press = (int)(lcd_readings->pressure + 0.5);
+    press = (press < 0) ? 0 : (press > 10) ? 10 : press;
+    char press_str[5];
+    snprintf(press_str, sizeof(press_str), "%3dP", press);
+
+    unsigned int Counter = (counter > 9999) ? 9999 : counter;  // Max 4 digits
+    char counter_str[8];  // Increased size for safety
+    
+    // Simple format: C followed directly by the number
+    snprintf(counter_str, sizeof(counter_str), "C%u", Counter);
+
+    // First part: uptime (positions 0-7, skip position 8)
+    strncpy(first_part, uptime_str, 8);
+    first_part[8] = '\0';  // Ensure null termination
+
+    // Second part: counter (positions 9-15)
+    strncpy(second_part, counter_str, 7);
+    second_part[7] = '\0';  // Ensure null termination
+
+
+    // // ✅ ENHANCED: Dynamic counter formatting with automatic spacing
+    // unsigned int Counter = (counter > 9999) ? 9999 : counter;  // Max 4 digits
+    // char counter_str[8];  // Increased size for safety
+    
+    // // Determine number of digits in counter
+    // int digits;
+    // if (Counter == 0) {
+    //     digits = 1;
+    // } else {
+    //     digits = 0;
+    //     unsigned int temp_counter = Counter;
+    //     while (temp_counter > 0) {
+    //         digits++;
+    //         temp_counter /= 10;
+    //     }
+    // }
+    
+    // char spacing[5] = "";  // Max 4 spaces + null terminator
+    // int num_spaces = digits - 1;
+    
+    // // Generate the required number of spaces
+    // for (int i = 0; i < num_spaces && i < 4; i++) {
+    //     spacing[i] = ' ';
+    // }
+    // spacing[num_spaces] = '\0';  // Null terminate
+    
+    // // Build the counter string with calculated spacing
+    // snprintf(counter_str, sizeof(counter_str), "C%s%u", spacing, Counter);
+
+    // // First part: uptime (positions 0-7, skip position 8)
+    // strncpy(first_part, uptime_str, 8);
+    // first_part[8] = '\0';  // Ensure null termination
+
+    // // Second part: counter (positions 9-15)
+    // strncpy(second_part, counter_str, 7);
+    // second_part[7] = '\0';  // Ensure null termination
+
+    // Take mutex for thread-safe LCD access
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        // Write first part (uptime) - positions 0-7
+        lcd_put_cur(0, 0);
+        lcd_send_string(first_part);
+        
+        // Skip position 8 and write counter - positions 9-15
+        lcd_put_cur(0, 9);
+        lcd_send_string(second_part);
+        
+        xSemaphoreGive(i2c_mutex);
+    } else {
+        ESP_LOGE(TAG, "Failed to take i2c_mutex for LCD update");
+    }
+
+    // Move cursor to scroll row
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        lcd_put_cur(SCROLL_ROW, 0);
+        xSemaphoreGive(i2c_mutex);
+    }
+
+    ESP_LOGD(TAG, "LCD Row 1: '%s' '%s' (Uptime: %s, Counter: %u)", 
+             first_part, second_part, uptime_str, Counter);
 }
 
 void send_daily_status_sms(double uptime_days) {

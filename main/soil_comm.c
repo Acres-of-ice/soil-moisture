@@ -726,7 +726,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
   // Log signal quality if needed
   if (rssi < -75) {
-    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+    ESP_LOGW(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
     update_status_message("Poor signal: RSSI: %d dBm", rssi);
   }
 
@@ -764,11 +764,6 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
     ESP_LOGD(TAG, "Signal Strength: %d dBm", recv_data.rssi);
     ESP_LOGD(TAG, "==========================\n");
 
-    if (recv_data.battery == -99) {
-      ESP_LOGE("SoilBattery", " Node Address: 0x%02X (%s) Entering deep sleep",
-               recv_data.node_address, get_pcb_name(recv_data.node_address));
-    }
-
     // Update sensor readings in the array-based system
     // Take mutex to safely update readings
     if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -790,7 +785,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
         soil_readings.soil[plot_index] = recv_data.soil;
         soil_readings.battery[plot_index] = recv_data.battery;
 
-        ESP_LOGI(TAG, "Updated plot %d (0x%02X): Soil=%d%%, Battery=%d%%",
+        ESP_LOGD(TAG, "Updated plot %d (0x%02X): Soil=%d%%, Battery=%d%%",
                  plot_index + 1, recv_data.node_address, recv_data.soil,
                  recv_data.battery);
       } else {
@@ -966,7 +961,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                valve_addr);
       return valve_addr;
     } else {
-      ESP_LOGE(TAG, "Invalid valve plot number: %d (valid range: 1-%d)",
+      ESP_LOGW(TAG, "Invalid valve plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -980,7 +975,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                plot_number, solenoid_addr);
       return solenoid_addr;
     } else {
-      ESP_LOGE(TAG, "Invalid solenoid plot number: %d (valid range: 1-%d)",
+      ESP_LOGW(TAG, "Invalid solenoid plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -994,7 +989,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                soil_addr);
       return soil_addr;
     } else {
-      ESP_LOGE(TAG, "Invalid soil plot number: %d (valid range: 1-%d)",
+      ESP_LOGW(TAG, "Invalid soil plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -1009,7 +1004,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                plot_number, weather_addr);
       return weather_addr;
     } else {
-      ESP_LOGE(TAG, "Invalid weather station number: %d (valid range: 1-8)",
+      ESP_LOGW(TAG, "Invalid weather station number: %d (valid range: 1-8)",
                plot_number);
     }
   }
