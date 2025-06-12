@@ -966,7 +966,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                valve_addr);
       return valve_addr;
     } else {
-      ESP_LOGW(TAG, "Invalid valve plot number: %d (valid range: 1-%d)",
+      ESP_LOGE(TAG, "Invalid valve plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -980,7 +980,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                plot_number, solenoid_addr);
       return solenoid_addr;
     } else {
-      ESP_LOGW(TAG, "Invalid solenoid plot number: %d (valid range: 1-%d)",
+      ESP_LOGE(TAG, "Invalid solenoid plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -994,7 +994,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                soil_addr);
       return soil_addr;
     } else {
-      ESP_LOGW(TAG, "Invalid soil plot number: %d (valid range: 1-%d)",
+      ESP_LOGE(TAG, "Invalid soil plot number: %d (valid range: 1-%d)",
                plot_number, CONFIG_NUM_PLOTS);
     }
   }
@@ -1009,7 +1009,7 @@ uint8_t get_device_from_pcb_name(const char *pcb_name) {
                plot_number, weather_addr);
       return weather_addr;
     } else {
-      ESP_LOGW(TAG, "Invalid weather station number: %d (valid range: 1-8)",
+      ESP_LOGE(TAG, "Invalid weather station number: %d (valid range: 1-8)",
                plot_number);
     }
   }
