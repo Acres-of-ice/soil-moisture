@@ -169,7 +169,8 @@ void app_main(void) {
   // esp_log_level_set("ESPNOW", ESP_LOG_NONE);
   // esp_log_level_set("espnow_lib", ESP_LOG_NONE);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
-  // esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
+  esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
+  esp_log_level_set("MQTT_CONFIG", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
@@ -301,9 +302,6 @@ void app_main(void) {
     gpio_set_level(SIM_GPIO, 1);
   }
 
-  notify("v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
-         get_pcb_name(g_nodeAddress), g_plot_number);
-
   xTaskCreatePinnedToCore(button_task, "Button task", BUTTON_TASK_STACK_SIZE,
                           &g_nodeAddress, BUTTON_TASK_PRIORITY,
                           &buttonTaskHandle, BUTTON_TASK_CORE_ID);
@@ -324,6 +322,9 @@ void app_main(void) {
                             NULL, LCD_TASK_PRIORITY, NULL, LCD_TASK_CORE_ID);
     vTaskDelay(pdMS_TO_TICKS(100));
   }
+
+  notify("v%s %s %s (Plot %d)", PROJECT_VERSION, CONFIG_SITE_NAME,
+         get_pcb_name(g_nodeAddress), g_plot_number);
 
   if (site_config.has_valve) {
     xTaskCreatePinnedToCore(vTaskESPNOW, "Master ESPNOW", COMM_TASK_STACK_SIZE,

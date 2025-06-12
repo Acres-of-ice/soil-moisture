@@ -21,6 +21,7 @@ if(CONFIG_MASTER)
     list(APPEND SRCS_LIST "http_server.c")
     list(APPEND SRCS_LIST "hex_data.c")
     list(APPEND SRCS_LIST "mqtt_data.c")
+    list(APPEND SRCS_LIST "mqtt_config.c")
     list(APPEND SRCS_LIST "mqtt_notify.c")
 endif()
 

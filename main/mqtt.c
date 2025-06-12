@@ -1,4 +1,5 @@
 #include "mqtt.h"
+#include "mqtt_config.h"
 #include "ota.h"
 #include "rtc.h"
 #include "sdkconfig.h"
@@ -14,6 +15,8 @@ char ack_topic[64];
 char ota_topic[64];
 char status_topic[64];
 char error_topic[64];
+char config_topic[64];
+char config_response_topic[64];
 
 static int mqtt_reconnect_attempts = 0;
 static TickType_t last_reconnect_attempt = 0;
@@ -79,6 +82,10 @@ esp_err_t iMQTT_Init(void) {
            CONFIG_SITE_NAME);
   snprintf(status_topic, sizeof(status_topic), MQTT_STATUS_TOPIC_FORMAT,
            CONFIG_SITE_NAME);
+  snprintf(config_topic, sizeof(config_topic), "drip/%s/config",
+           CONFIG_SITE_NAME);
+  snprintf(config_response_topic, sizeof(config_response_topic),
+           "drip/%s/config/response", CONFIG_SITE_NAME);
 
   ESP_LOGD(TAG, "MQTT client started successfully");
   return ESP_OK;
@@ -139,6 +146,13 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
       ESP_LOGI(TAG, "Topic %s subscription sent", command_topic);
     } else {
       ESP_LOGW(TAG, "Failed to subscribe to command topic");
+    }
+
+    msg_id = esp_mqtt_client_subscribe(client, config_topic, 1);
+    if (msg_id >= 0) {
+      ESP_LOGI(TAG, "Topic %s subscription sent", config_topic);
+    } else {
+      ESP_LOGW(TAG, "Failed to subscribe to config topic");
     }
 
     char status_msg[256];
@@ -206,8 +220,17 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
           ESP_LOGE(TAG, "OTA initiation failed: %s",
                    esp_err_to_name(ota_result));
         }
+
       } else {
         ESP_LOGD(TAG, "Unknown command: %s", data);
+      }
+    } else if (strstr(topic, config_topic) != NULL) {
+      ESP_LOGI(TAG, "Config message received: %s", data);
+      // Route to config handlers (will be implemented in next task)
+      if (strcmp(data, "status") == 0) {
+        handle_config_status(client);
+      } else {
+        handle_config_update(client, data);
       }
     } else {
       ESP_LOGD(TAG, "Unhandled topic: %s", topic);
