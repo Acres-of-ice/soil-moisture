@@ -308,14 +308,4 @@ static const test_case_t test_cases[] = {
 
 // Calculate number of test cases automatically
 #define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_cases[0]))
-
-// Add this helper function to simulate MQTT reset command during test case 14
-void simulate_mqtt_reset_during_test(int test_case_number) {
-  if (test_case_number == 13) { // Before test case 14 (0-based indexing)
-    ESP_LOGI("Simulation", "🔧 Simulating MQTT 'reset error' command");
-    reset_all_plot_error_tracking();
-    ESP_LOGI("Simulation", "✅ All plots re-enabled via simulated MQTT reset");
-  }
-}
-
 #endif // SENSOR_H
