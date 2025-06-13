@@ -61,13 +61,13 @@ const char *valveStateToString(ValveState state) {
       uint8_t addr = get_valve_controller_address(current_plot);
       uint8_t device_type = GET_DEVICE_TYPE(addr);
       if (device_type == DEVICE_TYPE_VALVE) {
-        return current_plot == 0   ? "Valve 1 Open"
-               : current_plot == 1 ? "Valve 2 Open"
-                                   : "Valve Open";
+        return current_plot == 0   ? "V1 On"
+               : current_plot == 1 ? "V2 On"
+                                   : "V On";
       } else if (device_type == DEVICE_TYPE_SOLENOID) {
-        return current_plot == 0   ? "Solenoid 1 Open"
-               : current_plot == 1 ? "Solenoid 2 Open"
-                                   : "Solenoid Open";
+        return current_plot == 0   ? "S1 On"
+               : current_plot == 1 ? "S2 On"
+                                   : "S On";
       }
     }
     return "Controller Open";
@@ -87,13 +87,13 @@ const char *valveStateToString(ValveState state) {
       uint8_t addr = get_valve_controller_address(current_plot);
       uint8_t device_type = GET_DEVICE_TYPE(addr);
       if (device_type == DEVICE_TYPE_VALVE) {
-        return current_plot == 0   ? "Valve 1 Close"
-               : current_plot == 1 ? "Valve 2 Close"
-                                   : "Valve Close";
+        return current_plot == 0   ? "V1 Off"
+               : current_plot == 1 ? "V2 Off"
+                                   : "V Off";
       } else if (device_type == DEVICE_TYPE_SOLENOID) {
-        return current_plot == 0   ? "Solenoid 1 Close"
-               : current_plot == 1 ? "Solenoid 2 Close"
-                                   : "Solenoid Close";
+        return current_plot == 0   ? "S1 Off"
+               : current_plot == 1 ? "S2 Off"
+                                   : "S Off";
       }
     }
     return "Controller Close";
@@ -891,7 +891,7 @@ void updateValveState(void *pvParameters) {
       break;
 
     case STATE_ERROR:
-      ESP_LOGE(TAG, "In ERROR state for plot %d", current_plot + 1);
+      ESP_LOGW(TAG, "In ERROR state for plot %d", current_plot + 1);
 
       // Check if we just entered error state (first time in this case)
       if (error_state_start_time == 0) {
@@ -900,9 +900,6 @@ void updateValveState(void *pvParameters) {
         // Mark irrigation as failed (not successful completion)
         irrigation_completed = false;
 
-        ESP_LOGE(TAG,
-                 "Entering ERROR state - initiating safe shutdown sequence");
-
         // Send error notification immediately
         if (strlen(current_error_condition.error_message) > 0) {
           ESP_LOGE(TAG, "ERROR DETAILS: %s",
@@ -910,8 +907,7 @@ void updateValveState(void *pvParameters) {
         } else {
           char fallback_msg[128];
           snprintf(fallback_msg, sizeof(fallback_msg),
-                   "Irrigation ERROR on Plot %d at %s", current_plot + 1,
-                   current_error_condition.timestamp);
+                   "Irrigation ERROR on Plot %d", current_plot + 1);
           ESP_LOGE(TAG, "ERROR: %s", fallback_msg);
         }
 
@@ -980,7 +976,6 @@ void updateValveState(void *pvParameters) {
     // Update the state if it has changed
     if (newState != getCurrentState()) {
       setCurrentState(newState);
-      notify(valveStateToString(newState));
     }
     vTaskDelay(pdMS_TO_TICKS(10)); // Short delay to prevent tight loop
   }
@@ -1005,8 +1000,8 @@ void setCurrentState(ValveState newState) {
       currentState = newState;
       stateStartTime = xTaskGetTickCount();
       xSemaphoreGive(stateMutex);
-      ESP_LOGI(TAG, "%s to %s", valveStateToString(oldState),
-               valveStateToString(newState));
+      notify("%s to %s", valveStateToString(oldState),
+             valveStateToString(newState));
     } else {
       xSemaphoreGive(stateMutex);
       ESP_LOGI(TAG, "State unchanged: %s", valveStateToString(currentState));

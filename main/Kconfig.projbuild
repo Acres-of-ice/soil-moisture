@@ -271,6 +271,7 @@ menu "Time Configuration"
 
     config STATE_TIMEOUT_M
         int "State machine timeout (minutes)"
+        default 5 if SITE_TEST
         default 60
         range 1 180
         help
@@ -278,6 +279,7 @@ menu "Time Configuration"
 
     config IRRIGATION_TIMEOUT_M
         int "Irrigation timeout (minutes)"
+        default 2 if SITE_TEST
         default 45
         range 1 60
         help
