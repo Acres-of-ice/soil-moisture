@@ -333,6 +333,7 @@ menu "Time Configuration"
 
     config ERROR_CHECK_DELAY_S
         int "Error check delay after pump start (seconds)"
+        default 3 if SITE_TEST
         default 60
         range 10 300
         help
@@ -397,8 +398,9 @@ menu "Error Detection Thresholds"
 
     config ERROR_VALIDATION_READINGS
         int "Number of consecutive readings to validate error"
+        default 1 if SITE_TEST
         default 5
-        range 3 10
+        range 1 10
         help
             Number of consecutive sensor readings that must meet error conditions
             before triggering error state. This prevents false positives from
@@ -406,6 +408,7 @@ menu "Error Detection Thresholds"
 
     config MAX_CONSECUTIVE_ERRORS
         int "Maximum consecutive errors per plot"
+        default 1 if SITE_TEST
         default 3
         range 1 10
         help

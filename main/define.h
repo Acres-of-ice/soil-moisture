@@ -21,6 +21,7 @@ extern uint8_t g_plot_number;
 extern bool gsm_init_success;
 extern bool errorConditionMet;
 extern uint8_t sequence_number;
+extern bool irrigation_completed;
 
 //// Device Type Constants (High Nibble)
 #define DEVICE_TYPE_MASTER 0x00

@@ -627,228 +627,40 @@ void set_simulated_values(int soil_values[CONFIG_NUM_PLOTS],
   }
 }
 
-// Combined simulation with simple moisture alternation
-// void simulation_task(void *pvParameters) {
-//   if (readings_mutex == NULL) {
-//     readings_mutex = xSemaphoreCreateMutex();
-//   }
-
-//   const char *TAG = "Simulation";
-//   int irrigation_cycles_detected = 0;
-
-//   ESP_LOGI(TAG, "Starting simulation with simple moisture alternation");
-//   ESP_LOGI(TAG, "Initial counter: %d", counter);
-//   ESP_LOGI(TAG, "Total test cases: %d", NUM_TEST_CASES);
-
-//   for (int test_idx = 0; test_idx < NUM_TEST_CASES; test_idx++) {
-//     const test_case_t *test = &test_cases[test_idx];
-
-//     ESP_LOGI(TAG, "\n=== Test Case %d ===", test_idx + 1);
-//     ESP_LOGI(TAG, "Description: %s", test->description);
-
-//     // Wait for IDLE state before starting
-//     ESP_LOGI(TAG, "Waiting for IDLE state...");
-//     while (getCurrentState() != STATE_IDLE) {
-//       ESP_LOGD(TAG, "Current state: %s", valveStateToString(getCurrentState()));
-//       vTaskDelay(pdMS_TO_TICKS(1000));
-//     }
-//     ESP_LOGI(TAG, "System ready in IDLE state");
-
-//     // Set initial test conditions
-//     int soil_values[CONFIG_NUM_PLOTS];
-//     int battery_values[CONFIG_NUM_PLOTS];
-
-//     for (int i = 0; i < CONFIG_NUM_PLOTS; i++) {
-//       if (i < 2) {
-//         soil_values[i] = test->initial_soil[i];
-//         battery_values[i] = test->battery[i];
-//       } else {
-//         soil_values[i] = CONFIG_PLOT_WET + 5; // Default well watered
-//         battery_values[i] = 85;               // Default good battery
-//       }
-//     }
-
-//     // Apply all sensor readings
-//     set_simulated_values(soil_values, battery_values, test->temperature,
-//                          test->humidity, test->pressure, test->water_temp,
-//                          test->discharge, test->voltage);
-
-//     // Log test conditions
-//     ESP_LOGI(TAG, "Test conditions:");
-//     ESP_LOGI(TAG, "  Soil: Plot1=%d%%, Plot2=%d%%", test->initial_soil[0],
-//              test->initial_soil[1]);
-//     ESP_LOGI(TAG, "  Battery: Plot1=%d%%, Plot2=%d%%", test->battery[0],
-//              test->battery[1]);
-//     ESP_LOGI(TAG, "  Environment: T=%.1f°C, H=%.1f%%, P=%.1fbar",
-//              test->temperature, test->humidity, test->pressure);
-//     ESP_LOGI(TAG, "  Water: T=%.1f°C, Flow=%.1fl/s, Voltage=%.1fV",
-//              test->water_temp, test->discharge, test->voltage);
-
-//     int starting_counter = counter;
-//     ESP_LOGI(TAG, "Starting counter: %d", starting_counter);
-
-//     // Determine if irrigation should happen and which plot
-//     bool should_irrigate = false;
-//     int expected_plot = -1;
-
-//     for (int i = 0; i < 2; i++) {
-//       if (test->initial_soil[i] < CONFIG_PLOT_DRY) {
-//         should_irrigate = true;
-//         expected_plot = i;
-//         break; // First dry plot wins (priority to lower numbers)
-//       }
-//     }
-
-//     ESP_LOGI(TAG, "Analysis: %s irrigation expected%s",
-//              should_irrigate ? "YES" : "NO",
-//              should_irrigate ? (expected_plot == 0 ? " (Plot 1)" : " (Plot 2)")
-//                              : "");
-
-//     if (should_irrigate) {
-//       ESP_LOGI(TAG, "Expected: Plot %d should be irrigated", expected_plot + 1);
-
-//       // Wait for irrigation to start
-//       ESP_LOGI(TAG, "Waiting for irrigation to start...");
-
-//       // Wait for system to leave IDLE state
-//       while (getCurrentState() == STATE_IDLE) {
-//         vTaskDelay(pdMS_TO_TICKS(500));
-//       }
-
-//       ESP_LOGI(TAG, "✓ Irrigation started - state: %s",
-//                valveStateToString(getCurrentState()));
-
-//       // Wait for IRR_START state
-//       ESP_LOGI(TAG, "Waiting for IRR_START state...");
-//       while (getCurrentState() != STATE_IRR_START) {
-//         ESP_LOGD(TAG, "Current state: %s",
-//                  valveStateToString(getCurrentState()));
-//         vTaskDelay(pdMS_TO_TICKS(500));
-//       }
-
-//       ESP_LOGI(TAG, "✓ Reached IRR_START - waiting 5 seconds then applying "
-//                     "final moisture");
-
-//       // Wait 5 seconds in IRR_START, then apply final moisture levels
-//       vTaskDelay(pdMS_TO_TICKS(5000));
-
-//       // Apply final soil moisture levels
-//       for (int i = 0; i < 2; i++) {
-//         soil_values[i] = test->final_soil[i];
-//       }
-
-//       set_simulated_values(soil_values, battery_values, test->temperature,
-//                            test->humidity, test->pressure, test->water_temp,
-//                            test->discharge, test->voltage);
-
-//       ESP_LOGI(TAG, "💧 Applied final moisture: Plot1=%d%%, Plot2=%d%%",
-//                test->final_soil[0], test->final_soil[1]);
-
-//       // Wait for irrigation to complete (return to IDLE)
-//       ESP_LOGI(TAG, "Waiting for irrigation cycle to complete...");
-
-//       ValveState last_state = STATE_IRR_START;
-//       while (getCurrentState() != STATE_IDLE) {
-//         ValveState current_state = getCurrentState();
-//         if (current_state != last_state) {
-//           ESP_LOGI(TAG, "State: %s → %s", valveStateToString(last_state),
-//                    valveStateToString(current_state));
-//           last_state = current_state;
-//         }
-//         vTaskDelay(pdMS_TO_TICKS(500));
-//       }
-
-//       ESP_LOGI(TAG, "✓ Irrigation completed - returned to IDLE");
-
-//       // Validate results
-//       int final_counter = counter;
-//       if (final_counter > starting_counter) {
-//         irrigation_cycles_detected++;
-//         ESP_LOGI(TAG, "✅ SUCCESS: Counter incremented %d → %d (total: %d)",
-//                  starting_counter, final_counter, irrigation_cycles_detected);
-//       } else {
-//         ESP_LOGE(TAG, "❌ FAILED: Counter did not increment (still %d)",
-//                  final_counter);
-//       }
-
-//     } else {
-//       // Test case expects no irrigation
-//       ESP_LOGI(TAG, "Expected: No irrigation should occur");
-//       ESP_LOGI(TAG, "Monitoring for 20 seconds...");
-
-//       TickType_t monitor_start = xTaskGetTickCount();
-//       bool unexpected_irrigation = false;
-
-//       while ((xTaskGetTickCount() - monitor_start) < pdMS_TO_TICKS(20000)) {
-//         if (getCurrentState() != STATE_IDLE) {
-//           unexpected_irrigation = true;
-//           ESP_LOGE(TAG, "❌ FAILED: Unexpected irrigation detected - state: %s",
-//                    valveStateToString(getCurrentState()));
-//           break;
-//         }
-//         vTaskDelay(pdMS_TO_TICKS(1000));
-//       }
-
-//       int final_counter = counter;
-//       if (!unexpected_irrigation && final_counter == starting_counter) {
-//         ESP_LOGI(TAG, "✅ SUCCESS: No irrigation as expected (counter: %d)",
-//                  final_counter);
-//       } else if (final_counter != starting_counter) {
-//         ESP_LOGE(TAG, "❌ FAILED: Counter changed unexpectedly (%d → %d)",
-//                  starting_counter, final_counter);
-//       }
-//     }
-
-//     ESP_LOGI(TAG, "Test case %d completed", test_idx + 1);
-
-//     // Brief pause between test cases
-//     vTaskDelay(pdMS_TO_TICKS(3000));
-//   }
-
-//   // Final summary
-//   ESP_LOGI(TAG, "\n🎉 Simulation completed!");
-//   ESP_LOGI(TAG, "===============================");
-//   ESP_LOGI(TAG, "Total test cases: %d", NUM_TEST_CASES);
-//   ESP_LOGI(TAG, "Irrigation cycles detected: %d", irrigation_cycles_detected);
-//   ESP_LOGI(TAG, "Final counter: %d", counter);
-//   ESP_LOGI(TAG, "Success rate: %.1f%%",
-//            (float)irrigation_cycles_detected * 100.0f / NUM_TEST_CASES);
-//   ESP_LOGI(TAG, "===============================");
-
-//   vTaskDelete(NULL);
-// }
-
 void simulation_task(void *pvParameters) {
   if (readings_mutex == NULL) {
     readings_mutex = xSemaphoreCreateMutex();
   }
 
   const char *TAG = "Simulation";
-  int total_irrigation_cycles = 0;  // Track across all loops
-  int simulation_loop = 1;          // Track which simulation loop we're on
+  int total_irrigation_cycles = 0; // Track across all loops
+  int simulation_loop = 1;         // Track which simulation loop we're on
 
-  ESP_LOGI(TAG, "Starting continuous simulation with simple moisture alternation");
+  ESP_LOGI(TAG,
+           "Starting continuous simulation with simple moisture alternation");
   ESP_LOGI(TAG, "Initial counter: %d", counter);
   ESP_LOGI(TAG, "Total test cases per loop: %d", NUM_TEST_CASES);
 
-  while (1) {  // ✅ INFINITE LOOP - Simulation repeats forever
+  while (1) { // ✅ INFINITE LOOP - Simulation repeats forever
     ESP_LOGI(TAG, "\n🔄 SIMULATION LOOP %d STARTING", simulation_loop);
     ESP_LOGI(TAG, "==========================================");
     ESP_LOGI(TAG, "Counter at start of loop %d: %d", simulation_loop, counter);
-    
-    int irrigation_cycles_this_loop = 0;  // Track for this loop only
-    int loop_start_counter = counter;     // Remember counter at start of this loop
+
+    int irrigation_cycles_this_loop = 0; // Track for this loop only
+    int loop_start_counter = counter; // Remember counter at start of this loop
 
     for (int test_idx = 0; test_idx < NUM_TEST_CASES; test_idx++) {
       const test_case_t *test = &test_cases[test_idx];
 
-      ESP_LOGI(TAG, "\n=== Loop %d - Test Case %d ===", simulation_loop, test_idx + 1);
+      ESP_LOGI(TAG, "\n=== Loop %d - Test Case %d ===", simulation_loop,
+               test_idx + 1);
       ESP_LOGI(TAG, "Description: %s", test->description);
 
       // Wait for IDLE state before starting
       ESP_LOGI(TAG, "Waiting for IDLE state...");
       while (getCurrentState() != STATE_IDLE) {
-        ESP_LOGD(TAG, "Current state: %s", valveStateToString(getCurrentState()));
+        ESP_LOGD(TAG, "Current state: %s",
+                 valveStateToString(getCurrentState()));
         vTaskDelay(pdMS_TO_TICKS(1000));
       }
       ESP_LOGI(TAG, "System ready in IDLE state");
@@ -900,11 +712,13 @@ void simulation_task(void *pvParameters) {
 
       ESP_LOGI(TAG, "Analysis: %s irrigation expected%s",
                should_irrigate ? "YES" : "NO",
-               should_irrigate ? (expected_plot == 0 ? " (Plot 1)" : " (Plot 2)")
-                               : "");
+               should_irrigate
+                   ? (expected_plot == 0 ? " (Plot 1)" : " (Plot 2)")
+                   : "");
 
       if (should_irrigate) {
-        ESP_LOGI(TAG, "Expected: Plot %d should be irrigated", expected_plot + 1);
+        ESP_LOGI(TAG, "Expected: Plot %d should be irrigated",
+                 expected_plot + 1);
 
         // Wait for irrigation to start
         ESP_LOGI(TAG, "Waiting for irrigation to start...");
@@ -964,8 +778,11 @@ void simulation_task(void *pvParameters) {
         if (final_counter > starting_counter) {
           irrigation_cycles_this_loop++;
           total_irrigation_cycles++;
-          ESP_LOGI(TAG, "✅ SUCCESS: Counter incremented %d → %d (loop: %d, total: %d)",
-                   starting_counter, final_counter, irrigation_cycles_this_loop, total_irrigation_cycles);
+          ESP_LOGI(
+              TAG,
+              "✅ SUCCESS: Counter incremented %d → %d (loop: %d, total: %d)",
+              starting_counter, final_counter, irrigation_cycles_this_loop,
+              total_irrigation_cycles);
         } else {
           ESP_LOGE(TAG, "❌ FAILED: Counter did not increment (still %d)",
                    final_counter);
@@ -982,7 +799,8 @@ void simulation_task(void *pvParameters) {
         while ((xTaskGetTickCount() - monitor_start) < pdMS_TO_TICKS(20000)) {
           if (getCurrentState() != STATE_IDLE) {
             unexpected_irrigation = true;
-            ESP_LOGE(TAG, "❌ FAILED: Unexpected irrigation detected - state: %s",
+            ESP_LOGE(TAG,
+                     "❌ FAILED: Unexpected irrigation detected - state: %s",
                      valveStateToString(getCurrentState()));
             break;
           }
@@ -1008,12 +826,14 @@ void simulation_task(void *pvParameters) {
     // ✅ LOOP SUMMARY - After each complete loop
     int loop_end_counter = counter;
     int counter_increment_this_loop = loop_end_counter - loop_start_counter;
-    
+
     ESP_LOGI(TAG, "\n🎉 SIMULATION LOOP %d COMPLETED!", simulation_loop);
     ESP_LOGI(TAG, "===============================");
     ESP_LOGI(TAG, "Test cases in this loop: %d", NUM_TEST_CASES);
-    ESP_LOGI(TAG, "Irrigation cycles this loop: %d", irrigation_cycles_this_loop);
-    ESP_LOGI(TAG, "Counter: %d → %d (+%d)", loop_start_counter, loop_end_counter, counter_increment_this_loop);
+    ESP_LOGI(TAG, "Irrigation cycles this loop: %d",
+             irrigation_cycles_this_loop);
+    ESP_LOGI(TAG, "Counter: %d → %d (+%d)", loop_start_counter,
+             loop_end_counter, counter_increment_this_loop);
     ESP_LOGI(TAG, "Loop success rate: %.1f%%",
              (float)irrigation_cycles_this_loop * 100.0f / NUM_TEST_CASES);
     ESP_LOGI(TAG, "");
@@ -1021,18 +841,21 @@ void simulation_task(void *pvParameters) {
     ESP_LOGI(TAG, "Total loops completed: %d", simulation_loop);
     ESP_LOGI(TAG, "Total irrigation cycles: %d", total_irrigation_cycles);
     ESP_LOGI(TAG, "Overall success rate: %.1f%%",
-             (float)total_irrigation_cycles * 100.0f / (simulation_loop * NUM_TEST_CASES));
+             (float)total_irrigation_cycles * 100.0f /
+                 (simulation_loop * NUM_TEST_CASES));
     ESP_LOGI(TAG, "===============================\n");
 
     // ✅ PREPARE FOR NEXT LOOP
-    simulation_loop++;  // Increment loop counter
-    
+    simulation_loop++; // Increment loop counter
+
     // Brief pause between simulation loops
-    ESP_LOGI(TAG, "Waiting 10 seconds before starting loop %d...", simulation_loop);
+    ESP_LOGI(TAG, "Waiting 10 seconds before starting loop %d...",
+             simulation_loop);
     vTaskDelay(pdMS_TO_TICKS(10000));
-    
+
     // ✅ COUNTER IS PRESERVED - No reset here!
-    ESP_LOGI(TAG, "Starting loop %d with preserved counter: %d", simulation_loop, counter);
+    ESP_LOGI(TAG, "Starting loop %d with preserved counter: %d",
+             simulation_loop, counter);
   }
 
   // This will never be reached due to infinite loop

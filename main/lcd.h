@@ -30,7 +30,7 @@ void lcd_scroll_string(const char *str);
 void update_status_message(const char *format, ...);
 void start_lcd_scroll_task(const char *message);
 void lcd_row_one_task(void *pvParameters);
-void update_lcd_row_one(const char *uptime_str,
+void update_lcd_row_one(uint32_t uptime_seconds,
                         const sensor_readings_t *lcd_readings);
 double get_uptime_days(void);
 

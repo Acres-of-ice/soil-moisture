@@ -12,10 +12,6 @@ static bool mqtt_circuit_breaker_active = false;
 #define MQTT_FAILURE_THRESHOLD 5
 #define MQTT_CIRCUIT_BREAKER_TIMEOUT_MS (30 * 1000) // 30 seconds
 
-// Message type strings
-static const char *msg_type_strings[] = {"info", "warning", "error", "status",
-                                         "action"};
-
 static bool is_mqtt_related_error(const char *message) {
   if (!message)
     return false;

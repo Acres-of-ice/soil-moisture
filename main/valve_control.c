@@ -19,6 +19,7 @@ static const char *TAG = "ValveControl";
 extern SemaphoreHandle_t stateMutex;
 static TickType_t stateStartTime = 0; // Tracks when we entered current state
 bool AUTO_mode = pdTRUE;
+bool irrigation_completed = false;
 
 extern TaskHandle_t valveTaskHandle;
 bool SPRAY_mode = pdFALSE;
@@ -26,7 +27,6 @@ bool DRAIN_mode = pdFALSE;
 
 static ValveState currentState = STATE_IDLE;
 static TickType_t stateEntryTime = 0;
-static TickType_t errorEntryTime = 0; // Track when we entered error state
 static sensor_readings_t current_readings;
 
 int counter = 1;
@@ -71,8 +71,10 @@ const char *valveStateToString(ValveState state) {
       }
     }
     return "Controller Open";
+
   case STATE_PUMP_ON:
     return "PUMP ON";
+
   case STATE_IRR_START:
     return current_plot >= 0 ? (current_plot == 0   ? "IRR 1 Start"
                                 : current_plot == 1 ? "IRR 2 Start"
@@ -401,6 +403,7 @@ void init_error_tracking(void) {
   error_condition_met = false;
   error_detection_active = false;
   error_validation_count = 0;
+  irrigation_completed = false; // Add this line
 
   // Reset validation history
   reset_error_validation();
@@ -745,6 +748,9 @@ void updateValveState(void *pvParameters) {
         ESP_LOGI(TAG, "Plot %d moisture reached threshold: %d%%",
                  current_plot + 1, current_readings.soil[current_plot]);
 
+        // Mark as successful completion
+        irrigation_completed = true;
+
         // Stop error detection on successful completion
         stop_error_detection();
         newState = STATE_PUMP_OFF;
@@ -756,6 +762,8 @@ void updateValveState(void *pvParameters) {
           pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
         ESP_LOGW(TAG, "Irrigation timeout for plot %d: %d%%", current_plot + 1,
                  current_readings.soil[current_plot]);
+        // Mark as successful completion
+        irrigation_completed = true;
 
         // Stop error detection on timeout
         stop_error_detection();
@@ -849,19 +857,33 @@ void updateValveState(void *pvParameters) {
     case STATE_IRR_DONE:
       ESP_LOGI(TAG, "Irrigation for plot %d completed", current_plot + 1);
 
-      // Reset consecutive error counter for this plot on successful completion
+      // Only reset consecutive error counter for successful irrigation
       if (current_plot >= 0 && current_plot < CONFIG_NUM_PLOTS) {
-        if (plot_consecutive_errors[current_plot] > 0) {
+        if (irrigation_completed && plot_consecutive_errors[current_plot] > 0) {
           ESP_LOGI(TAG,
-                   "Resetting consecutive error counter for plot %d (was: %d)",
+                   "Resetting consecutive error counter for plot %d (was: %d) "
+                   "- SUCCESSFUL irrigation",
                    current_plot + 1, plot_consecutive_errors[current_plot]);
           plot_consecutive_errors[current_plot] = 0;
+        } else if (!irrigation_completed) {
+          ESP_LOGI(TAG,
+                   "NOT resetting error counter for plot %d - irrigation "
+                   "FAILED (errors: %d/%d)",
+                   current_plot + 1, plot_consecutive_errors[current_plot],
+                   CONFIG_MAX_CONSECUTIVE_ERRORS);
+        } else {
+          ESP_LOGD(TAG,
+                   "No error counter reset needed for plot %d (successful but "
+                   "no previous errors)",
+                   current_plot + 1);
         }
 
         // Note: Do NOT reset plot_disabled flag here - that requires manual
-        // intervention Only reset the consecutive error counter to give the
-        // plot a fresh start
+        // intervention
       }
+
+      // Reset the flag for next irrigation cycle
+      irrigation_completed = false;
 
       counter++;
       current_plot = -1; // Reset current plot
@@ -874,6 +896,9 @@ void updateValveState(void *pvParameters) {
       // Check if we just entered error state (first time in this case)
       if (error_state_start_time == 0) {
         error_state_start_time = xTaskGetTickCount();
+
+        // Mark irrigation as failed (not successful completion)
+        irrigation_completed = false;
 
         ESP_LOGE(TAG,
                  "Entering ERROR state - initiating safe shutdown sequence");
