@@ -122,9 +122,7 @@ typedef struct {
   const char *description;
 } test_case_t;
 
-// Test cases with various sensor combinations
-#define NUM_TEST_CASES 10
-static const test_case_t test_cases[NUM_TEST_CASES] = {
+static const test_case_t test_cases[] = {
     // Test Case 1: Basic Plot 1 irrigation with normal conditions
     {.initial_soil = {25, 80}, // Plot 1 dry, Plot 2 wet
      .final_soil = {75, 80},   // Plot 1 becomes wet
@@ -143,74 +141,136 @@ static const test_case_t test_cases[NUM_TEST_CASES] = {
      .battery = {90, 82},
      .temperature = 35.2,
      .humidity = 35.0,
-     .pressure = 2.1, // Hot and dry
+     .pressure = 2.1,
      .water_temp = 28.0,
      .discharge = 3.5,
      .voltage = 12.3,
      .description = "Plot 2 irrigation - hot weather conditions"},
 
-    // Test Case 3: Cold weather irrigation
-    {.initial_soil = {20, 85}, // Plot 1 very dry, Plot 2 wet
-     .final_soil = {72, 85},   // Plot 1 becomes well watered
-     .battery = {75, 90},
+    // Test Case 3: ERROR - Zero discharge (pump failure)
+    {.initial_soil = {25, 80}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {25, 80},   // No irrigation due to error
+     .battery = {85, 88},
+     .temperature = 24.5,
+     .humidity = 65.0,
+     .pressure = 1.8,
+     .water_temp = 22.0,
+     .discharge = 0.0, // ERROR: No water flow
+     .voltage = 12.5,
+     .description = "ERROR TEST - Zero discharge (pump failure)"},
+
+    // Test Case 4: ERROR - Zero pressure (pressure sensor failure)
+    {.initial_soil = {30, 85}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {30, 85},   // No irrigation due to error
+     .battery = {88, 90},
+     .temperature = 23.8,
+     .humidity = 62.0,
+     .pressure = 0.0, // ERROR: No pressure reading
+     .water_temp = 21.5,
+     .discharge = 2.3,
+     .voltage = 12.4,
+     .description = "ERROR TEST - Zero pressure (sensor failure)"},
+
+    // Test Case 5: ERROR - Water temperature too low (frozen pipes)
+    {.initial_soil = {28, 82}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {28, 82},   // No irrigation due to error
+     .battery = {83, 89},
+     .temperature = -2.0,
+     .humidity = 85.0,
+     .pressure = 1.9,
+     .water_temp = 1.0, // ERROR: Water temp below 3°C threshold
+     .discharge = 2.1,
+     .voltage = 12.2,
+     .description = "ERROR TEST - Water temp too low (frozen pipes)"},
+
+    // Test Case 6: ERROR - Invalid sensor readings (999 values)
+    {.initial_soil = {32, 78}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {32, 78},   // No irrigation due to error
+     .battery = {87, 91},
+     .temperature = 25.0,
+     .humidity = 60.0,
+     .pressure = 999.0,   // ERROR: Invalid pressure reading
+     .water_temp = 999.0, // ERROR: Invalid water temp reading
+     .discharge = 999.0,  // ERROR: Invalid discharge reading
+     .voltage = 12.3,
+     .description = "ERROR TEST - Invalid sensor readings (999 values)"},
+
+    // Test Case 7: ERROR - Multiple error conditions
+    {.initial_soil = {27, 84}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {27, 84},   // No irrigation due to error
+     .battery = {80, 86},
+     .temperature = 24.2,
+     .humidity = 58.0,
+     .pressure = 0.0,   // ERROR: Zero pressure
+     .water_temp = 2.5, // ERROR: Water temp too low
+     .discharge = 0.0,  // ERROR: Zero discharge
+     .voltage = 12.1,
+     .description = "ERROR TEST - Multiple error conditions (pressure + temp + "
+                    "discharge)"},
+
+    // Test Case 8: ERROR recovery test - Plot 1 should be disabled after 3
+    // consecutive errors
+    {.initial_soil = {29, 81}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {29, 81},   // No irrigation due to error
+     .battery = {84, 87},
+     .temperature = 23.5,
+     .humidity = 65.0,
+     .pressure = 0.0, // ERROR: Zero pressure (3rd consecutive for Plot 1)
+     .water_temp = 22.0,
+     .discharge = 2.2,
+     .voltage = 12.4,
+     .description =
+         "ERROR TEST - 3rd consecutive error (Plot 1 should be disabled)"},
+
+    // Test Case 9: Plot 2 irrigation after Plot 1 disabled
+    {.initial_soil = {33, 30}, // Plot 1 dry (but disabled), Plot 2 dry
+     .final_soil = {33, 76},   // Only Plot 2 gets irrigated (Plot 1 skipped)
+     .battery = {82, 85},
+     .temperature = 26.0,
+     .humidity = 58.0,
+     .pressure = 1.9,
+     .water_temp = 23.0,
+     .discharge = 2.4,
+     .voltage = 12.6,
+     .description = "Plot 2 irrigation - Plot 1 skipped (disabled)"},
+
+    // Test Case 10: Cold weather irrigation
+    {.initial_soil = {85, 28}, // Plot 1 wet, Plot 2 dry
+     .final_soil = {85, 74},   // Plot 2 becomes well watered
+     .battery = {75, 88},
      .temperature = 5.5,
      .humidity = 85.0,
-     .pressure = 1.9, // Cold and humid
-     .water_temp = 8.0,
+     .pressure = 1.9,
+     .water_temp = 8.0, // Above 3°C threshold - OK
      .discharge = 1.8,
      .voltage = 12.1,
-     .description = "Emergency irrigation - cold weather"},
+     .description = "Cold weather irrigation - Plot 2 (temp above threshold)"},
 
-    // Test Case 4: High pressure system test
-    {.initial_soil = {35, 32}, // Both plots need water
-     .final_soil = {78, 32},   // Only Plot 1 gets irrigated first
-     .battery = {83, 79},
+    // Test Case 11: High pressure system test
+    {.initial_soil = {35, 85}, // Plot 1 dry, Plot 2 wet
+     .final_soil = {78, 85},   // Plot 1 gets irrigated
+     .battery = {83, 90},
      .temperature = 25.8,
      .humidity = 62.0,
-     .pressure = 3.5, // High pressure
+     .pressure = 3.5,
      .water_temp = 22.8,
      .discharge = 4.2,
-     .voltage = 12.4, // High discharge
+     .voltage = 12.4,
      .description = "High pressure irrigation - Plot 1"},
 
-    // Test Case 5: Low pressure system test
-    {.initial_soil = {78,
-                      32},   // Plot 1 wet, Plot 2 dry (continuation of test 4)
-     .final_soil = {78, 77}, // Plot 2 becomes wet
-     .battery = {83, 79},
-     .temperature = 25.8,
-     .humidity = 62.0,
-     .pressure = 0.8, // Low pressure
-     .water_temp = 22.8,
-     .discharge = 1.2,
-     .voltage = 12.4, // Low discharge
-     .description = "Low pressure irrigation - Plot 2"},
-
-    // Test Case 6: Low battery warning test
-    {.initial_soil = {28, 85}, // Plot 1 dry, Plot 2 wet
-     .final_soil = {74, 85},   // Plot 1 becomes wet
-     .battery = {15, 88},      // Plot 1 low battery
+    // Test Case 12: Low battery warning test
+    {.initial_soil = {85, 31}, // Plot 1 wet, Plot 2 dry
+     .final_soil = {85, 74},   // Plot 2 becomes wet
+     .battery = {88, 15},      // Plot 2 low battery
      .temperature = 26.7,
      .humidity = 59.0,
      .pressure = 1.6,
      .water_temp = 23.8,
      .discharge = 2.7,
      .voltage = 12.0,
-     .description = "Low battery irrigation - Plot 1 battery at 15%"},
+     .description = "Low battery irrigation - Plot 2 battery at 15%"},
 
-    // Test Case 7: Low system voltage test
-    {.initial_soil = {33, 80}, // Plot 1 dry, Plot 2 wet
-     .final_soil = {76, 80},   // Plot 1 becomes wet
-     .battery = {80, 77},
-     .temperature = 24.1,
-     .humidity = 68.0,
-     .pressure = 1.9,
-     .water_temp = 21.5,
-     .discharge = 2.3,
-     .voltage = 11.2, // Low voltage
-     .description = "Low voltage irrigation - system voltage 11.2V"},
-
-    // Test Case 8: No irrigation - both plots well watered
+    // Test Case 13: No irrigation - both plots well watered
     {.initial_soil = {82, 79}, // Both plots above wet threshold
      .final_soil = {82, 79},   // No change
      .battery = {95, 93},
@@ -222,28 +282,40 @@ static const test_case_t test_cases[NUM_TEST_CASES] = {
      .voltage = 13.1,
      .description = "No irrigation needed - both plots well watered"},
 
-    // Test Case 9: Extreme conditions test
-    {.initial_soil = {15, 88}, // Plot 1 extremely dry, Plot 2 wet
-     .final_soil = {80, 88},   // Plot 1 becomes well watered
-     .battery = {65, 92},      // Plot 1 stressed battery
-     .temperature = 42.1,
-     .humidity = 15.0,
-     .pressure = 1.2, // Extreme heat
-     .water_temp = 35.0,
-     .discharge = 5.0,
-     .voltage = 11.8, // Hot water
-     .description = "Extreme conditions - very hot, dry, low pressure"},
+    // Test Case 14: MQTT reset test - Plot 1 should be re-enabled
+    {.initial_soil = {26, 83}, // Plot 1 dry (previously disabled), Plot 2 wet
+     .final_soil = {73, 83},   // Plot 1 gets irrigated (after MQTT reset)
+     .battery = {86, 91},
+     .temperature = 24.8,
+     .humidity = 61.0,
+     .pressure = 2.0,
+     .water_temp = 22.5,
+     .discharge = 2.6,
+     .voltage = 12.7,
+     .description = "Plot 1 irrigation after MQTT error reset"},
 
-    // Test Case 10: Optimal conditions test
+    // Test Case 15: Optimal conditions test
     {.initial_soil = {38, 85}, // Plot 1 just below threshold, Plot 2 wet
      .final_soil = {72, 85},   // Plot 1 reaches good level
-     .battery = {95, 98},      // Excellent batteries
+     .battery = {95, 98},
      .temperature = 23.5,
      .humidity = 68.0,
-     .pressure = 2.0, // Perfect conditions
+     .pressure = 2.0,
      .water_temp = 21.0,
      .discharge = 2.4,
-     .voltage = 13.2, // Optimal
+     .voltage = 13.2,
      .description = "Optimal conditions - perfect weather and system health"}};
+
+// Calculate number of test cases automatically
+#define NUM_TEST_CASES (sizeof(test_cases) / sizeof(test_cases[0]))
+
+// Add this helper function to simulate MQTT reset command during test case 14
+void simulate_mqtt_reset_during_test(int test_case_number) {
+  if (test_case_number == 13) { // Before test case 14 (0-based indexing)
+    ESP_LOGI("Simulation", "🔧 Simulating MQTT 'reset error' command");
+    reset_all_plot_error_tracking();
+    ESP_LOGI("Simulation", "✅ All plots re-enabled via simulated MQTT reset");
+  }
+}
 
 #endif // SENSOR_H

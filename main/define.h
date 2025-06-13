@@ -140,6 +140,8 @@ extern QueueHandle_t message_queue;
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
 #define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
 #define LOW_VOLTAGE_SLEEP_US (CONFIG_LOW_VOLTAGE_SLEEP_M * 60000 * 1000)
+#define ERROR_CHECK_DELAY_MS (CONFIG_ERROR_CHECK_DELAY_S * 1000)
+#define ERROR_DURATION_MS (CONFIG_ERROR_DURATION_M * 60000)
 
 // ==================== Logging Definitions ====================
 #define CUSTOM_LOG_LEVEL_NONE 0
@@ -399,5 +401,49 @@ extern int runtime_poll_interval_s;
 #define CONFIG_VALVE_TIMEOUT_S runtime_valve_timeout_s
 #define CONFIG_DATA_TIME_M runtime_data_time_m
 #define CONFIG_POLL_INTERVAL_S runtime_poll_interval_s
+
+// ==================== Error Tracking Variables ====================
+
+// Error tracking arrays - one entry per plot
+extern int plot_consecutive_errors[CONFIG_NUM_PLOTS]; // Track consecutive
+                                                      // errors per plot
+extern bool plot_disabled[CONFIG_NUM_PLOTS]; // Track which plots are disabled
+                                             // due to errors
+
+// Error state tracking
+extern bool error_condition_met; // Flag indicating if error conditions are
+                                 // currently met
+extern TickType_t error_state_start_time; // When error state was entered
+extern TickType_t
+    error_check_start_time; // When error checking began for current irrigation
+
+// Error validation tracking
+extern int error_validation_count;  // Count of consecutive error readings for
+                                    // validation
+extern bool error_detection_active; // Flag indicating if error detection is
+                                    // currently active
+//
+typedef struct {
+  bool discharge_error;    // True if discharge is 0 or 999
+  bool pressure_error;     // True if pressure is 0 or 999
+  bool water_temp_error;   // True if water temp < threshold
+  char error_message[256]; // Formatted error message with details
+  int affected_plot;       // Which plot is experiencing the error
+  char timestamp[32];      // Timestamp when error was detected
+} error_condition_t;
+
+// Global error condition tracking
+extern error_condition_t current_error_condition;
+
+// Error validation history for consecutive reading checks
+typedef struct {
+  bool discharge_errors[CONFIG_ERROR_VALIDATION_READINGS];
+  bool pressure_errors[CONFIG_ERROR_VALIDATION_READINGS];
+  bool water_temp_errors[CONFIG_ERROR_VALIDATION_READINGS];
+  int validation_index; // Current index in the circular buffer
+  int readings_count;   // How many readings we've collected so far
+} error_validation_history_t;
+
+extern error_validation_history_t error_history;
 
 #endif // DEFINE_H

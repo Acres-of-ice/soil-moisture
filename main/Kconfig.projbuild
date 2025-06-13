@@ -219,6 +219,7 @@ menu "Hardware Configuration"
             int
             default 1 if HAS_CALIBRATION
             default 0
+
 endmenu
 
 config ENABLE_DRIP_TIMER
@@ -330,6 +331,14 @@ menu "Time Configuration"
         help
             Set the interval in minutes for calibration task.
 
+    config ERROR_CHECK_DELAY_S
+        int "Error check delay after pump start (seconds)"
+        default 60
+        range 10 300
+        help
+            Time to wait after pump starts before beginning error detection.
+            This prevents false positives during pump startup transients.
+
     config POLL_INTERVAL_S
         int "Poll interval (seconds)"
         default 3 if SITE_TEST
@@ -345,6 +354,68 @@ menu "Time Configuration"
         range 1 600
         help
             Set the interval in minutes to check for new data to send via SMS.
+
+endmenu
+
+config ENABLE_ERROR_DETECTION
+    bool "Enable irrigation error detection"
+    default y
+    help
+        Enable automatic error detection during irrigation cycles.
+        When enabled, the system monitors discharge, pressure, and water temperature
+        for anomalous readings that could indicate equipment malfunction.
+
+menu "Error Detection Thresholds"
+    visible if ENABLE_ERROR_DETECTION
+
+    config ENABLE_DISCHARGE_ERROR
+        bool "Enable discharge error detection"
+        default y
+        help
+            Monitor discharge sensor for zero or invalid readings during irrigation.
+
+    config ENABLE_PRESSURE_ERROR
+        bool "Enable pressure error detection"
+        default y
+        help
+            Monitor pressure sensor for zero or invalid readings during irrigation.
+
+    config ENABLE_WATER_TEMP_ERROR
+        bool "Enable water temperature error detection"
+        default y
+        help
+            Monitor water temperature for abnormally low readings during irrigation.
+
+    config WATER_TEMP_ERROR_THRESHOLD
+        int "Water temperature error threshold (°C)"
+        default 3
+        range -10 15
+        depends on ENABLE_WATER_TEMP_ERROR
+        help
+            Water temperature below this value triggers error state.
+            Low water temperature may indicate frozen pipes or sensor malfunction.
+
+    config ERROR_VALIDATION_READINGS
+        int "Number of consecutive readings to validate error"
+        default 5
+        range 3 10
+        help
+            Number of consecutive sensor readings that must meet error conditions
+            before triggering error state. This prevents false positives from
+            temporary sensor fluctuations.
+
+    config MAX_CONSECUTIVE_ERRORS
+        int "Maximum consecutive errors per plot"
+        default 3
+        range 1 10
+        help
+            Number of consecutive errors from the same plot before that specific plot
+            is disabled and requires manual intervention. This prevents a single
+            faulty plot from repeatedly failing and wasting water/energy.
+            
+            Example: If set to 3, after 3 consecutive irrigation failures on Plot 1,
+            that plot will be skipped in future irrigation cycles until manually reset.
+            Other plots will continue to operate normally.
 
 endmenu
 

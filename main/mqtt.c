@@ -220,6 +220,20 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base,
           ESP_LOGE(TAG, "OTA initiation failed: %s",
                    esp_err_to_name(ota_result));
         }
+      } else if (strcmp(data, "reset error") == 0) {
+        ESP_LOGI(TAG, "Error reset command received via MQTT");
+
+        // Reset all plots error tracking
+        reset_all_plot_error_tracking();
+
+        // Send confirmation response
+        char response_msg[128];
+        snprintf(
+            response_msg, sizeof(response_msg),
+            "{\"message\":\"All plot error tracking reset successfully\"}");
+
+        esp_mqtt_client_publish(client, status_topic, response_msg, 0, 1, 0);
+        ESP_LOGI(TAG, "Error reset completed - response sent to status topic");
 
       } else {
         ESP_LOGD(TAG, "Unknown command: %s", data);
