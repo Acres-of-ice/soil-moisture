@@ -4,6 +4,7 @@
 #include "i2cdev.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "sensor.h"
 
@@ -389,6 +390,215 @@ void modbus_init(void) {
   ESP_ERROR_CHECK(uart_driver_install(MB_PORT_NUM, 256, 256, 0, NULL, 0));
 }
 
+
+// void sensor_task(void *pvParameters) {
+//     UBaseType_t initial_stack = uxTaskGetStackHighWaterMark(NULL);
+//     //ESP_LOGI(TAG, "Sensor task starting with stack high water mark: %" PRIu32, initial_stack);
+
+//     static i2c_dev_t i2c_dev_ads = {0};
+//     static ADS1x1x_config_t ch1 = {0};
+//     static float adc_readings_arr[4] = {0.0f}; // Initialize array
+//     static float temp1 = 99.0f, temp2 = 99.0f, humidity = 99.0f;
+//     static float discharge = 99.0f, dummy = 99.0f;
+//     static sensor_readings_t local_readings = {0}; // Local buffer
+//     static int consecutive_i2c_failures = 0;
+//     static bool i2c_initialized = false;
+    
+//     TickType_t last_wake_time = xTaskGetTickCount();
+
+//     // ✅ SAFE I2C Initialization with error handling
+//     if (i2c0bus != NULL && !i2c_initialized) {
+//         ESP_LOGI(TAG, "Initializing I2C for sensor task...");
+        
+//         // Take I2C mutex for initialization
+//         if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
+//             i2c_device_add(&i2c0bus, &i2c_dev_ads, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND, I2C_ADC_FREQ_HZ);
+            
+//             if (ADS1x1x_init(&ch1, ADS1115, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND, MUX_SINGLE_3, PGA_4096) == 0) {
+//                 ESP_LOGE(TAG, "Failed to initialize ADS1115");
+//             } else {
+//                 ESP_LOGI(TAG, "ADS1115 initialized successfully");
+//                 i2c_initialized = true;
+//             }
+//             xSemaphoreGive(i2c_mutex);
+//         } else {
+//             ESP_LOGE(TAG, "Failed to take I2C mutex for initialization");
+//         }
+//     }
+
+//     while (1) {
+//         // ✅ ENHANCED: Stack monitoring with early warning
+//     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
+//       ESP_LOGE(TAG, "Low stack Sensor task: %d", uxTaskGetStackHighWaterMark(NULL));
+//     }
+
+//         // ✅ SAFE: Clear and initialize local readings structure completely
+//         memset(&local_readings, 0, sizeof(sensor_readings_t));
+        
+//         // Set default/safe values
+//         // local_readings.soil_A = 999;        // Safe defaults
+//         // local_readings.soil_B = 999;
+//         local_readings.temperature = 25.0f;
+//         local_readings.humidity = 60.0f;
+//         local_readings.water_temp = 20.0f;
+//         local_readings.pressure = 1.0f;
+//         local_readings.discharge = 0.5f;
+//         local_readings.voltage = 12.0f;
+
+//         // ✅ SAFE I2C operations with error recovery
+//         if (i2c0bus != NULL && i2c_initialized) {
+//             bool i2c_success = true;
+            
+//             // Take I2C mutex with timeout
+//             if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+//                 UBaseType_t stack_before_i2c = uxTaskGetStackHighWaterMark(NULL);
+                
+//                 //ESP_LOGD(TAG, "Starting I2C reads, stack: %" PRIu32, stack_before_i2c);
+                
+//                 // Read I2C channels with error checking
+//                 for (int i = 0; i < 4; i++) {
+//                     UBaseType_t stack_before_channel = uxTaskGetStackHighWaterMark(NULL);
+                    
+//                     // Initialize to safe value
+//                     adc_readings_arr[i] = 99.0f;
+                    
+
+//                     adc_readings_arr[i] = read_channel(&i2c_dev_ads, &ch1, i);
+                    
+//                     UBaseType_t stack_after_channel = uxTaskGetStackHighWaterMark(NULL);
+                    
+//                     // Check for stack corruption during I2C read
+//                     if (stack_after_channel < stack_before_channel - 300) {
+//                         // ESP_LOGE(TAG, "Stack corruption detected during I2C channel %d: %" PRIu32 " -> %" PRIu32, 
+//                         //          i, stack_before_channel, stack_after_channel);
+//                         i2c_success = false;
+//                         adc_readings_arr[i] = 99.0f; // Use safe default
+//                         break;
+//                     }
+                    
+//                     // Validate reading
+//                     if (!isfinite(adc_readings_arr[i]) || adc_readings_arr[i] < -1000.0f || adc_readings_arr[i] > 1000.0f) {
+//                         ESP_LOGW(TAG, "Invalid I2C reading on channel %d: %.2f", i, adc_readings_arr[i]);
+//                         adc_readings_arr[i] = 99.0f;
+//                         i2c_success = false;
+//                     }
+                    
+//                     // Apply channel-specific adjustments only if reading is valid
+//                     if (i == 2 && adc_readings_arr[i] != 99.0f) {
+//                         adc_readings_arr[i] -= 50;
+//                         if (IS_SITE("Likir"))
+//                             adc_readings_arr[i] -= 1.10;
+//                         else if (IS_SITE("Ursi"))
+//                             adc_readings_arr[i] -= 0.53;
+//                         else if (IS_SITE("Tuna"))
+//                             adc_readings_arr[i] -= 0.14;
+//                         else if (IS_SITE("Kuri"))
+//                             adc_readings_arr[i] -= 0.1;
+//                     }
+                    
+//                     ESP_LOGD(TAG, "I2C channel %d: %.2f", i, adc_readings_arr[i]);
+                    
+//                     // ✅ CRITICAL: Longer delay between I2C operations for hardware stability
+//                     vTaskDelay(pdMS_TO_TICKS(100)); // Increased from 10ms to 100ms
+//                 }
+                
+//                 // Use I2C reading only if successful
+//                 if (i2c_success) {
+//                     local_readings.pressure = adc_readings_arr[1];
+//                     consecutive_i2c_failures = 0;
+//                 } else {
+//                     consecutive_i2c_failures++;
+//                     ESP_LOGE(TAG, "I2C operation failed, consecutive failures: %d", consecutive_i2c_failures);
+                    
+//                     // If too many failures, reinitialize I2C
+//                     if (consecutive_i2c_failures >= 3) {
+//                         ESP_LOGE(TAG, "Too many I2C failures, reinitializing ADS1115...");
+//                         ADS1x1x_init(&ch1, ADS1115, ADS1x1x_I2C_ADDRESS_ADDR_TO_GND, MUX_SINGLE_3, PGA_4096);
+//                         consecutive_i2c_failures = 0;
+//                     }
+//                 }
+                
+//                 xSemaphoreGive(i2c_mutex);
+//             } else {
+//                 ESP_LOGE(TAG, "Failed to take I2C mutex, using default pressure");
+//                 consecutive_i2c_failures++;
+//             }
+//         }
+
+//         // ✅ SAFE: Handle Modbus readings with error handling
+//         if (site_config.has_temp_humidity) {
+//             int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+//             if (result == 0 && isfinite(temp1) && isfinite(humidity)) {
+//                 local_readings.temperature = temp1;
+//                 local_readings.humidity = humidity;
+//             } else {
+//                 ESP_LOGW(TAG, "Modbus temp/humidity read failed or invalid: result=%d, temp=%.2f, hum=%.2f", 
+//                          result, temp1, humidity);
+//                 // Keep default values
+//             }
+//             vTaskDelay(pdMS_TO_TICKS(50));
+//         }
+
+//         if (site_config.has_flowmeter) {
+//             int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+//             if (result == 0 && isfinite(temp2)) {
+//                 local_readings.water_temp = temp2;
+//             }
+
+//             result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+//             if (result == 0 && isfinite(discharge)) {
+//                 local_readings.discharge = discharge;
+//             }
+//             vTaskDelay(pdMS_TO_TICKS(50));
+//         }
+
+//         // ✅ SAFE: Handle external soil sensor values with bounds checking
+//         // Check if soil_A and soil_B are reasonable values
+//         // if (soil_A >= 0 && soil_A <= 100) {
+//         //     local_readings.soil_A = soil_A;
+//         // } else {
+//         //     ESP_LOGW(TAG, "Invalid soil_A value: %d, using default", soil_A);
+//         //     local_readings.soil_A = 999; // Safe default
+//         // }
+        
+//         // if (soil_B >= 0 && soil_B <= 100) {
+//         //     local_readings.soil_B = soil_B;
+//         // } else {
+//         //     ESP_LOGW(TAG, "Invalid soil_B value: %d, using default", soil_B);
+//         //     local_readings.soil_B = 999; // Safe default
+//         // }
+
+//         //         // ✅ External soil sensor variables
+//         local_readings.soil_A = soil_A;
+//         local_readings.soil_B = soil_B;
+//         ESP_LOGI(TAG, "Soil sensors - A: %d, B: %d", soil_A, soil_B);
+
+//         // ✅ SAFE: Critical section for updating shared readings
+//         if (xSemaphoreTake(readings_mutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+//             // Verify local_readings structure integrity before copying
+//             if (isfinite(local_readings.temperature) && isfinite(local_readings.pressure)) {
+//                 memcpy(&readings, &local_readings, sizeof(sensor_readings_t));
+//             } else {
+//                 ESP_LOGE(TAG, "Corrupted local_readings detected, not updating global readings");
+//             }
+//             xSemaphoreGive(readings_mutex);
+//         } else {
+//             ESP_LOGE(TAG, "Failed to take readings_mutex, skipping update");
+//         }
+
+//         // ✅ SAFE: Stack check after operations
+//         UBaseType_t final_stack = uxTaskGetStackHighWaterMark(NULL);
+//         // if (final_stack < current_stack - 200) {
+//         //     ESP_LOGE(TAG, "Significant stack usage in this cycle: %" PRIu32 " -> %" PRIu32, 
+//         //              current_stack, final_stack);
+//         // }
+
+//         // Use vTaskDelayUntil for consistent timing
+//         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
+//     }
+// }
+
+// This one skips all i2c operation//
 // void sensor_task(void *pvParameters) {
 //     // if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
 //     //     ESP_LOGE(TAG, "Low stack: %" PRIu32, uxTaskGetStackHighWaterMark(NULL));
@@ -506,6 +716,8 @@ void modbus_init(void) {
 //         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(POLL_INTERVAL_MS));
 //     }
 // }
+
+
 void sensor_task(void *pvParameters) {
 
   if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
@@ -565,29 +777,29 @@ void sensor_task(void *pvParameters) {
     }
 
     // Handle Modbus readings without mutex
-    // if (site_config.has_temp_humidity) {
-    //   int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
-    //   if (result == 0) {
-    //     local_readings.temperature = temp1;
-    //     local_readings.humidity = humidity;
-    //   } else {
-    //     local_readings.temperature = 99.0f;
-    //     local_readings.humidity = 99.0f;
-    //   }
-    //   vTaskDelay(pdMS_TO_TICKS(50));
-    // }
+    if (site_config.has_temp_humidity) {
+      int result = modbus_read_sensor(&temp_humidity_sensor, &temp1, &humidity);
+      if (result == 0) {
+        local_readings.temperature = temp1;
+        local_readings.humidity = humidity;
+      } else {
+        local_readings.temperature = 99.0f;
+        local_readings.humidity = 99.0f;
+      }
+      vTaskDelay(pdMS_TO_TICKS(50));
+    }
 
-    // if (site_config.has_flowmeter) {
-    //   int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
-    //   if (result == 0) {
-    //     local_readings.water_temp = temp2;
-    //   }
+    if (site_config.has_flowmeter) {
+      int result = modbus_read_sensor(&flow_temp_sensor, &temp2, &dummy);
+      if (result == 0) {
+        local_readings.water_temp = temp2;
+      }
 
-    //   result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
-    //   if (result == 0) {
-    //     local_readings.discharge = discharge;
-    //   }
-    // }
+      result = modbus_read_sensor(&flow_discharge_sensor, &discharge, &dummy);
+      if (result == 0) {
+        local_readings.discharge = discharge;
+      }
+    }
 
     // if (site_config.has_voltage_cutoff && adc_handle != NULL) {
     //   local_readings.voltage = measure_voltage();

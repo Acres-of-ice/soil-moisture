@@ -922,7 +922,7 @@ void custom_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len,
 
   // Log signal quality if needed
   if (rssi < -75) {
-    ESP_LOGE(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
+    ESP_LOGW(TAG, "Poor signal quality: RSSI: %d dBm", rssi);
     // update_status_message("Poor signal: RSSI: %d dBm", rssi);
   }
 
