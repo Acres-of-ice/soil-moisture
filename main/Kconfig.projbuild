@@ -271,7 +271,7 @@ menu "Time Configuration"
 
     config STATE_TIMEOUT_M
         int "State machine timeout (minutes)"
-        default 5 if SITE_TEST
+        default 1 if SITE_TEST
         default 60
         range 1 180
         help
@@ -279,7 +279,7 @@ menu "Time Configuration"
 
     config VALVE_TIMEOUT_S
         int "Valve operation timeout (seconds)"
-        default 6 if SITE_TEST
+        default 1 if SITE_TEST
         default 90
         range 1 3600
         help
@@ -295,7 +295,7 @@ menu "Time Configuration"
 
     config DATA_INTERVAL_M
         int "Data logging interval (minutes)"
-        default 2 if SITE_TEST
+        default 1 if SITE_TEST
         default 5
         range 1 60
         help
@@ -303,7 +303,7 @@ menu "Time Configuration"
 
     config ERROR_DURATION_M
         int "Error duration (minutes)"
-        default 2 if SITE_TEST
+        default 1 if SITE_TEST
         default 120
         range 1 600
         help
@@ -313,15 +313,15 @@ menu "Time Configuration"
         int "Error check delay after pump start (seconds)"
         default 3 if SITE_TEST
         default 60
-        range 10 300
+        range 1 300
         help
             Time to wait after pump starts before beginning error detection.
             This prevents false positives during pump startup transients.
 
     config POLL_INTERVAL_S
         int "Poll interval (seconds)"
-        default 3 if SITE_TEST
-        default 60
+        default 1 if SITE_TEST
+        default 5
         range 1 600
         help
             Set the interval in seconds between sensor readings.
@@ -345,40 +345,19 @@ menu "Time Configuration"
 
 endmenu
 
-config ENABLE_ERROR_DETECTION
-    bool "Enable irrigation error detection"
+config ENABLE_ERROR_CONFIG
+    bool "Enable Error Configuration"
     default y
     help
-        Enable automatic error detection during irrigation cycles.
-        When enabled, the system monitors discharge, pressure, and water temperature
-        for anomalous readings that could indicate equipment malfunction.
+        Enable this option to customize error settings. If disabled, default values will be used.
 
 menu "Error Detection Thresholds"
-    visible if ENABLE_ERROR_DETECTION
-
-    config ENABLE_DISCHARGE_ERROR
-        bool "Enable discharge error detection"
-        default y
-        help
-            Monitor discharge sensor for zero or invalid readings during irrigation.
-
-    config ENABLE_PRESSURE_ERROR
-        bool "Enable pressure error detection"
-        default y
-        help
-            Monitor pressure sensor for zero or invalid readings during irrigation.
-
-    config ENABLE_WATER_TEMP_ERROR
-        bool "Enable water temperature error detection"
-        default y
-        help
-            Monitor water temperature for abnormally low readings during irrigation.
+    visible if ENABLE_ERROR_CONFIG
 
     config WATER_TEMP_ERROR_THRESHOLD
         int "Water temperature error threshold (°C)"
         default 3
         range -10 15
-        depends on ENABLE_WATER_TEMP_ERROR
         help
             Water temperature below this value triggers error state.
             Low water temperature may indicate frozen pipes or sensor malfunction.

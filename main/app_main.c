@@ -343,7 +343,12 @@ void app_main(void) {
         (COMM_TASK_PRIORITY + 1), &discoveryTaskHandle, COMM_TASK_CORE_ID);
   }
 
+  xTaskCreatePinnedToCore(
+      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
+      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
+
   if (site_config.simulate) {
+    vTaskDelay(pdMS_TO_TICKS(2000));
     ESP_LOGW(TAG, "Simulation ON");
     notify("Simulation ON");
     xTaskCreatePinnedToCore(simulation_task, "simulation_task",
@@ -353,10 +358,7 @@ void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 
-  xTaskCreatePinnedToCore(
-      dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
-      DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(10000));
+  // vTaskDelay(pdMS_TO_TICKS(10000));
   // xTaskCreatePinnedToCore(hex_data_task, "HEXDataTask",
   //                         HEX_DATA_TASK_STACK_SIZE, NULL,
   //                         HEX_DATA_TASK_PRIORITY, NULL,

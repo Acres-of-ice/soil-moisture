@@ -247,28 +247,21 @@ bool check_sensor_error_conditions(const sensor_readings_t *readings,
     strcpy(error_flags->timestamp, "Unknown");
   }
 
-#if CONFIG_ENABLE_ERROR_DETECTION
-
   // Check discharge sensor error (if enabled)
-#if CONFIG_ENABLE_DISCHARGE_ERROR
   if (readings->discharge == 0 || readings->discharge == 999) {
     error_flags->discharge_error = true;
     error_detected = true;
     ESP_LOGW(TAG, "Discharge error detected: %.2f", readings->discharge);
   }
-#endif
 
   // Check pressure sensor error (if enabled)
-#if CONFIG_ENABLE_PRESSURE_ERROR
   if (readings->pressure == 0 || readings->pressure == 999) {
     error_flags->pressure_error = true;
     error_detected = true;
     ESP_LOGW(TAG, "Pressure error detected: %.2f", readings->pressure);
   }
-#endif
 
   // Check water temperature error (if enabled)
-#if CONFIG_ENABLE_WATER_TEMP_ERROR
   if (readings->water_temp < CONFIG_WATER_TEMP_ERROR_THRESHOLD ||
       readings->water_temp == 999) {
     error_flags->water_temp_error = true;
@@ -276,7 +269,6 @@ bool check_sensor_error_conditions(const sensor_readings_t *readings,
     ESP_LOGW(TAG, "Water temperature error detected: %.2f°C (threshold: %d°C)",
              readings->water_temp, CONFIG_WATER_TEMP_ERROR_THRESHOLD);
   }
-#endif
 
   // Build comprehensive error message if any errors detected
   if (error_detected) {
@@ -313,8 +305,6 @@ bool check_sensor_error_conditions(const sensor_readings_t *readings,
             sizeof(error_flags->error_message) - 1);
     error_flags->error_message[sizeof(error_flags->error_message) - 1] = '\0';
   }
-
-#endif // CONFIG_ENABLE_ERROR_DETECTION
 
   return error_detected;
 }
@@ -717,9 +707,7 @@ void updateValveState(void *pvParameters) {
       }
       stateEntryTime = xTaskGetTickCount();
       // Start error detection timing after pump activation
-#if CONFIG_ENABLE_ERROR_DETECTION
       start_error_detection_timing();
-#endif
       newState = STATE_IRR_START;
       break;
 
@@ -734,14 +722,12 @@ void updateValveState(void *pvParameters) {
       get_sensor_readings(&current_readings);
 
       // Perform error detection after delay period
-#if CONFIG_ENABLE_ERROR_DETECTION
       if (perform_error_detection(&current_readings)) {
         ESP_LOGE(TAG,
                  "Error conditions detected - transitioning to error state");
         newState = STATE_ERROR;
         break;
       }
-#endif
 
       // Check if irrigation target reached (normal completion)
       if (current_readings.soil[current_plot] >= CONFIG_PLOT_WET) {
@@ -776,14 +762,12 @@ void updateValveState(void *pvParameters) {
                current_readings.soil[current_plot], CONFIG_PLOT_WET);
 
       // Show error detection status
-#if CONFIG_ENABLE_ERROR_DETECTION
       if (is_error_detection_ready()) {
         ESP_LOGD(TAG, "Error detection ACTIVE - monitoring sensors");
       } else {
         ESP_LOGD(TAG, "Error detection delay period - %d second delay",
                  CONFIG_ERROR_CHECK_DELAY_S);
       }
-#endif
 
       vTaskDelay(pdMS_TO_TICKS(10000)); // Wait 10 seconds before next check
       break;

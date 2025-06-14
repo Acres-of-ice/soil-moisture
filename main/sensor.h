@@ -123,29 +123,29 @@ typedef struct {
 } test_case_t;
 
 static const test_case_t test_cases[] = {
-    // Test Case 1: Basic Plot 1 irrigation with normal conditions
-    {.initial_soil = {25, 80}, // Plot 1 dry, Plot 2 wet
-     .final_soil = {75, 80},   // Plot 1 becomes wet
-     .battery = {85, 88},
-     .temperature = 24.5,
-     .humidity = 65.0,
-     .pressure = 1.8,
-     .water_temp = 22.0,
-     .discharge = 2.5,
-     .voltage = 12.5,
-     .description = "Basic Plot 1 irrigation - normal conditions"},
-
-    // Test Case 2: Plot 2 irrigation with hot weather
-    {.initial_soil = {85, 30}, // Plot 1 wet, Plot 2 dry
-     .final_soil = {85, 78},   // Plot 2 becomes wet
-     .battery = {90, 82},
-     .temperature = 35.2,
-     .humidity = 35.0,
-     .pressure = 2.1,
-     .water_temp = 28.0,
-     .discharge = 3.5,
-     .voltage = 12.3,
-     .description = "Plot 2 irrigation - hot weather conditions"},
+    // // Test Case 1: Basic Plot 1 irrigation with normal conditions
+    // {.initial_soil = {25, 80}, // Plot 1 dry, Plot 2 wet
+    //  .final_soil = {75, 80},   // Plot 1 becomes wet
+    //  .battery = {85, 88},
+    //  .temperature = 24.5,
+    //  .humidity = 65.0,
+    //  .pressure = 1.8,
+    //  .water_temp = 22.0,
+    //  .discharge = 2.5,
+    //  .voltage = 12.5,
+    //  .description = "Basic Plot 1 irrigation - normal conditions"},
+    //
+    // // Test Case 2: Plot 2 irrigation with hot weather
+    // {.initial_soil = {85, 30}, // Plot 1 wet, Plot 2 dry
+    //  .final_soil = {85, 78},   // Plot 2 becomes wet
+    //  .battery = {90, 82},
+    //  .temperature = 35.2,
+    //  .humidity = 35.0,
+    //  .pressure = 2.1,
+    //  .water_temp = 28.0,
+    //  .discharge = 3.5,
+    //  .voltage = 12.3,
+    //  .description = "Plot 2 irrigation - hot weather conditions"},
 
     // Test Case 3: ERROR - Zero discharge (pump failure)
     {.initial_soil = {25, 80}, // Plot 1 dry, Plot 2 wet
