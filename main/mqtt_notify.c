@@ -100,7 +100,7 @@ static esp_err_t mqtt_publish_notification(const char *message, bool is_error) {
   // Create JSON payload
   cJSON *root = cJSON_CreateObject();
   if (!root) {
-    ESP_LOGE(TAG, "Failed to create JSON object");
+    ESP_LOGW(TAG, "Failed to create JSON object");
     return ESP_ERR_NO_MEM;
   }
 
@@ -136,7 +136,7 @@ static esp_err_t mqtt_publish_notification(const char *message, bool is_error) {
       esp_mqtt_client_publish(client, topic, json_string, 0, qos, retain);
 
   if (msg_id < 0) {
-    ESP_LOGE(TAG, "Failed to publish notification: %s", message);
+    ESP_LOGW(TAG, "Failed to publish notification: %s", message);
     update_mqtt_circuit_breaker(false); // Record failure
     free(json_string);
     cJSON_Delete(root);
@@ -187,7 +187,7 @@ esp_err_t mqtt_notify_error(const char *format, ...) {
   esp_err_t result = mqtt_publish_notification(message_buffer, true);
   if (result != ESP_OK && is_mqtt_related_error(message_buffer)) {
     // For MQTT-related errors, log them directly instead of trying MQTT
-    ESP_LOGE("MQTT_FALLBACK", "MQTT error (logged only): %s", message_buffer);
+    ESP_LOGW("MQTT_FALLBACK", "MQTT error (logged only): %s", message_buffer);
   }
 
   return result;
