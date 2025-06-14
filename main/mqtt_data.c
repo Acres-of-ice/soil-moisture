@@ -44,15 +44,15 @@ static esp_err_t validate_mqtt_data_config(void) {
   }
 
   // Check data transmission interval
-  if (CONFIG_DATA_TIME_M < 1 || CONFIG_DATA_TIME_M > 60) {
+  if (CONFIG_DATA_INTERVAL_M < 1 || CONFIG_DATA_INTERVAL_M > 60) {
     ESP_LOGW(
         TAG,
         "Data transmission interval (%d min) may be too frequent or too long",
-        CONFIG_DATA_TIME_M);
+        CONFIG_DATA_INTERVAL_M);
   }
 
   // Check buffer size vs interval
-  int max_offline_minutes = DATA_BUFFER_SIZE * CONFIG_DATA_TIME_M;
+  int max_offline_minutes = DATA_BUFFER_SIZE * CONFIG_DATA_INTERVAL_M;
   ESP_LOGD(TAG, "Max offline buffering: %d minutes (%d entries)",
            max_offline_minutes, DATA_BUFFER_SIZE);
 
@@ -91,7 +91,8 @@ esp_err_t mqtt_data_init(void) {
   }
 
   ESP_LOGD(TAG, "MQTT data system initialized successfully");
-  ESP_LOGI(TAG, "Data transmission interval: %d minutes", CONFIG_DATA_TIME_M);
+  ESP_LOGI(TAG, "Data transmission interval: %d minutes",
+           CONFIG_DATA_INTERVAL_M);
   return ESP_OK;
 }
 
@@ -347,8 +348,8 @@ void mqtt_data_task(void *pvParameters) {
     }
 
     // Execute data transmission on schedule OR immediate request
-    if (immediate_request ||
-        (xTaskGetTickCount() - last_wake_time >= pdMS_TO_TICKS(DATA_TIME_MS))) {
+    if (immediate_request || (xTaskGetTickCount() - last_wake_time >=
+                              pdMS_TO_TICKS(DATA_INTERVAL_MS))) {
 
       ESP_LOGD(TAG, "Data transmission cycle starting");
 

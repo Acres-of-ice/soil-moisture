@@ -23,9 +23,8 @@ typedef struct config_var {
 int runtime_plot_dry = CONFIG_PLOT_DRY;
 int runtime_plot_wet = CONFIG_PLOT_WET;
 int runtime_state_timeout_m = CONFIG_STATE_TIMEOUT_M;
-int runtime_irrigation_timeout_m = CONFIG_IRRIGATION_TIMEOUT_M;
 int runtime_valve_timeout_s = CONFIG_VALVE_TIMEOUT_S;
-int runtime_data_time_m = CONFIG_DATA_TIME_M;
+int runtime_data_time_m = CONFIG_DATA_INTERVAL_M;
 int runtime_poll_interval_s = CONFIG_POLL_INTERVAL_S;
 
 // Declare the config variables array using runtime variables
@@ -33,9 +32,8 @@ static const config_var_t config_vars[] = {
     {"PLOT_DRY", &runtime_plot_dry, 0, 100},
     {"PLOT_WET", &runtime_plot_wet, 0, 100},
     {"STATE_TIMEOUT_M", &runtime_state_timeout_m, 1, 180},
-    {"IRRIGATION_TIMEOUT_M", &runtime_irrigation_timeout_m, 1, 60},
     {"VALVE_TIMEOUT_S", &runtime_valve_timeout_s, 1, 3600},
-    {"DATA_TIME_M", &runtime_data_time_m, 1, 60},
+    {"DATA_INTERVAL_M", &runtime_data_time_m, 1, 60},
     {"POLL_INTERVAL_S", &runtime_poll_interval_s, 1, 600}};
 static const size_t config_vars_count =
     sizeof(config_vars) / sizeof(config_vars[0]);
@@ -61,9 +59,8 @@ static void init_runtime_vars_if_needed(void) {
     runtime_plot_dry = CONFIG_PLOT_DRY;
     runtime_plot_wet = CONFIG_PLOT_WET;
     runtime_state_timeout_m = CONFIG_STATE_TIMEOUT_M;
-    runtime_irrigation_timeout_m = CONFIG_IRRIGATION_TIMEOUT_M;
     runtime_valve_timeout_s = CONFIG_VALVE_TIMEOUT_S;
-    runtime_data_time_m = CONFIG_DATA_TIME_M;
+    runtime_data_time_m = CONFIG_DATA_INTERVAL_M;
     runtime_poll_interval_s = CONFIG_POLL_INTERVAL_S;
     config_vars_initialized = true;
     ESP_LOGI(TAG,

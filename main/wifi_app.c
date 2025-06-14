@@ -279,7 +279,7 @@ void wifi_app_task(void *pvParameters) {
   wifi_app_espnow_wifi_init();
   vTaskDelay(2000);
   wifi_app_ap_config();
-  wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
+  // wifi_app_send_message(WIFI_APP_MSG_START_HTTP_SERVER);
 
   for (;;) {
     if (uxTaskGetStackHighWaterMark(NULL) < 1000) {
@@ -445,13 +445,6 @@ void wifi_app_espnow_wifi_init(void) {
     ESP_LOGI(TAG, "Creating STA interface for web server");
     esp_netif_sta = esp_netif_create_default_wifi_sta();
   }
-
-  // // Step 4: Set up event handlers for web server functionality
-  // static bool event_handlers_registered = false;
-  // if (!event_handlers_registered) {
-  //   wifi_app_event_handler_init();
-  //   event_handlers_registered = true;
-  // }
 
   ESP_LOGD(TAG, "Web server network interfaces initialized successfully");
 }

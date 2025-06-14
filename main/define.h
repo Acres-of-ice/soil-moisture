@@ -133,13 +133,12 @@ extern QueueHandle_t message_queue;
 // ==================== Timeout Configurations ====================
 #define SERVER_TIMEOUT_S (CONFIG_SERVER_TIMEOUT_M * 60)
 #define SMS_INTERVAL_MS (CONFIG_SMS_INTERVAL_M * 60000)
-#define CALIBRATION_DURATION_MS (CONFIG_CALIBRATION_DURATION_M * 60000)
 #define ERROR_DURATION_MS (CONFIG_ERROR_DURATION_M * 60000)
 #define POLL_INTERVAL_MS (CONFIG_POLL_INTERVAL_S * 1000)
 #define VALVE_TIMEOUT_MS (CONFIG_VALVE_TIMEOUT_S * 1000)
-#define DATA_TIME_MS (CONFIG_DATA_TIME_M * 60000)
+#define DATA_INTERVAL_MS (CONFIG_DATA_INTERVAL_M * 60000)
+#define CALIBRATION_DURATION_MS DATA_INTERVAL_MS
 #define STATE_TIMEOUT_MS (CONFIG_STATE_TIMEOUT_M * 60000)
-#define IRRIGATION_TIMEOUT_MS (CONFIG_IRRIGATION_TIMEOUT_M * 60000)
 #define LOW_VOLTAGE_SLEEP_US (CONFIG_LOW_VOLTAGE_SLEEP_M * 60000 * 1000)
 #define ERROR_CHECK_DELAY_MS (CONFIG_ERROR_CHECK_DELAY_S * 1000)
 #define ERROR_DURATION_MS (CONFIG_ERROR_DURATION_M * 60000)
@@ -363,7 +362,6 @@ typedef struct {
 extern data_buffer_t mqtt_data_buffer;
 extern TaskHandle_t mqttDataTaskHandle;
 
-// Data transmission timing (using existing CONFIG_DATA_TIME_M)
 #define DATA_RETRY_INTERVAL_MS (30 * 1000) // 30 seconds between retries
 #define MAX_DATA_RETRY_ATTEMPTS 3
 
@@ -390,17 +388,15 @@ extern int runtime_poll_interval_s;
 #undef CONFIG_PLOT_DRY
 #undef CONFIG_PLOT_WET
 #undef CONFIG_STATE_TIMEOUT_M
-#undef CONFIG_IRRIGATION_TIMEOUT_M
 #undef CONFIG_VALVE_TIMEOUT_S
-#undef CONFIG_DATA_TIME_M
+#undef CONFIG_DATA_INTERVAL_M
 #undef CONFIG_POLL_INTERVAL_S
 
 #define CONFIG_PLOT_DRY runtime_plot_dry
 #define CONFIG_PLOT_WET runtime_plot_wet
 #define CONFIG_STATE_TIMEOUT_M runtime_state_timeout_m
-#define CONFIG_IRRIGATION_TIMEOUT_M runtime_irrigation_timeout_m
 #define CONFIG_VALVE_TIMEOUT_S runtime_valve_timeout_s
-#define CONFIG_DATA_TIME_M runtime_data_time_m
+#define CONFIG_DATA_INTERVAL_M runtime_data_time_m
 #define CONFIG_POLL_INTERVAL_S runtime_poll_interval_s
 
 // ==================== Error Tracking Variables ====================

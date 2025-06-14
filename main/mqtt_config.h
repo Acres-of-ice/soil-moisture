@@ -33,9 +33,8 @@ extern int runtime_poll_interval_s;
 #define CONFIG_PLOT_DRY runtime_plot_dry
 #define CONFIG_PLOT_WET runtime_plot_wet
 #define CONFIG_STATE_TIMEOUT_M runtime_state_timeout_m
-#define CONFIG_IRRIGATION_TIMEOUT_M runtime_irrigation_timeout_m
 #define CONFIG_VALVE_TIMEOUT_S runtime_valve_timeout_s
-#define CONFIG_DATA_TIME_M runtime_data_time_m
+#define CONFIG_DATA_INTERVAL_M runtime_data_time_m
 #define CONFIG_POLL_INTERVAL_S runtime_poll_interval_s
 const config_var_t *find_config_var(const char *var_name);
 bool validate_config_value(const config_var_t *var, int value);

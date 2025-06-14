@@ -169,12 +169,12 @@ void app_main(void) {
   // esp_log_level_set("ESPNOW", ESP_LOG_NONE);
   // esp_log_level_set("espnow_lib", ESP_LOG_NONE);
   // esp_log_level_set("SENSOR", ESP_LOG_DEBUG);
-  esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
-  esp_log_level_set("MQTT_CONFIG", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_NOTIFY", ESP_LOG_DEBUG);
+  // esp_log_level_set("MQTT_CONFIG", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("MQTT_DATA", ESP_LOG_DEBUG);
   // esp_log_level_set("SERVER", ESP_LOG_DEBUG);
-  // esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
+  esp_log_level_set("ValveControl", ESP_LOG_DEBUG);
   // esp_log_level_set("GSM", ESP_LOG_DEBUG);
   // esp_log_level_set("ButtonControl", ESP_LOG_DEBUG);
   // esp_log_level_set("DATA", ESP_LOG_DEBUG);
@@ -357,10 +357,11 @@ void app_main(void) {
       dataLoggingTask, "DataLoggingTask", DATA_LOG_TASK_STACK_SIZE, NULL,
       DATA_LOG_TASK_PRIORITY, &dataLoggingTaskHandle, DATA_LOG_TASK_CORE_ID);
   vTaskDelay(pdMS_TO_TICKS(10000));
-  xTaskCreatePinnedToCore(hex_data_task, "HEXDataTask",
-                          HEX_DATA_TASK_STACK_SIZE, NULL,
-                          HEX_DATA_TASK_PRIORITY, NULL, HEX_DATA_TASK_CORE_ID);
-  vTaskDelay(pdMS_TO_TICKS(100));
+  // xTaskCreatePinnedToCore(hex_data_task, "HEXDataTask",
+  //                         HEX_DATA_TASK_STACK_SIZE, NULL,
+  //                         HEX_DATA_TASK_PRIORITY, NULL,
+  //                         HEX_DATA_TASK_CORE_ID);
+  // vTaskDelay(pdMS_TO_TICKS(100));
 
   if (site_config.has_voltage_cutoff) {
     // Measure voltage and handle low voltage cutoff

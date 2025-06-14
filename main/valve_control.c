@@ -759,7 +759,7 @@ void updateValveState(void *pvParameters) {
 
       // Check for irrigation timeout
       if (xTaskGetTickCount() - stateEntryTime >
-          pdMS_TO_TICKS(IRRIGATION_TIMEOUT_MS)) {
+          pdMS_TO_TICKS(STATE_TIMEOUT_MS * 0.9)) {
         ESP_LOGW(TAG, "Irrigation timeout for plot %d: %d%%", current_plot + 1,
                  current_readings.soil[current_plot]);
         // Mark as successful completion

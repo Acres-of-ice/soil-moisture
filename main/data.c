@@ -323,7 +323,7 @@ void dataLoggingTask(void *pvParameters) {
     }
 
     // Changed to vTaskDelay for simplicity and to handle task suspension better
-    vTaskDelay(pdMS_TO_TICKS(DATA_TIME_MS));
+    vTaskDelay(pdMS_TO_TICKS(DATA_INTERVAL_MS));
   }
 }
 

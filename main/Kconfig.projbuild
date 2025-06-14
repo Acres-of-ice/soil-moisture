@@ -277,14 +277,6 @@ menu "Time Configuration"
         help
             Timeout for state machine in minutes.
 
-    config IRRIGATION_TIMEOUT_M
-        int "Irrigation timeout (minutes)"
-        default 2 if SITE_TEST
-        default 45
-        range 1 60
-        help
-            Timeout for state machine in minutes.
-
     config VALVE_TIMEOUT_S
         int "Valve operation timeout (seconds)"
         default 6 if SITE_TEST
@@ -301,29 +293,13 @@ menu "Time Configuration"
         help
             Interval for keeping server on
 
-    config SMS_INTERVAL_M
-        int "Hex data and sms send interval (minutes)"
-        default 10 if SITE_TEST
-        default 20
-        range 1 60
-        help
-            Timeout for SMS and HEX  in minutes.
-
-    config DATA_TIME_M
+    config DATA_INTERVAL_M
         int "Data logging interval (minutes)"
         default 2 if SITE_TEST
         default 5
         range 1 60
         help
             Interval for data logging in seconds (default: 5 minutes).
-
-    config CALIBRATION_DURATION_M
-        int "Calibration duration (minutes)"
-        default 1 if SITE_TEST
-        default 4
-        range 1 60
-        help
-            Set the interval in minutes for calibration task.
 
     config ERROR_DURATION_M
         int "Error duration (minutes)"
@@ -357,6 +333,15 @@ menu "Time Configuration"
         range 1 600
         help
             Set the interval in minutes to check for new data to send via SMS.
+
+    config SMS_INTERVAL_M
+        int "Hex data and sms send interval (minutes)"
+        default 10 if SITE_TEST
+        default 20
+        range 1 60
+        help
+            Timeout for SMS and HEX  in minutes.
+
 
 endmenu
 

@@ -14,7 +14,7 @@
 #include "wifi_app.h"
 
 static const char *TAG = "ButtonControl";
-bool wifi_enabled = true; // WiFi status flag
+bool wifi_enabled = false; // WiFi status flag
 static char response_sms[32];
 extern char header_buffer[512];
 
