@@ -184,11 +184,64 @@ esp_err_t mqtt_notify_error(const char *format, ...) {
   vsnprintf(message_buffer, sizeof(message_buffer), format, args);
   va_end(args);
 
-  esp_err_t result = mqtt_publish_notification(message_buffer, true);
+  // Create JSON payload with timestamp for error messages
+  cJSON *root = cJSON_CreateObject();
+  if (!root) {
+    ESP_LOGE("MQTT_NOTIFY", "Failed to create JSON object for error");
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Add error message
+  cJSON_AddStringToObject(root, "message", message_buffer);
+
+  // Add timestamp (current time)
+  char *current_time = fetchTime(); // Your existing time function
+  if (current_time) {
+    cJSON_AddStringToObject(root, "timestamp", current_time);
+  } else {
+    cJSON_AddStringToObject(root, "timestamp", "unknown");
+  }
+
+  // Add device information
+  cJSON_AddStringToObject(root, "device", get_pcb_name(g_nodeAddress));
+  cJSON_AddStringToObject(root, "type", "error");
+  cJSON_AddStringToObject(root, "site", CONFIG_SITE_NAME);
+  cJSON_AddStringToObject(root, "version", PROJECT_VERSION);
+
+  // Convert to string
+  char *json_string = cJSON_Print(root);
+  if (!json_string) {
+    cJSON_Delete(root);
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Publish to error topic
+  esp_mqtt_client_handle_t client = get_mqtt_client();
+  if (!client || !isMqttConnected) {
+    ESP_LOGW("MQTT_NOTIFY", "MQTT not available for error: %s", message_buffer);
+    free(json_string);
+    cJSON_Delete(root);
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  char error_topic[128];
+  snprintf(error_topic, sizeof(error_topic), "drip/%s/error", CONFIG_SITE_NAME);
+
+  int msg_id =
+      esp_mqtt_client_publish(client, error_topic, json_string, 0, 1, 0);
+
+  esp_err_t result = (msg_id >= 0) ? ESP_OK : ESP_FAIL;
+
   if (result != ESP_OK && is_mqtt_related_error(message_buffer)) {
     // For MQTT-related errors, log them directly instead of trying MQTT
     ESP_LOGW("MQTT_FALLBACK", "MQTT error (logged only): %s", message_buffer);
+  } else if (result == ESP_OK) {
+    ESP_LOGI("MQTT_NOTIFY", "Error published: %s", message_buffer);
   }
+
+  // Cleanup
+  free(json_string);
+  cJSON_Delete(root);
 
   return result;
 }
