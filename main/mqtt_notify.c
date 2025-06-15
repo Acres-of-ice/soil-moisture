@@ -184,14 +184,14 @@ esp_err_t mqtt_notify_error(const char *format, ...) {
   vsnprintf(message_buffer, sizeof(message_buffer), format, args);
   va_end(args);
 
-  // Create JSON payload with timestamp for error messages
+  // Create JSON payload with only essential fields
   cJSON *root = cJSON_CreateObject();
   if (!root) {
     ESP_LOGE("MQTT_NOTIFY", "Failed to create JSON object for error");
     return ESP_ERR_NO_MEM;
   }
 
-  // Add error message
+  // Add only message, timestamp, and version
   cJSON_AddStringToObject(root, "message", message_buffer);
 
   // Add timestamp (current time)
@@ -199,13 +199,10 @@ esp_err_t mqtt_notify_error(const char *format, ...) {
   if (current_time) {
     cJSON_AddStringToObject(root, "timestamp", current_time);
   } else {
-    cJSON_AddStringToObject(root, "timestamp", "unknown");
+    s cJSON_AddStringToObject(root, "timestamp", "unknown");
   }
 
-  // Add device information
-  cJSON_AddStringToObject(root, "device", get_pcb_name(g_nodeAddress));
-  cJSON_AddStringToObject(root, "type", "error");
-  cJSON_AddStringToObject(root, "site", CONFIG_SITE_NAME);
+  // Add version
   cJSON_AddStringToObject(root, "version", PROJECT_VERSION);
 
   // Convert to string
@@ -228,7 +225,7 @@ esp_err_t mqtt_notify_error(const char *format, ...) {
   snprintf(error_topic, sizeof(error_topic), "drip/%s/error", CONFIG_SITE_NAME);
 
   int msg_id =
-      esp_mqtt_client_publish(client, error_topic, json_string, 0, 1, 0);
+      t esp_mqtt_client_publish(client, error_topic, json_string, 0, 1, 0);
 
   esp_err_t result = (msg_id >= 0) ? ESP_OK : ESP_FAIL;
 
